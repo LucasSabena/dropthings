@@ -19,17 +19,23 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
     @Published public private(set) var settings: ScrollSettings
     @Published public private(set) var lastError: String?
     @Published public private(set) var isPaused: Bool = false
+    /// Bundle ID of the frontmost app, refreshed via `NSWorkspace`. The
+    /// transformer reads this on every scroll event so per-app overrides
+    /// take effect immediately when the user switches apps.
+    @Published public private(set) var activeBundleID: String?
 
     private let settingsStore: SettingsStore
     private let permissions: PermissionCenter
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "scroll-control")
     private var tap: EventTapClient?
     private var hotkey: GlobalHotkey?
+    private var workspaceObserver: NSObjectProtocol?
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
         self.permissions = permissions
         self.settings = settings.loadScrollSettings()
+        self.activeBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
 
     public func start() async throws {
@@ -39,6 +45,7 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             logger.notice("Start blocked: Accessibility not granted")
             return
         }
+        startObservingFrontmostApp()
         installTap()
         registerHotkey()
         if case .failed = state { return }
@@ -49,11 +56,34 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
 
     public func stop() async {
         unregisterHotkey()
+        stopObservingFrontmostApp()
         tap?.stop()
         tap = nil
         state = .off
         isPaused = false
         logger.info("Scroll Control stopped")
+    }
+
+    private func startObservingFrontmostApp() {
+        guard workspaceObserver == nil else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObserver = center.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            Task { @MainActor [weak self] in
+                self?.activeBundleID = app.bundleIdentifier
+            }
+        }
+    }
+
+    private func stopObservingFrontmostApp() {
+        if let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            workspaceObserver = nil
+        }
     }
 
     // MARK: - Public actions
@@ -83,20 +113,36 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             magicMouseDirection: newSettings.magicMouseDirection,
             horizontalScrollEnabled: newSettings.horizontalScrollEnabled,
             scrollMultiplier: newSettings.scrollMultiplier,
-            hotkey: newSettings.hotkey
+            hotkey: newSettings.hotkey,
+            appOverrides: newSettings.appOverrides
         )
+        let tapNeedsReinstall = sanitized.appOverrides != settings.appOverrides
         let hotkeyChanged = sanitized.hotkey != settings.hotkey
         settings = sanitized
         settingsStore.saveScrollSettings(sanitized)
-        if state == .running && !isPaused {
+        if (tapNeedsReinstall || !isPaused) && state == .running {
             tap?.stop()
             tap = nil
             installTap()
         }
-        if hotkeyChanged && state == .running {
+        if hotkeyChanged && state.isStarted {
             unregisterHotkey()
             registerHotkey()
         }
+    }
+
+    public func updateAppOverride(bundleID: String, direction: ScrollDirection, multiplier: Double) {
+        var new = settings
+        var overrides = new.appOverrides.filter { $0.bundleID != bundleID }
+        overrides.append(ScrollAppOverride(bundleID: bundleID, direction: direction, multiplier: multiplier))
+        new.appOverrides = overrides
+        updateSettings(new)
+    }
+
+    public func removeAppOverride(bundleID: String) {
+        var new = settings
+        new.appOverrides.removeAll { $0.bundleID == bundleID }
+        updateSettings(new)
     }
 
     public func updateTrackpadDirection(_ direction: ScrollDirection) {
@@ -149,8 +195,8 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         let client = EventTapClient()
         let transformer = ScrollEventTransformer(settings: settings)
         do {
-            try client.start { input in
-                transformer.transform(input)
+            try client.start { [weak self] input in
+                transformer.transform(input, activeBundleID: self?.activeBundleID)
             }
             tap = client
             lastError = nil

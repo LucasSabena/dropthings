@@ -33,14 +33,15 @@ public struct ScrollEventTransformer: Sendable {
         return .unknown
     }
 
-    public func transform(_ input: ScrollEventInput) -> ScrollEventDecision {
+    public func transform(_ input: ScrollEventInput, activeBundleID: String? = nil) -> ScrollEventDecision {
         let kind = classify(input)
-        let direction = settings.direction(for: kind)
+        let direction = settings.direction(for: kind, activeBundleID: activeBundleID)
         let invert = direction == .inverted
-        let verticalFactor = invert ? -settings.scrollMultiplier : 1
+        let multiplier = settings.multiplier(for: kind, activeBundleID: activeBundleID)
+        let verticalFactor = invert ? -multiplier : multiplier
         let horizontalFactor: Double = {
             guard settings.horizontalScrollEnabled else { return 0 }
-            return invert ? -settings.scrollMultiplier : 1
+            return invert ? -multiplier : multiplier
         }()
 
         let pointX = input.pointDeltaX * horizontalFactor

@@ -17,10 +17,10 @@ are enabled or when you click **Check for Updates**.
 | Module | What it does | Permission |
 |---|---|---|
 | **File Shelf** | Drop files here. Pick them up in any app. Pin items to keep them across restarts. | — |
-| **Scroll Control** | Natural scroll on the trackpad, Windows-style wheel on the mouse. Independent direction per device. | Accessibility |
-| **Menu Bar Cleaner** | Collapse low-priority menu bar icons behind one visible control. | — |
+| **Scroll Control** | Natural scroll on the trackpad, Windows-style wheel on the mouse. Independent direction per device. Per-app overrides. | Accessibility |
+| **Menu Bar Cleaner** | Collapse low-priority menu bar icons behind one control. Hover-to-reveal, profiles, safe reset. | — |
 | **Keep Awake** | One toggle. Mac stays awake as if you were using it. | — |
-| **Color Picker** | Pick any color with the native macOS sampler. Hex on the clipboard. Persistent history. | — |
+| **Color Picker** | Native macOS sampler with live 8x loupe. Copy as HEX/RGB/HSL/SwiftUI/CSS. Favorites + derived palette. | — |
 
 Every module:
 
@@ -189,10 +189,9 @@ Next on the queue (in priority order):
 
 1. **Clipboard History** — global hotkey, persistent history, exclusion list for sensitive apps.
 2. **Command Palette** — single hotkey to invoke any module's actions.
-3. **Color Picker Pro** — magnifier, formats (HEX/RGB/HSL), similar colors.
-4. **Window Snapper** — Rectangle-style halves, quarters, maximize.
-5. **Focus / Presentation Mode** — workflow that orchestrates existing modules.
-6. **Screenshot Studio** — deferred until region capture and annotation UX are worth shipping.
+3. **Window Snapper** — Rectangle-style halves, quarters, maximize.
+4. **Focus / Presentation Mode** — workflow that orchestrates existing modules.
+5. **Screenshot Studio** — region capture and annotation.
 
 Full backlog with rationale: [`docs/modulos/backlog-modulos-futuros.md`](docs/modulos/backlog-modulos-futuros.md).
 

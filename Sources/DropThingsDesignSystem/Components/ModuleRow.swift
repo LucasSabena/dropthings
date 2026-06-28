@@ -25,7 +25,7 @@ public struct ModuleRow: View {
     public var body: some View {
         HStack(spacing: DTSpace.md) {
             Image(systemName: module.iconName)
-                .font(.system(size: 16, weight: .medium))
+                .font(DTTypography.moduleIcon)
                 .foregroundStyle(DTColor.accent)
                 .frame(width: DTSize.iconButton, height: DTSize.iconButton)
                 .background(DTColor.surfaceRaised)

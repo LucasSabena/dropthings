@@ -41,12 +41,14 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     }
 
     public func stop() async {
+        // Release the assertion but keep the persisted `enabled` setting
+        // untouched. `stop()` runs on app quit and on module disable; in
+        // the quit case the user expects KeepAwake to come back on next
+        // launch exactly as they left it. The module-disable case is
+        // handled by `setKeepingAwake(false)` flipping the setting, so by
+        // the time `stop()` runs there the setting is already `false`.
         assertion.release()
         syncAssertionState()
-        if settings.enabled {
-            settings.enabled = false
-            persistSettings()
-        }
         state = .off
         logger.info("Keep Awake stopped")
     }

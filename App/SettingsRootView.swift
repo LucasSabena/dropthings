@@ -263,7 +263,7 @@ private struct ModuleDetailView: View {
         return VStack(alignment: .leading, spacing: DTSpace.sm) {
             HStack(alignment: .center, spacing: DTSpace.md) {
                 Image(systemName: module.iconName)
-                    .font(.system(size: 28, weight: .medium))
+                    .font(DTTypography.moduleHeaderIcon)
                     .foregroundStyle(DTColor.accent)
                     .frame(width: 48, height: 48)
                     .background(DTColor.surfaceRaised)

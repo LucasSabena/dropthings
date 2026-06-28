@@ -105,7 +105,8 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         }
         monitor.start()
         mouseMonitor = monitor
-        logger.notice("Shake-to-show armed (3 flips, 60pt min, 0.6s window). Move mouse left-right-left-right to test.")
+        let shake = ShakeDetector()
+        logger.notice("Shake-to-show armed (\(shake.minFlips) flips, \(Int(shake.minDisplacement))pt min, \(String(format: "%.1f", shake.windowDuration))s window). Move mouse left-right-left-right to test.")
     }
 
     private func stopShakeDetection() {
@@ -170,7 +171,11 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         }
         if hotkeyChanged {
             unregisterHotkey()
-            if state == .running {
+            // Re-register even when the module is `.degraded` from an
+            // earlier hotkey conflict — the user is trying a new combo
+            // precisely to recover. We only skip modules that are off
+            // or still waiting on a permission grant.
+            if state.isStarted {
                 registerHotkey()
             }
         }
@@ -296,8 +301,15 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         let pinned = items.filter(\.isPinned)
         do {
             try persistence.savePinnedItems(pinned)
+            if case .degraded = state {
+                state = .running
+            }
         } catch {
             logger.error("Could not save pinned items: \(error)")
+            // Surface the failure instead of staying silent at `.running`.
+            // The shelf still works in-memory for the session, but the
+            // user should know pinned items are not being persisted.
+            state = .degraded(reason: "Could not save pinned items to disk: \(error.localizedDescription). Pinned items will be lost when the app quits.")
         }
     }
 
@@ -348,29 +360,48 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     }
 
     private func ingest(_ kinds: [FileShelfItemKind]) {
-        let existing = Set(items.map(\.id))
-        var addedCount = 0
+        let original = Set(items.map(\.id))
+        items = Self.merged(items, with: kinds, maxItems: settings.maxItems)
+        let added = items.filter { !original.contains($0.id) }.count
+        if added > 0 {
+            logger.info("Ingested \(added) item(s); shelf size now \(self.items.count)")
+        }
+    }
+
+    /// Pure merge + cap logic. Dedups by `FileShelfItem.id`, then trims from
+    /// the unpinned end first so pinned items never get pushed off by a
+    /// flood of transient drops. Exposed as `static` so the trimming
+    /// strategy is unit-testable without a live pasteboard. `nonisolated`
+    /// because it touches no instance state.
+    nonisolated static func merged(
+        _ items: [FileShelfItem],
+        with kinds: [FileShelfItemKind],
+        maxItems: Int
+    ) -> [FileShelfItem] {
+        var result = items
+        let existing = Set(result.map(\.id))
         for kind in kinds {
             let candidate = FileShelfItem(kind: kind)
             guard !existing.contains(candidate.id) else { continue }
-            items.append(candidate)
-            addedCount += 1
+            result.append(candidate)
         }
-        if items.count > settings.maxItems {
-            // Trim from the unpinned end first so pinned items never get
-            // pushed off by a flood of transient drops.
-            let trimCount = items.count - settings.maxItems
-            for _ in 0..<trimCount {
-                if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
-                    items.remove(at: lastUnpinned)
-                } else {
-                    items.removeFirst()
-                }
+        return Self.trimmed(result, maxItems: maxItems)
+    }
+
+    /// Pure cap enforcement: trims unpinned items from the end first; only
+    /// falls back to removing the oldest item when every item is pinned.
+    nonisolated static func trimmed(_ items: [FileShelfItem], maxItems: Int) -> [FileShelfItem] {
+        guard items.count > maxItems else { return items }
+        var result = items
+        let trimCount = result.count - maxItems
+        for _ in 0..<trimCount {
+            if let lastUnpinned = result.lastIndex(where: { !$0.isPinned }) {
+                result.remove(at: lastUnpinned)
+            } else {
+                result.removeFirst()
             }
         }
-        if addedCount > 0 {
-            logger.info("Ingested \(addedCount) item(s); shelf size now \(self.items.count)")
-        }
+        return result
     }
 
     // MARK: - SwiftUI surface

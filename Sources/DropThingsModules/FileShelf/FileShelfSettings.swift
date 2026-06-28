@@ -33,7 +33,7 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems) ?? FileShelfSettings.maxItemsDefault
         self.clearOnQuit = try c.decodeIfPresent(Bool.self, forKey: .clearOnQuit) ?? true
-        self.shakeToShow = try c.decodeIfPresent(Bool.self, forKey: .shakeToShow) ?? true
+        self.shakeToShow = try c.decodeIfPresent(Bool.self, forKey: .shakeToShow) ?? false
         self.hotkey = try c.decodeIfPresent(GlobalHotkey.Definition.self, forKey: .hotkey)
             ?? GlobalHotkey.defaultShelfHotkey
     }

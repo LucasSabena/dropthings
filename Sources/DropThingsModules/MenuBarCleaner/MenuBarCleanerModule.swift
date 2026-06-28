@@ -24,7 +24,10 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
 
     private var dividerItem: DropThingsStatusItem?
     private var toggleItem: DropThingsStatusItem?
+    private var hoverView: HoverTrackingView?
     private var screenObserver: NSObjectProtocol?
+    private var hoverTimer: Timer?
+    private var wasHoverRevealed: Bool = false
     private let expandedDividerLength: CGFloat = 18
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
@@ -35,8 +38,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func start() async throws {
         installStatusItems()
         subscribeToScreenChanges()
-        isCollapsed = settings.collapseOnLaunch
-        applyMenuBarState()
+        applyProfileOnLaunch()
         state = .running
         logger.info("Menu Bar Cleaner started")
     }
@@ -45,6 +47,8 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         revealForShutdown()
         uninstallStatusItems()
         unsubscribeFromScreenChanges()
+        hoverTimer?.invalidate()
+        hoverTimer = nil
         state = .off
         logger.info("Menu Bar Cleaner stopped")
     }
@@ -58,6 +62,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func collapse() {
         guard !isCollapsed else { return }
         isCollapsed = true
+        persistCollapsedToActiveProfile()
         applyMenuBarState()
         logger.info("Menu bar overflow collapsed")
     }
@@ -65,6 +70,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func reveal() {
         guard isCollapsed else { return }
         isCollapsed = false
+        persistCollapsedToActiveProfile()
         applyMenuBarState()
         logger.info("Menu bar overflow revealed")
     }
@@ -78,18 +84,108 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func setCollapseOnLaunch(_ enabled: Bool) {
         var new = settings
         new.collapseOnLaunch = enabled
-        settings = new
-        settingsStore.saveMenuBarCleanerSettings(new)
+        saveSettings(new)
     }
 
     public var collapseOnLaunch: Bool {
         settings.collapseOnLaunch
     }
 
+    public func setHoverRevealDelay(_ delay: TimeInterval) {
+        var new = settings
+        new.hoverRevealDelay = delay
+        saveSettings(new)
+        installHoverTracking()
+    }
+
+    public var hoverRevealDelay: TimeInterval {
+        settings.hoverRevealDelay
+    }
+
+    public func setActiveProfile(_ profileID: UUID?) {
+        var new = settings
+        new.activeProfileID = profileID
+        saveSettings(new)
+        if let profile = new.activeProfile {
+            if profile.collapsed {
+                collapse()
+            } else {
+                reveal()
+            }
+        }
+    }
+
+    public func updateProfile(_ profile: MenuBarCleanerProfile) {
+        var new = settings
+        if let index = new.profiles.firstIndex(where: { $0.id == profile.id }) {
+            new.profiles[index] = profile
+            saveSettings(new)
+        }
+    }
+
+    public func addProfile(name: String, collapsed: Bool) {
+        var new = settings
+        let profile = MenuBarCleanerProfile(id: UUID(), name: name, collapsed: collapsed)
+        new.profiles.append(profile)
+        saveSettings(new)
+    }
+
+    public func removeProfile(_ profileID: UUID) {
+        var new = settings
+        new.profiles.removeAll { $0.id == profileID }
+        if new.activeProfileID == profileID {
+            new.activeProfileID = nil
+        }
+        saveSettings(new)
+    }
+
+    public func toggleAlwaysVisible(_ bundleID: String) {
+        var new = settings
+        if new.alwaysVisibleBundleIDs.contains(bundleID) {
+            new.alwaysVisibleBundleIDs.removeAll { $0 == bundleID }
+        } else {
+            new.alwaysVisibleBundleIDs.append(bundleID)
+        }
+        saveSettings(new)
+    }
+
+    public func safeReset() {
+        reveal()
+        var new = settings
+        new.alwaysVisibleBundleIDs = []
+        new.activeProfileID = nil
+        saveSettings(new)
+        logger.notice("Menu Bar Cleaner reset: all icons visible, always-visible list cleared, no active profile")
+    }
+
     // MARK: - SwiftUI surface
 
     public func makeSettingsView() -> AnyView {
         AnyView(MenuBarCleanerSettingsView(module: self))
+    }
+
+    // MARK: - Settings persistence
+
+    private func saveSettings(_ new: MenuBarCleanerSettings) {
+        settings = new
+        settingsStore.saveMenuBarCleanerSettings(new)
+    }
+
+    private func persistCollapsedToActiveProfile() {
+        guard let activeID = settings.activeProfileID,
+              let index = settings.profiles.firstIndex(where: { $0.id == activeID }) else { return }
+        var new = settings
+        new.profiles[index].collapsed = isCollapsed
+        saveSettings(new)
+    }
+
+    private func applyProfileOnLaunch() {
+        if let profile = settings.activeProfile {
+            isCollapsed = profile.collapsed
+        } else {
+            isCollapsed = settings.collapseOnLaunch
+        }
+        applyMenuBarState()
     }
 
     // MARK: - Status items
@@ -109,10 +205,32 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         }
         toggle.show()
         toggleItem = toggle
+        installHoverTracking()
         updateToggleItem()
     }
 
+    private func installHoverTracking() {
+        guard let button = toggleItem?.button else { return }
+        let hover = HoverTrackingView()
+        hover.onEnter = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleHoverEntered()
+            }
+        }
+        hover.onExit = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleHoverExited()
+            }
+        }
+        hover.frame = button.bounds
+        hover.autoresizingMask = [.width, .height]
+        button.addSubview(hover)
+        hoverView = hover
+    }
+
     private func uninstallStatusItems() {
+        hoverView?.removeFromSuperview()
+        hoverView = nil
         toggleItem = nil
         dividerItem = nil
     }
@@ -152,11 +270,34 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         }
     }
 
+    // MARK: - Hover reveal
+
+    private func handleHoverEntered() {
+        guard isCollapsed, settings.hoverRevealDelay > 0 else { return }
+        hoverTimer?.invalidate()
+        wasHoverRevealed = false
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: settings.hoverRevealDelay, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.isCollapsed else { return }
+                self.wasHoverRevealed = true
+                self.reveal()
+            }
+        }
+    }
+
+    private func handleHoverExited() {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        guard wasHoverRevealed else { return }
+        wasHoverRevealed = false
+        collapse()
+    }
+
     // MARK: - Screen observer
 
     private func subscribeToScreenChanges() {
         guard screenObserver == nil else { return }
-        screenObserver = NotificationCenter.default.addObserver(
+        screenObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
@@ -171,7 +312,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
 
     private func unsubscribeFromScreenChanges() {
         if let screenObserver {
-            NotificationCenter.default.removeObserver(screenObserver)
+            NSWorkspace.shared.notificationCenter.removeObserver(screenObserver)
             self.screenObserver = nil
         }
     }

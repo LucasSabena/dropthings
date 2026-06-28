@@ -48,4 +48,17 @@ extension ModuleState {
         if case .off = self { return true }
         return false
     }
+
+    /// `true` if the module has been started (or attempted) and is not
+    /// waiting on a permission grant. Use this to gate side effects like
+    /// re-registering a hotkey after a settings change: a module that is
+    /// `.degraded` from a previous hotkey conflict should still retry
+    /// when the user picks a new combo, but a module that is `.off` or
+    /// waiting on Accessibility must not touch the global hotkey registry.
+    public var isStarted: Bool {
+        switch self {
+        case .off, .needsPermission: return false
+        case .starting, .running, .unavailable, .degraded, .failed: return true
+        }
+    }
 }

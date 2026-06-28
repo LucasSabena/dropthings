@@ -12,6 +12,7 @@ public enum DTSpace {
 }
 
 public enum DTRadius {
+    public static let xs: CGFloat = 3
     public static let sm: CGFloat = 4
     public static let md: CGFloat = 6
     public static let lg: CGFloat = 8

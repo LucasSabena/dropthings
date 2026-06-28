@@ -9,14 +9,22 @@ import os
 public final class MousePositionMonitor: @unchecked Sendable {
     public typealias Handler = @MainActor (CGPoint) -> Void
 
+    public var handler: Handler {
+        didSet {
+            if isRunning {
+                stop()
+                start()
+            }
+        }
+    }
+
     private let interval: TimeInterval
-    private let handler: Handler
     private let lock = NSLock()
     private var timer: Timer?
     private var sampleCount: Int = 0
     private let logger = Logger(subsystem: "app.dropthings", category: "mouse-monitor")
 
-    public init(interval: TimeInterval = 1.0 / 60.0, handler: @escaping Handler) {
+    public init(interval: TimeInterval = 1.0 / 60.0, handler: @escaping Handler = { _ in }) {
         self.interval = interval
         self.handler = handler
     }
@@ -32,11 +40,12 @@ public final class MousePositionMonitor: @unchecked Sendable {
         sampleCount = 0
 
         let interval = self.interval
-        let handler = self.handler
         let logger = self.logger
 
-        let newTimer = Timer(timeInterval: interval, repeats: true) { _ in
+        let newTimer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
             let location = NSEvent.mouseLocation
+            let handler = self.handler
             Task { @MainActor in
                 handler(location)
             }

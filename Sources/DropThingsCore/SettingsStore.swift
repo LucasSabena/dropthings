@@ -82,18 +82,27 @@ public final class SettingsStore: @unchecked Sendable {
         return SettingsStore(backend: backend, migrations: migrations)
     }
 
-    /// Run any pending migrations. Safe to call multiple times.
+    /// Run any pending migrations. Safe to call multiple times. The
+    /// schema version only advances when every migration from the stored
+    /// version up to `currentSchemaVersion` completes without throwing —
+    /// otherwise we leave the store at the last successfully applied
+    /// version so the next launch retries the failed step instead of
+    /// silently skipping it.
     public func migrateIfNeeded() {
         lock.lock()
         defer { lock.unlock() }
         let stored = backend.integer(forKey: Self.schemaVersionKey.rawValue) ?? 0
         guard stored < Self.currentSchemaVersion else { return }
-        for migration in migrations where migration.fromVersion >= stored {
+        var applied = stored
+        for migration in migrations where migration.fromVersion >= applied {
             do {
                 try migration.run(backend)
+                applied = migration.fromVersion
+                backend.setInteger(applied, forKey: Self.schemaVersionKey.rawValue)
             } catch {
                 ModuleLogger(subsystem: "app.dropthings", category: "settings")
-                    .error("Migration from v\(migration.fromVersion) failed: \(error)")
+                    .error("Migration from v\(migration.fromVersion) failed: \(error). Schema stays at v\(applied); next launch will retry.")
+                return
             }
         }
         backend.setInteger(Self.currentSchemaVersion, forKey: Self.schemaVersionKey.rawValue)
@@ -144,9 +153,11 @@ public final class SettingsStore: @unchecked Sendable {
         write { $0.removeValue(forKey: key.rawValue) }
     }
 
-    /// Bump this when you add a migration. The store replays every migration
-    /// with `fromVersion >= stored` until the version matches.
-    public static var currentSchemaVersion: Int = 1
+    /// Bump this when you add a migration. The store replays every
+    /// migration with `fromVersion >= stored` until the version matches.
+    /// `let` because a runtime bump would race with migrations that read
+    /// it mid-loop; a new schema ships as a code change, not at runtime.
+    public static let currentSchemaVersion: Int = 1
 
     private func read<T>(_ block: (SettingsStoreBackend) -> T?) -> T? {
         lock.lock()

@@ -60,6 +60,10 @@ public final class DropThingsStatusItem {
     public var buttonOriginX: CGFloat? {
         statusItem.button?.window?.frame.origin.x
     }
+
+    public var button: NSStatusBarButton? {
+        statusItem.button
+    }
 }
 
 private final class ClickTarget: NSObject {

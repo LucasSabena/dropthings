@@ -20,12 +20,16 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     @Published public private(set) var settings: ColorPickerSettings
 
     private let settingsStore: SettingsStore
+    private let permissions: PermissionCenter
     private var hotkey: GlobalHotkey?
     private var activeSampler: NSColorSampler?
+    private var loupe: ColorSamplerLoupe?
+    private var loupeWindow: ColorPickerLoupeWindowController?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "color-picker")
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
+        self.permissions = permissions
         self.settings = settings.loadColorPickerSettings()
     }
 
@@ -38,6 +42,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     public func stop() async {
         unregisterHotkey()
         activeSampler = nil
+        stopLoupe()
         state = .off
         logger.info("Color Picker stopped")
     }
@@ -51,10 +56,12 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         guard activeSampler == nil else { return }
         let sampler = NSColorSampler()
         activeSampler = sampler
+        startLoupe()
         sampler.show { [weak self] color in
             Task { @MainActor in
                 guard let self else { return }
                 self.activeSampler = nil
+                self.stopLoupe()
                 guard let color else {
                     self.logger.notice("Picking cancelled")
                     return
@@ -63,6 +70,30 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
             }
         }
         logger.info("Native color sampler opened")
+    }
+
+    private func startLoupe() {
+        let window = ColorPickerLoupeWindowController()
+        loupeWindow = window
+        let loupe = ColorSamplerLoupe(regionSize: 96) { [weak self] sample in
+            guard let self else { return }
+            let bridge = LoupeViewSample(
+                image: sample.image,
+                zoom: 8,
+                rgb: sample.centerRGB.map { PixelSample(r: $0.r, g: $0.g, b: $0.b) },
+                location: sample.location
+            )
+            self.loupeWindow?.show(sample: bridge)
+        }
+        loupe.start()
+        self.loupe = loupe
+    }
+
+    private func stopLoupe() {
+        loupe?.stop()
+        loupe = nil
+        loupeWindow?.hide()
+        loupeWindow = nil
     }
 
     public func clearHistory() {
@@ -94,9 +125,29 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
             hotkeyEnabled: settings.hotkeyEnabled,
             history: settings.history,
             historyLimit: limit,
-            hotkey: settings.hotkey
+            hotkey: settings.hotkey,
+            copyFormat: settings.copyFormat
         ).historyLimit
-        new.history = Array(new.history.prefix(new.historyLimit))
+        new.history = ColorPickerSettings.sanitized(
+            hotkeyEnabled: settings.hotkeyEnabled,
+            history: settings.history,
+            historyLimit: new.historyLimit,
+            hotkey: settings.hotkey,
+            copyFormat: settings.copyFormat
+        ).history
+        applySettings(new)
+    }
+
+    public func setCopyFormat(_ format: ColorCopyFormat) {
+        var new = settings
+        new.copyFormat = format
+        applySettings(new)
+    }
+
+    public func toggleFavorite(id: UUID) {
+        var new = settings
+        guard let index = new.history.firstIndex(where: { $0.id == id }) else { return }
+        new.history[index].isFavorite.toggle()
         applySettings(new)
     }
 
@@ -113,13 +164,14 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
             hotkeyEnabled: new.hotkeyEnabled,
             history: new.history,
             historyLimit: new.historyLimit,
-            hotkey: new.hotkey
+            hotkey: new.hotkey,
+            copyFormat: new.copyFormat
         )
         let hotkeyChanged = settings.hotkey != sanitized.hotkey
             || settings.hotkeyEnabled != sanitized.hotkeyEnabled
         settings = sanitized
         settingsStore.saveColorPickerSettings(sanitized)
-        if hotkeyChanged && state == .running {
+        if hotkeyChanged && state.isStarted {
             unregisterHotkey()
             registerHotkey()
         }
@@ -128,7 +180,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     public func copyToPasteboard(_ picked: PickedColor) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(picked.hex, forType: .string)
+        pb.setString(settings.copyFormat.string(r: picked.r, g: picked.g, b: picked.b), forType: .string)
     }
 
     // MARK: - SwiftUI surface
@@ -190,8 +242,19 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     private func recordPick(_ picked: PickedColor) {
         var new = settings
-        new.history.insert(picked, at: 0)
-        new.history = Array(new.history.prefix(new.historyLimit))
+        // New picks go to the front of the non-favorite section so
+        // favorites pinned to the top stay put.
+        let firstNonFavorite = new.history.firstIndex(where: { !$0.isFavorite }) ?? new.history.count
+        new.history.insert(picked, at: firstNonFavorite)
+        // Enforce the cap, but never evict favorites.
+        let sanitized = ColorPickerSettings.sanitized(
+            hotkeyEnabled: new.hotkeyEnabled,
+            history: new.history,
+            historyLimit: new.historyLimit,
+            hotkey: new.hotkey,
+            copyFormat: new.copyFormat
+        )
+        new.history = sanitized.history
         applySettings(new)
     }
 

@@ -78,12 +78,20 @@ public final class ModuleRegistry: ObservableObject {
 
         do {
             try await module.start()
-            states[id] = module.state
-            if case .off = states[id] ?? .off {
-                states[id] = .running
-            }
         } catch {
             states[id] = .failed(reason: String(describing: error), recovery: "Disable and re-enable the module.")
+            return
+        }
+        // The module may have set its own state during `start()` — a
+        // `.degraded` from a hotkey conflict, a `.needsPermission` from a
+        // defensive re-check, etc. We always mirror it so the UI never
+        // stays stuck on `.starting` when the module already decided it
+        // cannot run. Modules that left `state` untouched fall through to
+        // `.running` below.
+        if case .off = module.state {
+            states[id] = .running
+        } else {
+            states[id] = module.state
         }
     }
 

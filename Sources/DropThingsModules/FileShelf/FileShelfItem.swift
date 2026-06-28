@@ -52,7 +52,10 @@ public struct FileShelfItem: Identifiable, Hashable, Sendable, Codable {
         switch kind {
         case .file(let url): return "file:" + url.standardizedFileURL.path
         case .folder(let url): return "folder:" + url.standardizedFileURL.path
-        case .text(let s): return "text:" + s
+        // A leading sigil that cannot appear in a path-derived id, so a
+        // text item whose content literally starts with "file:" cannot
+        // collide with a file item.
+        case .text(let s): return "text\u{1F}:" + s
         }
     }
 

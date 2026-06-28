@@ -5,17 +5,21 @@ import DropThingsDesignSystem
 import DropThingsModules
 
 /// One-shot welcome window shown the first time the app launches. Tracks
-/// completion in a small `UserDefaults` flag; never shows again after the
-/// user dismisses it.
+/// completion in `SettingsStore` (the `app.dropthings` UserDefaults suite)
+/// so the flag travels with `SettingsImporter` and never leaks onto
+/// `UserDefaults.standard`.
 @MainActor
 final class OnboardingWindowController {
-    static let completedKey = "app.dropthings.onboarding.completed"
+    static let completedKey = SettingsKey("app.onboarding.completed")
+
+    private let settings: SettingsStore
 
     let window: NSWindow
     var onEnableFileShelf: (() -> Void)?
     var onComplete: (() -> Void)?
 
-    init() {
+    init(settings: SettingsStore) {
+        self.settings = settings
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 360),
             styleMask: [.titled, .closable],
@@ -38,13 +42,13 @@ final class OnboardingWindowController {
     }
 
     func dismiss() {
-        UserDefaults.standard.set(true, forKey: Self.completedKey)
+        settings.setBool(true, Self.completedKey)
         window.orderOut(nil)
         onComplete?()
     }
 
-    static var hasCompleted: Bool {
-        UserDefaults.standard.bool(forKey: completedKey)
+    var hasCompleted: Bool {
+        settings.bool(Self.completedKey, default: false)
     }
 }
 

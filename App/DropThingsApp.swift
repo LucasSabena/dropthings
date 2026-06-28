@@ -43,7 +43,7 @@ final class AppServices: ObservableObject {
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
         )
-        self.onboardingWindow = OnboardingWindowController()
+        self.onboardingWindow = OnboardingWindowController(settings: settings)
 
         registry.register(FileShelfModule(settings: settings))
         registry.register(ScrollControlModule(settings: settings, permissions: permissions))
@@ -118,7 +118,7 @@ final class AppServices: ObservableObject {
     /// Show the welcome window on first launch. Idempotent after the user
     /// dismisses it.
     func presentOnboardingIfNeeded() {
-        guard !OnboardingWindowController.hasCompleted else { return }
+        guard !onboardingWindow.hasCompleted else { return }
         onboardingWindow.show()
     }
 

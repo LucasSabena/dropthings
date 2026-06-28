@@ -51,7 +51,7 @@ struct ShelfView: View {
     private var emptyState: some View {
         VStack(spacing: DTSpace.sm) {
             Image(systemName: "tray")
-                .font(.system(size: 28))
+                .font(DTTypography.emptyStateGlyph)
                 .foregroundStyle(DTColor.textSecondary)
             Text("Drop files, text, or URLs here")
                 .font(DTTypography.body)
@@ -113,7 +113,7 @@ private struct ShelfItemRow: View {
                         .lineLimit(1)
                     if item.isPinned {
                         Image(systemName: "pin.fill")
-                            .font(.system(size: 9))
+                            .font(DTTypography.badgeLabel)
                             .foregroundStyle(DTColor.accent)
                             .help("Pinned — survives quit")
                     }
@@ -131,7 +131,7 @@ private struct ShelfItemRow: View {
                 onRemove()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(DTTypography.badgeButton)
             }
             .buttonStyle(.borderless)
             .controlSize(.small)

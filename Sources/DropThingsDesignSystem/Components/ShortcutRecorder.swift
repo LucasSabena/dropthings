@@ -115,7 +115,7 @@ public struct ShortcutRecorder: View {
             }
             let newDef = GlobalHotkey.Definition(
                 keyCode: UInt32(event.keyCode),
-                modifiers: UInt32(mods.rawValue),
+                modifiers: GlobalHotkey.Definition.carbonModifiers(from: mods),
                 id: previousID == 0 ? UInt32.random(in: 100...UInt32.max) : previousID
             )
             Task { @MainActor in

@@ -39,4 +39,17 @@ final class ModuleStateTests: XCTestCase {
             XCTFail("Expected needsPermission")
         }
     }
+
+    func testIsStartedExcludesOffAndNeedsPermission() {
+        XCTAssertFalse(ModuleState.off.isStarted)
+        XCTAssertFalse(ModuleState.needsPermission(missing: [.accessibility]).isStarted)
+    }
+
+    func testIsStartedIncludesAttemptedStates() {
+        XCTAssertTrue(ModuleState.starting.isStarted)
+        XCTAssertTrue(ModuleState.running.isStarted)
+        XCTAssertTrue(ModuleState.unavailable(reason: "x").isStarted)
+        XCTAssertTrue(ModuleState.degraded(reason: "y").isStarted)
+        XCTAssertTrue(ModuleState.failed(reason: "z", recovery: nil).isStarted)
+    }
 }
