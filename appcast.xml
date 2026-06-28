@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>DropThings</title>
+        <item>
+            <title>0.1.7</title>
+            <pubDate>Sun, 28 Jun 2026 20:46:06 -0300</pubDate>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>0.1.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/LucasSabena/dropthings/releases/download/v0.1.7/DropThings-0.1.7.zip" length="4734289" type="application/octet-stream"/>
+        </item>
+    </channel>
+</rss>

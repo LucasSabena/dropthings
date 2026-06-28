@@ -582,18 +582,17 @@ private struct AboutView: View {
     private var updatesSection: some View {
         SettingsSection(
             title: "Updates",
-            caption: "Checks GitHub Releases for new signed builds. No telemetry or account is used."
+            caption: "DropThings uses Sparkle to check for signed updates and install them safely. No telemetry or account is used."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
                 updateStatus
-                releaseNotes
                 updateActions
                 Divider()
                 Toggle(isOn: Binding(
                     get: { services.updates.automaticChecksEnabled },
-                    set: { services.updates.setAutomaticChecksEnabled($0) }
+                    set: { services.updates.automaticChecksEnabled = $0 }
                 )) {
-                    Text("Check automatically once a day")
+                    Text("Check automatically")
                         .font(DTTypography.body)
                 }
                 .toggleStyle(.checkbox)
@@ -617,46 +616,15 @@ private struct AboutView: View {
         }
     }
 
-    @ViewBuilder
-    private var releaseNotes: some View {
-        if let release = services.updates.state.availableRelease {
-            VStack(alignment: .leading, spacing: DTSpace.xs) {
-                HStack {
-                    Text("Changelog")
-                        .font(DTTypography.sectionTitle)
-                    Spacer()
-                    if let publishedAt = release.publishedAt {
-                        Text(Self.dateFormatter.string(from: publishedAt))
-                            .font(DTTypography.caption)
-                            .foregroundStyle(DTColor.textSecondary)
-                    }
-                }
-                Text(release.changelog.isEmpty ? "No release notes were published for this version." : release.changelog)
-                    .font(DTTypography.caption)
-                    .foregroundStyle(DTColor.textSecondary)
-                    .textSelection(.enabled)
-                    .lineLimit(10)
-            }
-        }
-    }
-
     private var updateActions: some View {
         HStack(spacing: DTSpace.sm) {
             Button {
                 services.updates.checkNow()
             } label: {
-                Label(services.updates.state.isChecking ? "Checking" : "Check for Updates",
+                Label(services.updates.state == .checking ? "Checking" : "Check for Updates",
                       systemImage: "arrow.clockwise")
             }
-            .disabled(services.updates.state.isChecking)
-
-            if let release = services.updates.state.availableRelease {
-                Button {
-                    services.openUpdate(release)
-                } label: {
-                    Label("Download Update", systemImage: "arrow.down.circle")
-                }
-            }
+            .disabled(services.updates.state == .checking)
 
             Button {
                 copyBrewCommand()
@@ -678,6 +646,10 @@ private struct AboutView: View {
             return "checkmark.circle"
         case .updateAvailable:
             return "arrow.down.circle"
+        case .downloading:
+            return "arrow.down"
+        case .installing:
+            return "gearshape"
         case .failed:
             return "exclamationmark.triangle"
         }
@@ -689,7 +661,7 @@ private struct AboutView: View {
             return DTColor.textSecondary
         case .upToDate:
             return DTColor.success
-        case .updateAvailable:
+        case .updateAvailable, .downloading, .installing:
             return DTColor.accent
         case .failed:
             return DTColor.warning
@@ -704,8 +676,12 @@ private struct AboutView: View {
             return "Checking for updates..."
         case .upToDate:
             return "DropThings is up to date"
-        case .updateAvailable(let release, _):
-            return "DropThings \(release.version) is available"
+        case .updateAvailable(let version, _):
+            return "DropThings \(version) is available"
+        case .downloading(let progress):
+            return "Downloading update \(Int(progress * 100))%"
+        case .installing:
+            return "Installing update..."
         case .failed:
             return "Could not check for updates"
         }
@@ -714,21 +690,19 @@ private struct AboutView: View {
     private var updateStatusDetail: String {
         switch services.updates.state {
         case .idle:
-            if let lastCheckedAt = services.updates.lastCheckedAt {
-                return "Last checked \(Self.dateFormatter.string(from: lastCheckedAt))."
-            }
             return "Current version \(services.bundleInfo.shortVersion)."
         case .checking:
-            return "Contacting GitHub Releases..."
-        case .upToDate(let checkedAt):
-            return "Checked \(Self.dateFormatter.string(from: checkedAt))."
-        case .updateAvailable(_, let checkedAt):
-            let checked = Self.dateFormatter.string(from: checkedAt)
-            return "Current version \(services.bundleInfo.shortVersion). Checked \(checked)."
-        case .failed(let message, let checkedAt):
-            if let checkedAt {
-                return "\(message) Last successful check \(Self.dateFormatter.string(from: checkedAt))."
-            }
+            return "Contacting update server..."
+        case .upToDate:
+            return "Current version \(services.bundleInfo.shortVersion)."
+        case .updateAvailable(let version, let changelog):
+            let notes = changelog?.isEmpty == false ? "" : " No release notes published."
+            return "Version \(version) is ready to install.\(notes)"
+        case .downloading(let progress):
+            return "Downloaded \(Int(progress * 100))% of the update."
+        case .installing:
+            return "The app will restart when the installation finishes."
+        case .failed(let message):
             return message
         }
     }

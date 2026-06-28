@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import ServiceManagement
 import UniformTypeIdentifiers
+import Sparkle
 import DropThingsCore
 import DropThingsDesignSystem
 import DropThingsModules
@@ -21,7 +22,7 @@ final class AppServices: ObservableObject {
     let settingsWindow: SettingsWindowController
     let onboardingWindow: OnboardingWindowController
     let launchAtLogin = LaunchAtLoginController()
-    let updates: AppUpdateService
+    let updates: SparkleUpdaterController
     let importer = SettingsImporter(suiteName: "app.dropthings")
     var bundleInfo: BundleInfo { BundleInfo.current() }
 
@@ -35,11 +36,7 @@ final class AppServices: ObservableObject {
         self.permissions = PermissionCenter()
         self.diagnostics = DiagnosticsStore()
         self.registry = ModuleRegistry(settings: settings, permissions: permissions)
-        self.updates = AppUpdateService(
-            settings: settings,
-            client: GitHubReleasesUpdateClient(owner: "LucasSabena", repository: "dropthings"),
-            currentVersion: { BundleInfo.current().shortVersion }
-        )
+        self.updates = SparkleUpdaterController()
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
         )
@@ -88,11 +85,6 @@ final class AppServices: ObservableObject {
         lines.append("AX trusted: \(bundleInfo.axIsProcessTrusted ? "yes" : "no")")
         lines.append("Launch at login: \(launchAtLogin.statusLabel)")
         lines.append("Automatic update checks: \(updates.automaticChecksEnabled ? "on" : "off")")
-        if let lastCheckedAt = updates.lastCheckedAt {
-            lines.append("Last update check: \(lastCheckedAt)")
-        } else {
-            lines.append("Last update check: never")
-        }
         lines.append("Permissions:")
         for permission in SystemPermission.allCases {
             lines.append("  - \(permission.displayName): \(permissions.state(for: permission))")
@@ -192,8 +184,8 @@ final class AppServices: ObservableObject {
         }
     }
 
-    func openUpdate(_ release: AppUpdateRelease) {
-        NSWorkspace.shared.open(release.downloadURL ?? release.releaseURL)
+    func showAboutWindow() {
+        settingsWindow.show()
     }
 }
 
@@ -274,17 +266,11 @@ struct DropThingsApp: App {
         }
         .keyboardShortcut(",")
 
-        if let release = services.updates.state.availableRelease {
-            Button("Download DropThings \(release.version)…") {
-                services.openUpdate(release)
-            }
-        } else {
-            Button(services.updates.state.isChecking ? "Checking for Updates…" : "Check for Updates…") {
-                services.updates.checkNow()
-                services.settingsWindow.show()
-            }
-            .disabled(services.updates.state.isChecking)
+        Button("Check for Updates…") {
+            services.updates.checkNow()
+            services.settingsWindow.show()
         }
+        .disabled(services.updates.state == .checking)
 
         Divider()
 

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D700000000000000000000A0 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C0 /* Sparkle */; };
 		D700000000000000000000A1 /* DropThingsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000B1 /* DropThingsApp.swift */; };
 		D700000000000000000000A2 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000B2 /* SettingsRootView.swift */; };
 		D700000000000000000000A8 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000B9 /* AppDelegate.swift */; };
@@ -14,6 +15,7 @@
 		D700000000000000000000AA /* OnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BB /* OnboardingWindowController.swift */; };
 		D700000000000000000000AB /* SettingsImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BC /* SettingsImporter.swift */; };
 		D700000000000000000000AC /* BundleInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BD /* BundleInfo.swift */; };
+		D700000000000000000000AD /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BE /* SparkleUpdater.swift */; };
 		D700000000000000000000A3 /* DropThingsCore in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C1 /* DropThingsCore */; };
 		D700000000000000000000A4 /* DropThingsDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C2 /* DropThingsDesignSystem */; };
 		D700000000000000000000A5 /* DropThingsPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C3 /* DropThingsPlatform */; };
@@ -29,6 +31,7 @@
 		D700000000000000000000BB /* OnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindowController.swift; sourceTree = "<group>"; };
 		D700000000000000000000BC /* SettingsImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsImporter.swift; sourceTree = "<group>"; };
 		D700000000000000000000BD /* BundleInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleInfo.swift; sourceTree = "<group>"; };
+		D700000000000000000000BE /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
 		D700000000000000000000B5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D700000000000000000000B6 /* DropThings.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DropThings.entitlements; sourceTree = "<group>"; };
 		D700000000000000000000B7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -40,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D700000000000000000000A0 /* Sparkle in Frameworks */,
 				D700000000000000000000A3 /* DropThingsCore in Frameworks */,
 				D700000000000000000000A4 /* DropThingsDesignSystem in Frameworks */,
 				D700000000000000000000A5 /* DropThingsPlatform in Frameworks */,
@@ -79,6 +83,7 @@
 				D700000000000000000000BB /* OnboardingWindowController.swift */,
 				D700000000000000000000BC /* SettingsImporter.swift */,
 				D700000000000000000000BD /* BundleInfo.swift */,
+				D700000000000000000000BE /* SparkleUpdater.swift */,
 				D700000000000000000000B5 /* Info.plist */,
 				D700000000000000000000B6 /* DropThings.entitlements */,
 				D700000000000000000000B7 /* Assets.xcassets */,
@@ -123,6 +128,7 @@
 			);
 			name = DropThings;
 			packageProductDependencies = (
+				D700000000000000000000C0 /* Sparkle */,
 				D700000000000000000000C1 /* DropThingsCore */,
 				D700000000000000000000C2 /* DropThingsDesignSystem */,
 				D700000000000000000000C3 /* DropThingsPlatform */,
@@ -158,6 +164,7 @@
 			mainGroup = D700000000000000000000F0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				D700000000000000000000D0 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				D700000000000000000000D1 /* XCLocalSwiftPackageReference "DropThings" */,
 			);
 			productRefGroup = D700000000000000000000F2 /* Products */;
@@ -192,6 +199,7 @@
 				D700000000000000000000AA /* OnboardingWindowController.swift in Sources */,
 				D700000000000000000000AB /* SettingsImporter.swift in Sources */,
 				D700000000000000000000AC /* BundleInfo.swift in Sources */,
+				D700000000000000000000AD /* SparkleUpdater.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,7 +344,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -362,7 +370,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -393,6 +401,17 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		D700000000000000000000D0 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCLocalSwiftPackageReference section */
 		D700000000000000000000D1 /* XCLocalSwiftPackageReference "DropThings" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -401,6 +420,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D700000000000000000000C0 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D700000000000000000000D0 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		D700000000000000000000C1 /* DropThingsCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DropThingsCore;
