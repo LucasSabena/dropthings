@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             AppServices.shared.registry.bootEnabledModules()
             AppServices.shared.presentOnboardingIfNeeded()
+            AppServices.shared.updates.checkAutomaticallyIfNeeded()
         }
     }
 

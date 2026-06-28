@@ -5,3 +5,9 @@ Packages/
 *.xcuserdata
 *.xcworkspace
 DerivedData/
+
+# Local-only docs and agent tooling — not part of the public repo.
+# The README still references docs/* paths; that's intentional for
+# anyone reading the source locally. We just don't ship them to GitHub.
+/docs/
+/.agents/

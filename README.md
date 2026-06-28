@@ -5,7 +5,8 @@
 
 DropThings is a PowerToys-style utility hub for macOS. Every feature is a
 small module you can enable or disable independently. No telemetry, no
-accounts, no network calls.
+accounts. Update checks contact GitHub Releases only when automatic checks
+are enabled or when you click **Check for Updates**.
 
 ![hero](docs/hero.png)
 
@@ -40,27 +41,28 @@ Requires **macOS 14 Sonoma or later**.
 ### Homebrew (recommended)
 
 ```bash
-brew install USER/tap/dropthings
+brew tap LucasSabena/dropthings https://github.com/LucasSabena/dropthings
+brew install --cask LucasSabena/dropthings/dropthings
 ```
 
-Replace `USER` with the GitHub user that hosts the tap (see
-[`Formula/dropthings.rb`](Formula/dropthings.rb) for the formula).
+DropThings is distributed as a Homebrew Cask because it installs a macOS
+`.app` bundle.
 
 ### One-line installer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/USER/dropthings/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LucasSabena/dropthings/main/scripts/install.sh | sh
 ```
 
-Downloads the latest release `.zip` from GitHub and installs to
+Downloads the latest release `.dmg` or `.zip` from GitHub and installs to
 `/Applications/DropThings.app`. Override the destination with
 `DROPTHINGS_INSTALL_PATH=~/Apps sh ...`.
 
 ### Manual
 
-1. Download the latest `DropThings-x.y.z.zip` from
-   [Releases](https://github.com/USER/dropthings/releases).
-2. Unzip.
+1. Download the latest `DropThings-x.y.z.dmg` from
+   [Releases](https://github.com/LucasSabena/dropthings/releases).
+2. Open the DMG.
 3. Drag `DropThings.app` into `/Applications`.
 4. The first time you launch it, macOS asks you to right-click → Open →
    Open. Subsequent launches are normal.
@@ -68,7 +70,7 @@ Downloads the latest release `.zip` from GitHub and installs to
 ### Build from source
 
 ```bash
-git clone https://github.com/USER/dropthings.git
+git clone https://github.com/LucasSabena/dropthings.git
 cd dropthings
 xcodebuild -project App.xcodeproj -scheme DropThings \
            -configuration Release -derivedDataPath .build/release build
@@ -113,6 +115,15 @@ the menu:
 Inside **Settings**, the sidebar lists each module. Click one to see its
 state, its settings, and its required permissions. Enable or disable with
 the toggle in the row.
+
+Settings → **About** shows the current version and update state. Use
+**Check for Updates** to fetch the latest GitHub Release, read its changelog,
+and open the download. Automatic checks run at most once a day and can be
+disabled from the same About screen. Homebrew users can update with:
+
+```bash
+brew upgrade --cask LucasSabena/dropthings/dropthings
+```
 
 Quick walkthroughs per module:
 

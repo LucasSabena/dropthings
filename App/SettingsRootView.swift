@@ -484,24 +484,232 @@ private struct DiagnosticsView: View {
 }
 
 private struct AboutView: View {
+    @EnvironmentObject private var services: AppServices
+    @State private var didCopyBrewCommand = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: DTSpace.md) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DTSpace.lg) {
+                header
+                versionSection
+                updatesSection
+            }
+            .padding(DTSpace.xl)
+            .frame(maxWidth: 720, alignment: .leading)
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: DTSpace.md) {
             Image("DropThingsLogoTransparent")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
-            Text("DropThings")
-                .font(DTTypography.windowTitle)
-            Text("Native macOS utility hub")
-                .font(DTTypography.body)
-                .foregroundStyle(DTColor.textSecondary)
-            Text("Small focused tools, clear permissions, and a compact control center.")
-                .font(DTTypography.caption)
-                .foregroundStyle(DTColor.textSecondary)
-            Spacer()
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text("DropThings")
+                    .font(DTTypography.windowTitle)
+                Text("Native macOS utility hub")
+                    .font(DTTypography.body)
+                    .foregroundStyle(DTColor.textSecondary)
+                Text("Small focused tools, clear permissions, and a compact control center.")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+            }
         }
-        .padding(DTSpace.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    private var versionSection: some View {
+        SettingsSection(title: "Version") {
+            VStack(alignment: .leading, spacing: DTSpace.xs) {
+                keyValue("Current version", services.bundleInfo.shortVersion)
+                keyValue("Build", services.bundleInfo.buildNumber)
+                keyValue("Bundle ID", services.bundleInfo.bundleIdentifier)
+            }
+        }
+    }
+
+    private var updatesSection: some View {
+        SettingsSection(
+            title: "Updates",
+            caption: "Checks GitHub Releases for new signed builds. No telemetry or account is used."
+        ) {
+            VStack(alignment: .leading, spacing: DTSpace.md) {
+                updateStatus
+                releaseNotes
+                updateActions
+                Divider()
+                Toggle(isOn: Binding(
+                    get: { services.updates.automaticChecksEnabled },
+                    set: { services.updates.setAutomaticChecksEnabled($0) }
+                )) {
+                    Text("Check automatically once a day")
+                        .font(DTTypography.body)
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
+    }
+
+    private var updateStatus: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DTSpace.sm) {
+            Image(systemName: updateStatusIcon)
+                .foregroundStyle(updateStatusColor)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text(updateStatusTitle)
+                    .font(DTTypography.body.weight(.semibold))
+                    .foregroundStyle(DTColor.textPrimary)
+                Text(updateStatusDetail)
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var releaseNotes: some View {
+        if let release = services.updates.state.availableRelease {
+            VStack(alignment: .leading, spacing: DTSpace.xs) {
+                HStack {
+                    Text("Changelog")
+                        .font(DTTypography.sectionTitle)
+                    Spacer()
+                    if let publishedAt = release.publishedAt {
+                        Text(Self.dateFormatter.string(from: publishedAt))
+                            .font(DTTypography.caption)
+                            .foregroundStyle(DTColor.textSecondary)
+                    }
+                }
+                Text(release.changelog.isEmpty ? "No release notes were published for this version." : release.changelog)
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                    .textSelection(.enabled)
+                    .lineLimit(10)
+            }
+        }
+    }
+
+    private var updateActions: some View {
+        HStack(spacing: DTSpace.sm) {
+            Button {
+                services.updates.checkNow()
+            } label: {
+                Label(services.updates.state.isChecking ? "Checking" : "Check for Updates",
+                      systemImage: "arrow.clockwise")
+            }
+            .disabled(services.updates.state.isChecking)
+
+            if let release = services.updates.state.availableRelease {
+                Button {
+                    services.openUpdate(release)
+                } label: {
+                    Label("Download Update", systemImage: "arrow.down.circle")
+                }
+            }
+
+            Button {
+                copyBrewCommand()
+            } label: {
+                Label(didCopyBrewCommand ? "Copied" : "Copy Homebrew Update",
+                      systemImage: didCopyBrewCommand ? "checkmark" : "terminal")
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private var updateStatusIcon: String {
+        switch services.updates.state {
+        case .idle:
+            return "clock"
+        case .checking:
+            return "arrow.triangle.2.circlepath"
+        case .upToDate:
+            return "checkmark.circle"
+        case .updateAvailable:
+            return "arrow.down.circle"
+        case .failed:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private var updateStatusColor: Color {
+        switch services.updates.state {
+        case .idle, .checking:
+            return DTColor.textSecondary
+        case .upToDate:
+            return DTColor.success
+        case .updateAvailable:
+            return DTColor.accent
+        case .failed:
+            return DTColor.warning
+        }
+    }
+
+    private var updateStatusTitle: String {
+        switch services.updates.state {
+        case .idle:
+            return "Ready to check for updates"
+        case .checking:
+            return "Checking for updates..."
+        case .upToDate:
+            return "DropThings is up to date"
+        case .updateAvailable(let release, _):
+            return "DropThings \(release.version) is available"
+        case .failed:
+            return "Could not check for updates"
+        }
+    }
+
+    private var updateStatusDetail: String {
+        switch services.updates.state {
+        case .idle:
+            if let lastCheckedAt = services.updates.lastCheckedAt {
+                return "Last checked \(Self.dateFormatter.string(from: lastCheckedAt))."
+            }
+            return "Current version \(services.bundleInfo.shortVersion)."
+        case .checking:
+            return "Contacting GitHub Releases..."
+        case .upToDate(let checkedAt):
+            return "Checked \(Self.dateFormatter.string(from: checkedAt))."
+        case .updateAvailable(_, let checkedAt):
+            let checked = Self.dateFormatter.string(from: checkedAt)
+            return "Current version \(services.bundleInfo.shortVersion). Checked \(checked)."
+        case .failed(let message, let checkedAt):
+            if let checkedAt {
+                return "\(message) Last successful check \(Self.dateFormatter.string(from: checkedAt))."
+            }
+            return message
+        }
+    }
+
+    private func keyValue(_ key: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(key)
+                .font(DTTypography.body)
+            Spacer()
+            Text(value)
+                .font(DTTypography.caption.monospaced())
+                .foregroundStyle(DTColor.textSecondary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func copyBrewCommand() {
+        let command = "brew upgrade --cask LucasSabena/dropthings/dropthings"
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(command, forType: .string)
+        didCopyBrewCommand = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            didCopyBrewCommand = false
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }

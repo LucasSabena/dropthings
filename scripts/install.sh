@@ -2,14 +2,14 @@
 # Download and install the latest DropThings release from GitHub.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/USER/dropthings/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/LucasSabena/dropthings/main/scripts/install.sh | sh
 #   curl ... | sh -s -- --to ~/Applications
 #
-# Requirements: bash 3.2+, curl, unzip. macOS only.
+# Requirements: bash 3.2+, curl, hdiutil. macOS only.
 
 set -euo pipefail
 
-REPO="${DROPTHINGS_REPO:-USER/dropthings}"
+REPO="${DROPTHINGS_REPO:-LucasSabena/dropthings}"
 INSTALL_PATH="${DROPTHINGS_INSTALL_PATH:-/Applications/DropThings.app}"
 
 usage() {
@@ -22,7 +22,7 @@ Options:
     -h, --help   Show this message
 
 Environment overrides:
-    DROPTHINGS_REPO         (default: USER/dropthings)
+    DROPTHINGS_REPO         (default: LucasSabena/dropthings)
     DROPTHINGS_INSTALL_PATH  (default: /Applications/DropThings.app)
 USAGE
 }
@@ -41,23 +41,10 @@ if ! command -v curl >/dev/null 2>&1; then
     echo "  xcode-select --install" >&2
     exit 1
 fi
-if ! command -v unzip >/dev/null 2>&1; then
-    echo "unzip is required." >&2
-    exit 1
-fi
 
 if [[ "$(uname)" != "Darwin" ]]; then
     echo "DropThings is macOS-only." >&2
     exit 1
-fi
-
-if [[ "$REPO" == "USER/dropthings" ]]; then
-    cat <<'NOTE'
-NOTE: this script defaults to USER/dropthings. Once you have a real GitHub
-      release for DropThings, run:
-        curl ... | sh -s -- --repo yourname/dropthings
-      or set DROPTHINGS_REPO=yourname/dropthings before piping.
-NOTE
 fi
 
 echo "==> Fetching latest release metadata for $REPO"
@@ -70,23 +57,45 @@ if [[ -z "$TAG" ]]; then
     exit 1
 fi
 
-# Pick the first .zip asset attached to the release.
-ASSET_URL=$(echo "$META" | grep -o '"browser_download_url": *"[^"]*\.zip"' | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)"/\1/')
+ASSET_KIND="dmg"
+ASSET_URL=$(echo "$META" | grep -o '"browser_download_url": *"[^"]*\.dmg"' | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)"/\1/')
 if [[ -z "$ASSET_URL" ]]; then
-    echo "Release $TAG has no .zip asset." >&2
+    ASSET_KIND="zip"
+    ASSET_URL=$(echo "$META" | grep -o '"browser_download_url": *"[^"]*\.zip"' | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)"/\1/')
+fi
+if [[ -z "$ASSET_URL" ]]; then
+    echo "Release $TAG has no .dmg or .zip asset." >&2
     exit 1
 fi
 
 TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
-ZIP="$TMPDIR/DropThings.zip"
+MOUNT_DIR=""
+cleanup() {
+    if [[ -n "$MOUNT_DIR" && -d "$MOUNT_DIR" ]]; then
+        hdiutil detach "$MOUNT_DIR" -quiet >/dev/null 2>&1 || true
+    fi
+    rm -rf "$TMPDIR"
+}
+trap cleanup EXIT
 
 echo "==> Downloading $ASSET_URL"
-curl -fsSL -o "$ZIP" "$ASSET_URL"
+DOWNLOAD="$TMPDIR/DropThings.$ASSET_KIND"
+curl -fsSL -o "$DOWNLOAD" "$ASSET_URL"
 
 echo "==> Verifying archive"
-unzip -qq -d "$TMPDIR/unzipped" "$ZIP"
-APP_SRC="$(find "$TMPDIR/unzipped" -maxdepth 3 -name 'DropThings.app' -type d | head -1)"
+if [[ "$ASSET_KIND" == "dmg" ]]; then
+    MOUNT_DIR="$TMPDIR/mount"
+    mkdir -p "$MOUNT_DIR"
+    hdiutil attach "$DOWNLOAD" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
+    APP_SRC="$(find "$MOUNT_DIR" -maxdepth 3 -name 'DropThings.app' -type d | head -1)"
+else
+    if ! command -v unzip >/dev/null 2>&1; then
+        echo "unzip is required to install from a .zip release asset." >&2
+        exit 1
+    fi
+    unzip -qq -d "$TMPDIR/unzipped" "$DOWNLOAD"
+    APP_SRC="$(find "$TMPDIR/unzipped" -maxdepth 3 -name 'DropThings.app' -type d | head -1)"
+fi
 if [[ -z "$APP_SRC" ]]; then
     echo "Archive did not contain DropThings.app" >&2
     exit 1
