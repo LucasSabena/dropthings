@@ -39,8 +39,8 @@ struct KeepAwakeSettingsView: View {
                             Text("Power assertion active")
                                 .font(DTTypography.caption.weight(.semibold))
                                 .foregroundStyle(DTColor.success)
-                            if let id = module.activeAssertionID {
-                                Text("ID \(id)")
+                            if !module.activeAssertionIDs.isEmpty {
+                                Text("IDs \(module.activeAssertionIDs.map(String.init).joined(separator: ", "))")
                                     .font(DTTypography.caption.monospacedDigit())
                                     .foregroundStyle(DTColor.textSecondary)
                             }

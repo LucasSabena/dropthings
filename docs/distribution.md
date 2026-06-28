@@ -16,7 +16,7 @@ scripts/build-dmg.sh
 Output:
 
 ```text
-.build/dist/DropThings-0.1.0.dmg
+.build/dist/DropThings-0.1.1.dmg
 ```
 
 The DMG contains:
@@ -41,14 +41,13 @@ brew install --cask LucasSabena/dropthings/dropthings
 Release asset expected by `Casks/dropthings.rb`:
 
 ```text
-https://github.com/LucasSabena/dropthings/releases/download/v0.1.0/DropThings-0.1.0.dmg
+https://github.com/LucasSabena/dropthings/releases/download/v0.1.1/DropThings-0.1.1.dmg
 ```
 
 Update the cask checksum with:
 
 ```bash
-shasum -a 256 .build/dist/DropThings-0.1.0.dmg
+shasum -a 256 .build/dist/DropThings-0.1.1.dmg
 ```
 
 Then replace `REPLACE_WITH_SHA256_OF_DMG` in `Casks/dropthings.rb`.
-

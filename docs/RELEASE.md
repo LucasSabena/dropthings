@@ -172,7 +172,7 @@ After publishing the DMG as a GitHub release asset, update
 `Casks/dropthings.rb` with:
 
 ```bash
-shasum -a 256 .build/dist/DropThings-0.1.0.dmg
+shasum -a 256 .build/dist/DropThings-0.1.1.dmg
 ```
 
 See `docs/distribution.md` for the shorter release checklist.

@@ -18,7 +18,7 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: KeepAwakeSettings
     @Published public private(set) var isAssertionActive: Bool = false
-    @Published public private(set) var activeAssertionID: UInt32?
+    @Published public private(set) var activeAssertionIDs: [UInt32] = []
     @Published public private(set) var lastError: String?
 
     private let settingsStore: SettingsStore
@@ -77,10 +77,10 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     private func applyState(_ enabled: Bool) {
         do {
             if enabled {
-                try assertion.acquire(reason: .systemSleep)
+                try assertion.acquireKeepAwakeAssertions()
                 syncAssertionState()
                 lastError = nil
-                logger.info("Assertion acquired (PreventUserIdleSystemSleep id=\(self.assertion.currentAssertionID))")
+                logger.info("Assertions acquired (ids=\(self.assertion.currentAssertionIDs.map(String.init).joined(separator: ",")))")
             } else {
                 assertion.release()
                 syncAssertionState()
@@ -102,7 +102,7 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
 
     private func syncAssertionState() {
         isAssertionActive = assertion.isActive
-        activeAssertionID = assertion.isActive ? assertion.currentAssertionID : nil
+        activeAssertionIDs = assertion.currentAssertionIDs
     }
 
     public func makeSettingsView() -> AnyView {

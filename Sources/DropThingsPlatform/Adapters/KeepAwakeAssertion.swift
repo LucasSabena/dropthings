@@ -2,7 +2,8 @@ import Foundation
 import IOKit.pwr_mgt
 
 /// Single-purpose wrapper around `IOPMAssertionCreateWithName` /
-/// `IOPMAssertionRelease`. Holds at most one assertion at a time.
+/// `IOPMAssertionRelease`. Holds one assertion per reason so Keep Awake can
+/// prevent both system idle sleep and display sleep at the same time.
 /// `acquire` is idempotent: a second call before `release` is a no-op.
 @MainActor
 public final class KeepAwakeAssertion {
@@ -32,25 +33,24 @@ public final class KeepAwakeAssertion {
         }
     }
 
-    private var id: IOPMAssertionID = 0
-    private var heldReason: Reason?
+    private var idsByReason: [Reason: IOPMAssertionID] = [:]
 
     public init() {}
 
-    public var isActive: Bool { id != 0 }
-    public var currentReason: Reason? { heldReason }
-    public var currentAssertionID: IOPMAssertionID { id }
+    public var isActive: Bool { !idsByReason.isEmpty }
+    public var currentReasons: Set<Reason> { Set(idsByReason.keys) }
+    public var currentAssertionIDs: [IOPMAssertionID] {
+        Reason.allCases.compactMap { idsByReason[$0] }
+    }
+    public var currentAssertionID: IOPMAssertionID {
+        currentAssertionIDs.first ?? 0
+    }
 
-    /// Acquire the assertion. If the assertion is already held for a
-    /// different reason, release the old one and acquire the new so the
-    /// system reflects the user's latest choice. Returns `true` when the
+    /// Acquire the assertion for one reason. Returns `true` when the
     /// assertion is now held for the requested reason.
     @discardableResult
     public func acquire(reason: Reason) throws -> Bool {
-        if id != 0 {
-            if heldReason == reason { return true }
-            release()
-        }
+        if idsByReason[reason] != nil { return true }
         let name = "DropThings - \(reason.assertionType)" as CFString
         let type = reason.assertionType as CFString
         var newId: IOPMAssertionID = 0
@@ -63,15 +63,26 @@ public final class KeepAwakeAssertion {
         guard status == kIOReturnSuccess else {
             throw FailureReason.osStatus(status)
         }
-        id = newId
-        heldReason = reason
+        idsByReason[reason] = newId
         return true
     }
 
+    /// Acquire every assertion DropThings needs to keep the open Mac visibly
+    /// awake: the system stays awake and the display does not idle off.
+    public func acquireKeepAwakeAssertions() throws {
+        do {
+            try acquire(reason: .systemSleep)
+            try acquire(reason: .displaySleep)
+        } catch {
+            release()
+            throw error
+        }
+    }
+
     public func release() {
-        guard id != 0 else { return }
-        IOPMAssertionRelease(id)
-        id = 0
-        heldReason = nil
+        for id in idsByReason.values {
+            IOPMAssertionRelease(id)
+        }
+        idsByReason.removeAll()
     }
 }
