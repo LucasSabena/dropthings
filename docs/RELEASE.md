@@ -4,7 +4,34 @@ How to take DropThings from a local debug build to a signed, notarized
 distribution. The project is not App-Store-bound; direct signed + notarized
 distribution matches the documented `docs/product-plan.md` path.
 
-## Prerequisites
+## Local dev install (no Developer ID)
+
+For manual testing, install the Release configuration to `/Applications`
+without signing. macOS will ask the user to right-click → Open the first
+time. There is a helper script that does the whole flow:
+
+```bash
+scripts/install-dev.sh                # installs to /Applications/DropThings.app
+scripts/install-dev.sh ~/Applications # installs to a custom path
+scripts/install-dev.sh --build-only   # just build, no install
+```
+
+What the script does:
+
+1. Builds the `Release` configuration into `.build/release-install/`.
+2. Copies the resulting `.app` to the chosen path (default `/Applications`).
+3. Removes the `com.apple.quarantine` xattr so Gatekeeper does not block
+   the launch with "cannot be opened because it is from an unidentified
+   developer".
+
+The first time you launch the freshly-installed `.app`, macOS asks you to
+right-click → Open → Open. That is the only friction. Subsequent launches
+are normal.
+
+This is sufficient for testing every feature — the only thing missing is
+the notarized stamp that lets other people install it without warnings.
+
+## Prerequisites (for signed + notarized distribution)
 
 - Apple Developer account (the $99/year program). Personal teams work for
   ad-hoc / development but **not** for notarized `Developer ID` builds.

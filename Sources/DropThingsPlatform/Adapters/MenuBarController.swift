@@ -71,11 +71,21 @@ public final class MenuBarController {
     }
 
     /// Apply the desired hidden state across every cached item. Items in
-    /// `hidden` are made invisible; everything else is restored.
-    public func applyHidden(_ hidden: Set<String>) {
+    /// `hidden` are made invisible; everything else is restored. Returns
+    /// a summary so callers can surface failures in the UI instead of
+    /// silently failing.
+    public func applyHidden(_ hidden: Set<String>) -> ApplyResult {
+        var result = ApplyResult()
         for (id, element) in elementsById {
-            _ = setVisible(!hidden.contains(id), on: element)
+            let shouldHide = hidden.contains(id)
+            let ok = setVisible(!shouldHide, on: element)
+            if ok {
+                result.succeeded.append(id)
+            } else {
+                result.failed.append(id)
+            }
         }
+        return result
     }
 
     @discardableResult
@@ -86,6 +96,12 @@ public final class MenuBarController {
 
     public var hasCachedItems: Bool {
         !elementsById.isEmpty
+    }
+
+    public struct ApplyResult: Equatable, Sendable {
+        public var succeeded: [String] = []
+        public var failed: [String] = []
+        public var hasFailures: Bool { !failed.isEmpty }
     }
 
     private func setVisible(_ visible: Bool, on element: AXUIElement) -> Bool {

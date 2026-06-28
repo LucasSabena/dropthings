@@ -82,7 +82,7 @@
 - Auto-hide delay for Menu Bar Cleaner.
 - Compact mode for notch / small screens.
 - Compatibility matrix by macOS version for Menu Bar Cleaner.
-- Hotkey customization (currently hardcoded to ⌥⌘S for File Shelf).
+- Hotkey presets per role (designer, gamer, etc.).
 - Auto-update via Sparkle.
 - Crash reporting (opt-in, privacy-respecting).
 

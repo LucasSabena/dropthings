@@ -1,29 +1,23 @@
 import Foundation
 import DropThingsCore
-import DropThingsPlatform
 
-/// User-tunable Keep Awake settings.
+/// User-tunable Keep Awake settings. v1 collapses to a single toggle:
+/// "Keep Mac awake". On, the module holds a `PreventUserIdleSystemSleep`
+/// assertion; off, normal power behavior.
 public struct KeepAwakeSettings: Sendable, Equatable, Codable {
-    public var preferredReason: KeepAwakeAssertion.Reason
-    public var restoreOnLaunch: Bool
+    public var enabled: Bool
 
-    public init(
-        preferredReason: KeepAwakeAssertion.Reason = .systemSleep,
-        restoreOnLaunch: Bool = false
-    ) {
-        self.preferredReason = preferredReason
-        self.restoreOnLaunch = restoreOnLaunch
+    public init(enabled: Bool = false) {
+        self.enabled = enabled
     }
 
     enum CodingKeys: String, CodingKey {
-        case preferredReason, restoreOnLaunch
+        case enabled
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        let reasonRaw = try c.decodeIfPresent(String.self, forKey: .preferredReason)
-        self.preferredReason = reasonRaw.flatMap(KeepAwakeAssertion.Reason.init(rawValue:)) ?? .systemSleep
-        self.restoreOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .restoreOnLaunch) ?? false
+        self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
     }
 }
 

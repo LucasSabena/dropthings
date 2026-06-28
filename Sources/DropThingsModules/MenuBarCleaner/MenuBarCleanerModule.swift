@@ -61,7 +61,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func stop() async {
         uninstallStatusItems()
         unsubscribeFromWorkspace()
-        controller.applyHidden([])
+        _ = controller.applyHidden([])
         discoveredItems = []
         state = .off
         logger.info("Menu Bar Cleaner stopped; menu bar restored")
@@ -70,6 +70,9 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     // MARK: - Status items
 
     private func installStatusItems() {
+        // Idempotent: a re-entrant start (e.g. after a permission re-grant
+        // path) must not double-install the separator or the reveal button.
+        guard separator == nil else { return }
         let separator = DropThingsStatusItem(length: 1)
         separator.setSymbol("circle.fill", accessibilityDescription: "DropThings divider")
         separator.show()
@@ -103,13 +106,9 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
 
     public func toggleReveal() {
         isRevealing.toggle()
-        if isRevealing {
-            controller.applyHidden([])
-            logger.notice("Reveal-all engaged")
-        } else {
-            controller.applyHidden(settings.hiddenItemIds)
-            logger.notice("Reveal-all released, hide list re-applied")
-        }
+        let target: Set<String> = isRevealing ? [] : settings.hiddenItemIds
+        let result = controller.applyHidden(target)
+        reportApplyResult(result, context: isRevealing ? "Reveal-all engaged" : "Reveal-all released, hide list re-applied")
         if let revealButton {
             updateRevealButton(revealButton)
         }
@@ -160,7 +159,8 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
             discoveredItems = items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             lastRefreshError = nil
             if !isRevealing {
-                controller.applyHidden(settings.hiddenItemIds)
+                let result = controller.applyHidden(settings.hiddenItemIds)
+                reportApplyResult(result, context: "Refreshed menu bar: \(items.count) items")
             }
             if let revealButton {
                 updateRevealButton(revealButton)
@@ -208,12 +208,24 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         settings = new
         settingsStore.saveMenuBarCleanerSettings(new)
         if state == .running && !isRevealing {
-            controller.applyHidden(new.hiddenItemIds)
+            let result = controller.applyHidden(new.hiddenItemIds)
+            reportApplyResult(result, context: "Applied hide list (\(new.hiddenItemIds.count) items hidden)")
+        } else {
+            logger.info("Applied hide list (\(new.hiddenItemIds.count) items hidden)")
         }
         if let revealButton {
             updateRevealButton(revealButton)
         }
-        logger.info("Applied hide list (\(new.hiddenItemIds.count) items hidden)")
+    }
+
+    private func reportApplyResult(_ result: MenuBarController.ApplyResult, context: String) {
+        if result.hasFailures {
+            lastRefreshError = "\(result.failed.count) item(s) could not be hidden. macOS may not allow it for some items."
+            state = .degraded(reason: lastRefreshError!)
+            logger.warning("\(context); \(result.failed.count) failed: \(result.failed)")
+        } else {
+            logger.info(context)
+        }
     }
 
     // MARK: - SwiftUI surface

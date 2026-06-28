@@ -122,16 +122,9 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
             x: x
         )
         shakeDetector.record(sample)
-        samplesProcessed += 1
-        // Heartbeat every ~120 samples (~2 seconds at 60Hz) so Console.app
-        // shows the detector is alive and what the mouse is doing.
-        if samplesProcessed % 120 == 0 {
-            logger.notice("Shake monitor alive: \(self.samplesProcessed) samples processed, last x=\(x)")
-        }
         guard shakeDetector.shouldFire() else { return }
         shakeDetector.reset()
-        samplesProcessed = 0
-        logger.notice("Shake detected at x=\(x), showing shelf")
+        logger.info("Shake detected at x=\(x), showing shelf")
         showPanel()
     }
 

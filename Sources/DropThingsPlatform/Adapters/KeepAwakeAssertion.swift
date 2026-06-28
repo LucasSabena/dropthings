@@ -11,6 +11,15 @@ public final class KeepAwakeAssertion {
         case osStatus(Int32)
     }
 
+    /// The two assertion types we wrap. The names match Apple's
+    /// `kIOPMAssertionTypePreventUserIdleSystemSleep` /
+    /// `kIOPMAssertionTypePreventUserIdleDisplaySleep`.
+    ///
+    /// Important: `displaySleep` keeps the display awake but does NOT
+    /// prevent the system from idling to sleep. `systemSleep` keeps the
+    /// system awake; the display may still dim if the user's power
+    /// settings say so. Most users want `systemSleep` to "keep my Mac
+    /// awake".
     public enum Reason: String, Sendable, CaseIterable, Codable {
         case systemSleep
         case displaySleep
@@ -30,13 +39,17 @@ public final class KeepAwakeAssertion {
 
     public var isActive: Bool { id != 0 }
     public var currentReason: Reason? { heldReason }
+    public var currentAssertionID: IOPMAssertionID { id }
 
-    /// Acquire the assertion. Returns `true` if the assertion is now held
-    /// (either freshly created or already held for the same reason).
+    /// Acquire the assertion. If the assertion is already held for a
+    /// different reason, release the old one and acquire the new so the
+    /// system reflects the user's latest choice. Returns `true` when the
+    /// assertion is now held for the requested reason.
     @discardableResult
     public func acquire(reason: Reason) throws -> Bool {
         if id != 0 {
-            return heldReason == reason
+            if heldReason == reason { return true }
+            release()
         }
         let name = "DropThings — \(reason.assertionType)" as CFString
         let type = reason.assertionType as CFString

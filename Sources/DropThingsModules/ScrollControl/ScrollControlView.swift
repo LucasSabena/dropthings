@@ -20,6 +20,17 @@ struct ScrollControlSettingsView: View {
                     )
                 )
 
+                if module.isPaused {
+                    InlineAlert(
+                        style: .warning,
+                        message: "Paused. Scroll events pass through unchanged until you press the shortcut again or click Resume."
+                    )
+                    Button("Resume now") {
+                        module.togglePause()
+                    }
+                    .controlSize(.regular)
+                }
+
                 directionPicker(
                     title: "Trackpad",
                     icon: "trackpad",

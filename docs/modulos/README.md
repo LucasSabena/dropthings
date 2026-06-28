@@ -45,6 +45,8 @@ Prioridad 2:
   funciona" y mejoras transversales.
 - `backlog-modulos-futuros.md`: modulos candidatos y orden sugerido de
   construccion.
+- `auditoria-global-modulos-2026-06-28.md`: revision global de todos los
+  modulos actuales con hallazgos P0/P1/P2 y proximos slices.
 
 ## Criterio general
 

@@ -72,12 +72,14 @@ public final class ScreenshotModule: DropThingsModule, ObservableObject {
 
     public func saveLastCapture() {
         guard let image = lastImage else { return }
-        let dir = resolveSaveFolder()
+        let (dir, didStartScope) = resolveSaveFolder()
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
         let url = dir.appendingPathComponent("DropThings-\(stamp).png")
         do {
-            try writer.savePNG(image, to: url)
+            try withSecurityScopedResource(url, didStartScope: didStartScope) {
+                try writer.savePNG(image, to: url)
+            }
             lastSavedURL = url
             updateLastPath(url.path)
             logger.info("Saved \(url.lastPathComponent)")
@@ -110,10 +112,13 @@ public final class ScreenshotModule: DropThingsModule, ObservableObject {
         logger.info("Save folder set to \(url.path)")
     }
 
-    /// Returns the user-chosen save folder, falling back to the default
-    /// `~/Downloads/Screenshots` when no bookmark is set or the bookmark
-    /// can no longer be resolved.
-    public func resolveSaveFolder() -> URL {
+    /// Returns the user-chosen save folder. If the user picked a folder,
+    /// the returned URL has `startAccessingSecurityScopedResource()`
+    /// called on it — the matching `stopAccessingSecurityScopedResource()`
+    /// happens at the end of `withSecurityScopedResource(_:)`. Falls
+    /// back to the default `~/Downloads/Screenshots` when no bookmark is
+    /// set or the bookmark can no longer be resolved.
+    public func resolveSaveFolder() -> (url: URL, didStartScope: Bool) {
         if let data = settings.saveFolderBookmark {
             var stale = false
             if let url = try? URL(
@@ -122,11 +127,28 @@ public final class ScreenshotModule: DropThingsModule, ObservableObject {
                 relativeTo: nil,
                 bookmarkDataIsStale: &stale
             ) {
-                _ = url.startAccessingSecurityScopedResource()
-                return url
+                let didStart = url.startAccessingSecurityScopedResource()
+                return (url, didStart)
             }
         }
-        return writer.resolveFolder()
+        return (writer.resolveFolder(), false)
+    }
+
+    /// Run `work` with a security-scoped resource access active for `url`,
+    /// if applicable. Always calls `stopAccessingSecurityScopedResource()`
+    /// when the scope was opened, so the security ledger stays balanced.
+    /// The closure may throw; the scope is still released on the way out.
+    public func withSecurityScopedResource<T>(
+        _ url: URL,
+        didStartScope: Bool,
+        _ work: () throws -> T
+    ) rethrows -> T {
+        defer {
+            if didStartScope {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try work()
     }
 
     public var screenshotSettings: ScreenshotSettings { settings }

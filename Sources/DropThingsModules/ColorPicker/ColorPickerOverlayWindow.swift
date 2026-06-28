@@ -101,7 +101,14 @@ private final class OverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onPick?(convert(event.locationInWindow, from: nil))
+        // `event.locationInWindow` is window-local (origin at the
+        // window's bottom-left). The overlay's frame is the union of every
+        // screen, so the window origin may be at a negative AppKit X or a
+        // high Y. Convert to AppKit screen coordinates before forwarding
+        // so the mapper sees real screen positions on any monitor.
+        let windowLocal = event.locationInWindow
+        let screenPoint = window?.convertPoint(toScreen: windowLocal) ?? windowLocal
+        onPick?(screenPoint)
     }
 
     override func draw(_ dirtyRect: NSRect) {

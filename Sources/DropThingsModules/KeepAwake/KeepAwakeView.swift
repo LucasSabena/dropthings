@@ -1,42 +1,68 @@
 import SwiftUI
+import AppKit
 import DropThingsCore
 import DropThingsDesignSystem
 import DropThingsPlatform
 
 struct KeepAwakeSettingsView: View {
     @ObservedObject var module: KeepAwakeModule
+    @State private var didCopyCheckCommand = false
 
     var body: some View {
         SettingsSection(
             title: "Keep Awake",
-            caption: "Prevent your Mac from sleeping while this module is on. Settings → Energy Saver still wins if the battery is critical."
+            caption: "While on, your Mac stays awake as if you were using it. macOS resumes its normal sleep schedule when you turn it off."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
-                Toggle("Keep system awake", isOn: Binding(
-                    get: { module.isKeepingAwake },
+                Toggle(isOn: Binding(
+                    get: { module.keepAwakeSettings.enabled },
                     set: { module.setKeepingAwake($0) }
-                ))
-
-                Picker("Prevent", selection: Binding(
-                    get: { module.keepAwakeSettings.preferredReason },
-                    set: { module.setPreferredReason($0) }
                 )) {
-                    Text("System sleep").tag(KeepAwakeAssertion.Reason.systemSleep)
-                    Text("Display sleep only").tag(KeepAwakeAssertion.Reason.displaySleep)
+                    HStack(spacing: DTSpace.sm) {
+                        Text("Keep Mac awake")
+                            .font(DTTypography.body.weight(.semibold))
+                        if module.keepAwakeSettings.enabled {
+                            Text("·")
+                                .foregroundStyle(DTColor.textSecondary)
+                            Text("Active")
+                                .font(DTTypography.caption.weight(.semibold))
+                                .foregroundStyle(DTColor.success)
+                        }
+                    }
                 }
-                .pickerStyle(.segmented)
 
-                Toggle("Restore on next launch", isOn: Binding(
-                    get: { module.keepAwakeSettings.restoreOnLaunch },
-                    set: { module.setRestoreOnLaunch($0) }
-                ))
+                if module.keepAwakeSettings.enabled {
+                    verifyRow
+                }
+            }
+        }
+    }
 
-                InlineAlert(
-                    style: .info,
-                    message: "The Mac App Store rejects apps that abuse this API. We use it only while you keep this toggle on."
-                )
+    private var verifyRow: some View {
+        VStack(alignment: .leading, spacing: DTSpace.xs) {
+            Text("Verify the system registered the assertion:")
+                .font(DTTypography.caption)
+                .foregroundStyle(DTColor.textSecondary)
+            HStack(spacing: DTSpace.sm) {
+                Button {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString("pmset -g assertions", forType: .string)
+                    didCopyCheckCommand = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        didCopyCheckCommand = false
+                    }
+                } label: {
+                    Label(
+                        didCopyCheckCommand ? "Copied" : "Copy pmset command",
+                        systemImage: didCopyCheckCommand ? "checkmark" : "doc.on.doc"
+                    )
+                }
+                .controlSize(.small)
+                Text("Paste into Terminal to see which assertions DropThings holds.")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
             }
         }
     }
 }
-

@@ -16,7 +16,7 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
     public init(
         maxItems: Int = FileShelfSettings.maxItemsDefault,
         clearOnQuit: Bool = true,
-        shakeToShow: Bool = true,
+        shakeToShow: Bool = false,
         hotkey: GlobalHotkey.Definition? = GlobalHotkey.defaultShelfHotkey
     ) {
         self.maxItems = maxItems

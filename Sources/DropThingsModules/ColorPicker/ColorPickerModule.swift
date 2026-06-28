@@ -194,11 +194,12 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
             dismissOverlay()
             return
         }
-        let scale = overlay?.backingScaleFactor ?? 1
-        let imagePoint = CGPoint(
-            x: location.x * scale,
-            y: CGFloat(image.height) - location.y * scale
-        )
+        // Convert from overlay-local AppKit coords to the correct image
+        // pixel. AppKit is bottom-left; CGImage is top-left; multi-monitor
+        // arrangements add horizontal/vertical offsets that a simple Y-flip
+        // gets wrong. The mapper owns that math.
+        let mapper = ScreenCoordinateMapper.current()
+        let imagePoint = mapper.imagePoint(forAppKitPoint: location)
         guard let rgb = PixelSampler.sample(at: imagePoint, in: image) else {
             dismissOverlay()
             return
@@ -206,7 +207,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         let picked = PickedColor.from(rgb: rgb)
         recordPick(picked)
         copyToPasteboard(picked)
-        logger.notice("Picked \(picked.hex)")
+        logger.notice("Picked \(picked.hex) at AppKit \(Int(location.x)),\(Int(location.y)) → image \(Int(imagePoint.x)),\(Int(imagePoint.y))")
         dismissOverlay()
     }
 
