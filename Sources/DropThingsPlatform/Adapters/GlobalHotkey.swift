@@ -145,7 +145,7 @@ public extension GlobalHotkey.Definition {
     /// Human-readable shortcut like `⌃⌥⌘C`. Falls back to "Key 47" for
     /// keycodes we have not catalogued.
     var displayString: String {
-        let mods = NSEvent.ModifierFlags(rawValue: UInt(modifiers))
+        let mods = nsModifiers
         var parts: [String] = []
         if mods.contains(.control) { parts.append("⌃") }
         if mods.contains(.option) { parts.append("⌥") }
@@ -159,9 +159,33 @@ public extension GlobalHotkey.Definition {
     /// record a shortcut with no modifier so a stray key press can never
     /// accidentally trigger a module.
     var hasModifier: Bool {
-        let mods = NSEvent.ModifierFlags(rawValue: UInt(modifiers))
-        let required: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
-        return !mods.intersection(required).isEmpty
+        !nsModifiers.intersection([.command, .option, .control, .shift]).isEmpty
+    }
+
+    /// Carbon modifier flags stored in `modifiers`, expressed as the
+    /// matching `NSEvent.ModifierFlags`. Carbon and AppKit use different
+    /// bit layouts (e.g. `cmdKey` is `1 << 8` while `.command` is `1 << 20`),
+    /// so we translate here at the boundary instead of pretending one set
+    /// of flags is the other.
+    var nsModifiers: NSEvent.ModifierFlags {
+        var ns: NSEvent.ModifierFlags = []
+        if modifiers & UInt32(cmdKey) != 0 { ns.insert(.command) }
+        if modifiers & UInt32(optionKey) != 0 { ns.insert(.option) }
+        if modifiers & UInt32(controlKey) != 0 { ns.insert(.control) }
+        if modifiers & UInt32(shiftKey) != 0 { ns.insert(.shift) }
+        return ns
+    }
+
+    /// Builds the Carbon modifier bitmask from AppKit modifier flags. Use
+    /// this when recording a shortcut from an `NSEvent` so the value we
+    /// store matches what `RegisterEventHotKey` expects.
+    static func carbonModifiers(from nsFlags: NSEvent.ModifierFlags) -> UInt32 {
+        var carbon: UInt32 = 0
+        if nsFlags.contains(.command) { carbon |= UInt32(cmdKey) }
+        if nsFlags.contains(.option)  { carbon |= UInt32(optionKey) }
+        if nsFlags.contains(.control) { carbon |= UInt32(controlKey) }
+        if nsFlags.contains(.shift)   { carbon |= UInt32(shiftKey) }
+        return carbon
     }
 
     private static func keyCodeName(for keyCode: Int) -> String {
