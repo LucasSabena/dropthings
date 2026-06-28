@@ -149,17 +149,33 @@ ls .build/release/Export/DropThings.app/Contents/Frameworks/
 `spctl` should report `accepted`. If it does not, the most common cause is a
 missing or unstapled notarization ticket.
 
-## Package as a DMG (optional)
+## Package as a DMG
 
 ```bash
-mkdir .build/release/dmg-staging
-cp -R .build/release/Export/DropThings.app .build/release/dmg-staging/
-ln -s /Applications .build/release/dmg-staging/Applications
-hdiutil create -volname "DropThings" \
-  -srcfolder .build/release/dmg-staging \
-  -ov -format UDZO \
-  .build/release/DropThings.dmg
+scripts/build-dmg.sh
 ```
+
+The DMG lands at `.build/dist/DropThings-<version>.dmg` and contains
+`DropThings.app` plus an `Applications` symlink, which is the normal macOS
+drag-to-install flow.
+
+## Homebrew Cask
+
+DropThings is a macOS app, so Homebrew distribution uses a Cask:
+
+```bash
+brew tap LucasSabena/dropthings https://github.com/LucasSabena/dropthings
+brew install --cask LucasSabena/dropthings/dropthings
+```
+
+After publishing the DMG as a GitHub release asset, update
+`Casks/dropthings.rb` with:
+
+```bash
+shasum -a 256 .build/dist/DropThings-0.1.0.dmg
+```
+
+See `docs/distribution.md` for the shorter release checklist.
 
 ## What to check after release-installing
 

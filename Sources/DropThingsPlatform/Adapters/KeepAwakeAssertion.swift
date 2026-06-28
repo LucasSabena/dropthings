@@ -26,8 +26,8 @@ public final class KeepAwakeAssertion {
 
         var assertionType: String {
             switch self {
-            case .systemSleep: return "PreventUserIdleSystemSleep"
-            case .displaySleep: return "PreventUserIdleDisplaySleep"
+            case .systemSleep: return kIOPMAssertionTypePreventUserIdleSystemSleep as String
+            case .displaySleep: return kIOPMAssertionTypePreventUserIdleDisplaySleep as String
             }
         }
     }
@@ -51,7 +51,7 @@ public final class KeepAwakeAssertion {
             if heldReason == reason { return true }
             release()
         }
-        let name = "DropThings — \(reason.assertionType)" as CFString
+        let name = "DropThings - \(reason.assertionType)" as CFString
         let type = reason.assertionType as CFString
         var newId: IOPMAssertionID = 0
         let status = IOPMAssertionCreateWithName(

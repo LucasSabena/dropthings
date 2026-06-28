@@ -17,6 +17,9 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
 
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: KeepAwakeSettings
+    @Published public private(set) var isAssertionActive: Bool = false
+    @Published public private(set) var activeAssertionID: UInt32?
+    @Published public private(set) var lastError: String?
 
     private let settingsStore: SettingsStore
     private let assertion = KeepAwakeAssertion()
@@ -29,12 +32,17 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
 
     public func start() async throws {
         applyState(settings.enabled)
-        state = .running
+        if case .degraded = state {
+            logger.warning("Keep Awake started degraded")
+        } else {
+            state = .running
+        }
         logger.info("Keep Awake started")
     }
 
     public func stop() async {
         assertion.release()
+        syncAssertionState()
         if settings.enabled {
             settings.enabled = false
             persistSettings()
@@ -70,18 +78,31 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
         do {
             if enabled {
                 try assertion.acquire(reason: .systemSleep)
-                logger.info("Assertion acquired (PreventUserIdleSystemSleep)")
+                syncAssertionState()
+                lastError = nil
+                logger.info("Assertion acquired (PreventUserIdleSystemSleep id=\(self.assertion.currentAssertionID))")
             } else {
                 assertion.release()
+                syncAssertionState()
+                lastError = nil
                 logger.info("Assertion released")
             }
         } catch let error as KeepAwakeAssertion.FailureReason {
             logger.warning("Could not change assertion state: \(error)")
+            syncAssertionState()
+            lastError = "Could not keep Mac awake: \(error)"
             state = .degraded(reason: "Could not keep Mac awake: \(error). macOS may have refused the power assertion.")
         } catch {
             logger.warning("Could not change assertion state: \(error)")
+            syncAssertionState()
+            lastError = "Could not keep Mac awake: \(error)"
             state = .degraded(reason: "Could not keep Mac awake: \(error)")
         }
+    }
+
+    private func syncAssertionState() {
+        isAssertionActive = assertion.isActive
+        activeAssertionID = assertion.isActive ? assertion.currentAssertionID : nil
     }
 
     public func makeSettingsView() -> AnyView {

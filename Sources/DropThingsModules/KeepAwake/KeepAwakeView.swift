@@ -32,6 +32,25 @@ struct KeepAwakeSettingsView: View {
                 }
 
                 if module.keepAwakeSettings.enabled {
+                    if module.isAssertionActive {
+                        HStack(spacing: DTSpace.xs) {
+                            Image(systemName: "checkmark.circle")
+                                .foregroundStyle(DTColor.success)
+                            Text("Power assertion active")
+                                .font(DTTypography.caption.weight(.semibold))
+                                .foregroundStyle(DTColor.success)
+                            if let id = module.activeAssertionID {
+                                Text("ID \(id)")
+                                    .font(DTTypography.caption.monospacedDigit())
+                                    .foregroundStyle(DTColor.textSecondary)
+                            }
+                        }
+                    } else {
+                        InlineAlert(
+                            style: .warning,
+                            message: module.lastError ?? "DropThings is enabled, but macOS has not confirmed an active power assertion."
+                        )
+                    }
                     verifyRow
                 }
             }
