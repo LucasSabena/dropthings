@@ -4,7 +4,7 @@ import DropThingsDesignSystem
 
 struct SettingsRootView: View {
     @EnvironmentObject private var services: AppServices
-    @State private var selection: SidebarItem = .modules
+    @State private var selection: SidebarItem = .general
 
     var body: some View {
         NavigationSplitView {
@@ -19,6 +19,8 @@ struct SettingsRootView: View {
     private var sidebar: some View {
         List(selection: $selection) {
             Section("App") {
+                Label("General", systemImage: "gearshape")
+                    .tag(SidebarItem.general)
                 Label("Modules", systemImage: "square.stack.3d.up")
                     .tag(SidebarItem.modules)
                 Label("Diagnostics", systemImage: "stethoscope")
@@ -40,6 +42,8 @@ struct SettingsRootView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
+        case .general:
+            GeneralSettingsView()
         case .modules:
             ModulesOverviewView()
         case .diagnostics:
@@ -59,10 +63,74 @@ struct SettingsRootView: View {
 }
 
 enum SidebarItem: Hashable {
+    case general
     case modules
     case diagnostics
     case about
     case module(ModuleID)
+}
+
+private struct GeneralSettingsView: View {
+    @EnvironmentObject private var services: AppServices
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DTSpace.lg) {
+                Text("General")
+                    .font(DTTypography.windowTitle)
+                Text("App-wide behavior for DropThings.")
+                    .font(DTTypography.body)
+                    .foregroundStyle(DTColor.textSecondary)
+
+                startupSection
+            }
+            .padding(DTSpace.xl)
+            .frame(maxWidth: 720, alignment: .leading)
+        }
+        .onAppear {
+            services.launchAtLogin.refresh()
+        }
+    }
+
+    private var startupSection: some View {
+        SettingsSection(
+            title: "Startup",
+            caption: "Use macOS Login Items so DropThings opens automatically after you sign in."
+        ) {
+            VStack(alignment: .leading, spacing: DTSpace.sm) {
+                Toggle(isOn: Binding(
+                    get: { services.launchAtLogin.isEnabled },
+                    set: { services.launchAtLogin.setEnabled($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                        Text("Open DropThings at login")
+                            .font(DTTypography.body.weight(.semibold))
+                        Text("Status: \(services.launchAtLogin.statusLabel)")
+                            .font(DTTypography.caption)
+                            .foregroundStyle(DTColor.textSecondary)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                if services.launchAtLogin.needsApproval {
+                    InlineAlert(
+                        style: .warning,
+                        message: "macOS needs you to approve DropThings in Login Items before it can open at startup."
+                    )
+                    Button {
+                        services.launchAtLogin.openLoginItemsSettings()
+                    } label: {
+                        Label("Open Login Items", systemImage: "arrow.up.forward.app")
+                    }
+                    .controlSize(.small)
+                }
+
+                if let error = services.launchAtLogin.lastError {
+                    InlineAlert(style: .error, message: error)
+                }
+            }
+        }
+    }
 }
 
 private struct ModuleSidebarRow: View {
@@ -264,17 +332,24 @@ private struct DiagnosticsView: View {
     private var bundleSection: some View {
         SettingsSection(title: "App", caption: "What macOS sees when granting permissions.") {
             VStack(alignment: .leading, spacing: DTSpace.xs) {
-                keyValue("Bundle ID", services.bundleInfo.bundleIdentifier)
-                keyValue("Bundle path", services.bundleInfo.bundlePath)
+                let bundleInfo = services.bundleInfo
+                keyValue("Bundle ID", bundleInfo.bundleIdentifier)
+                keyValue("Bundle path", bundleInfo.bundlePath)
                 keyValue("Version",
-                         "\(services.bundleInfo.shortVersion) (\(services.bundleInfo.buildNumber))")
+                         "\(bundleInfo.shortVersion) (\(bundleInfo.buildNumber))")
                 HStack {
                     Text("Accessibility (AX) trusted")
                         .font(DTTypography.body)
                     Spacer()
-                    Text(services.bundleInfo.axIsProcessTrusted ? "yes" : "no")
+                    Text(bundleInfo.axIsProcessTrusted ? "yes" : "no")
                         .font(DTTypography.caption.monospacedDigit())
-                        .foregroundStyle(services.bundleInfo.axIsProcessTrusted ? DTColor.success : DTColor.warning)
+                        .foregroundStyle(bundleInfo.axIsProcessTrusted ? DTColor.success : DTColor.warning)
+                }
+                if !bundleInfo.axIsProcessTrusted {
+                    InlineAlert(
+                        style: .warning,
+                        message: "If System Settings already shows DropThings enabled, reset the stale macOS permission entry and approve it again."
+                    )
                 }
                 HStack {
                     Spacer()
@@ -289,6 +364,12 @@ private struct DiagnosticsView: View {
                         services.permissions.refresh()
                     } label: {
                         Label("Refresh permissions", systemImage: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                    Button {
+                        services.repairAccessibilityTrust()
+                    } label: {
+                        Label("Reset & Request Accessibility", systemImage: "wrench.and.screwdriver")
                     }
                     .controlSize(.small)
                 }

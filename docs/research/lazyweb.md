@@ -76,3 +76,22 @@ Design implication:
   stay available across Spaces.
 - Screenshot is removed from the active module set until it can be rebuilt as
   a useful region capture/editor.
+
+## 2026-06-28 - Startup and Accessibility Repair
+
+Task: add a global startup setting and make stuck Accessibility permissions
+recoverable from the app.
+
+Workflow note:
+
+- No Lazyweb MCP tool is available in this session.
+- Followed the existing macOS utility settings pattern already recorded above:
+  app-wide controls live in a General settings pane, and permission repair
+  belongs in Diagnostics where the user can see what macOS currently sees.
+
+Design implication:
+
+- The startup control should be a plain switch backed by macOS Login Items,
+  with status text and a direct path to System Settings when approval is needed.
+- Accessibility repair should explain the stale-permission state in human
+  language and offer a single repair action instead of forcing Terminal use.

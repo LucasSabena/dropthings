@@ -2,8 +2,8 @@ import Foundation
 import AppKit
 import ApplicationServices
 
-/// Read-only bundle facts useful for the Diagnostics panel. Built once at
-/// `AppServices` init because none of these change at runtime.
+/// Read-only bundle facts useful for the Diagnostics panel. Build this on
+/// demand because Accessibility trust can change while the app is open.
 struct BundleInfo {
     let bundleIdentifier: String
     let bundlePath: String
@@ -29,12 +29,13 @@ struct BundleInfo {
     /// returns false even though the user thinks they granted it. Resetting
     /// TCC and re-granting fixes it.
     static let resetHint = """
-    If Accessibility shows Granted here but the module still says Needs permission:
+    If System Settings already shows DropThings enabled but Diagnostics still
+    says Accessibility is not granted:
 
-    1. Quit DropThings.
-    2. Run in Terminal.app:
-         tccutil reset Accessibility app.dropthings
-    3. Open DropThings again.
-    4. Click "Request Access" on the Accessibility row.
+    1. Click "Reset & Request Accessibility".
+    2. Approve the macOS prompt for DropThings.
+    3. If it still fails, quit DropThings, remove it from System Settings >
+       Privacy & Security > Accessibility, reopen /Applications/DropThings.app,
+       and add it again.
     """
 }

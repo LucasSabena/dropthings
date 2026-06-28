@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import ServiceManagement
 import UniformTypeIdentifiers
 import DropThingsCore
 import DropThingsDesignSystem
@@ -19,8 +20,9 @@ final class AppServices: ObservableObject {
     let registry: ModuleRegistry
     let settingsWindow: SettingsWindowController
     let onboardingWindow: OnboardingWindowController
+    let launchAtLogin = LaunchAtLoginController()
     let importer = SettingsImporter(suiteName: "app.dropthings")
-    let bundleInfo = BundleInfo.current()
+    var bundleInfo: BundleInfo { BundleInfo.current() }
 
     /// Forwards change notifications from child observables so SwiftUI views
     /// observing `AppServices` re-render when `registry` or `permissions`
@@ -60,6 +62,9 @@ final class AppServices: ObservableObject {
         diagnostics.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        launchAtLogin.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     /// Plain-text dump of the bundle path and current permission states.
@@ -67,10 +72,12 @@ final class AppServices: ObservableObject {
     /// into a bug report.
     func diagnosticSnapshot() -> String {
         var lines: [String] = []
+        let bundleInfo = BundleInfo.current()
         lines.append("Bundle ID: \(bundleInfo.bundleIdentifier)")
         lines.append("Bundle path: \(bundleInfo.bundlePath)")
         lines.append("Version: \(bundleInfo.shortVersion) (\(bundleInfo.buildNumber))")
         lines.append("AX trusted: \(bundleInfo.axIsProcessTrusted ? "yes" : "no")")
+        lines.append("Launch at login: \(launchAtLogin.statusLabel)")
         lines.append("Permissions:")
         for permission in SystemPermission.allCases {
             lines.append("  - \(permission.displayName): \(permissions.state(for: permission))")
@@ -131,6 +138,90 @@ final class AppServices: ObservableObject {
         // Each module reads its own settings via SettingsStore so a fresh
         // load is enough; the user can re-enable modules from the registry.
         diagnostics.record(level: .notice, category: "settings", message: "Settings imported from plist")
+    }
+
+    func repairAccessibilityTrust() {
+        do {
+            try runTCCResetAccessibility()
+            diagnostics.record(level: .notice, category: "permissions", message: "Accessibility TCC entry reset")
+        } catch {
+            diagnostics.record(level: .warning, category: "permissions", message: "Accessibility reset failed: \(error.localizedDescription)")
+        }
+        permissions.refresh()
+        _ = permissions.requestPermission(.accessibility)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self else { return }
+            self.permissions.refresh()
+            Task {
+                await self.registry.refreshPermissionsAndRetry()
+            }
+        }
+    }
+
+    private func runTCCResetAccessibility() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", "Accessibility", bundleInfo.bundleIdentifier]
+        let stderr = Pipe()
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let data = stderr.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: data, encoding: .utf8) ?? "exit \(process.terminationStatus)"
+            throw NSError(
+                domain: "DropThingsTCCReset",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+    }
+}
+
+@MainActor
+final class LaunchAtLoginController: ObservableObject {
+    @Published private(set) var status: SMAppService.Status = SMAppService.mainApp.status
+    @Published private(set) var lastError: String?
+
+    var isEnabled: Bool {
+        status == .enabled
+    }
+
+    var needsApproval: Bool {
+        status == .requiresApproval
+    }
+
+    var statusLabel: String {
+        switch status {
+        case .enabled: return "enabled"
+        case .notRegistered: return "off"
+        case .requiresApproval: return "needs approval"
+        case .notFound: return "not found"
+        @unknown default: return "unknown"
+        }
+    }
+
+    func refresh() {
+        status = SMAppService.mainApp.status
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        refresh()
+    }
+
+    func openLoginItemsSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

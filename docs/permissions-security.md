@@ -14,6 +14,9 @@ Accessibility:
 
 - Needed for scroll event taps.
 - Required by many system utility apps.
+- Diagnostics includes a `Reset & Request Accessibility` recovery action for
+  stale TCC entries caused by replacing local/ad-hoc builds at the same bundle
+  identifier.
 
 Screen Recording:
 
@@ -29,6 +32,14 @@ Full Disk Access:
 Automation:
 
 - Avoid unless a future module controls other apps explicitly.
+
+Login Items:
+
+- The global `Open DropThings at login` setting uses `SMAppService.mainApp`.
+- macOS remains the source of truth; users can revoke or approve it from
+  System Settings → General → Login Items.
+- This is not a permission for input or data access, and it should stay in
+  app-level settings rather than module settings.
 
 ## Security Review Checklist
 

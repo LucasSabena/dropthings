@@ -8,7 +8,7 @@ live in `docs/file-shelf-manual-checks.md` and
 ## 0. Build + verify
 
 ```bash
-swift test                          # 50 tests, must be 0 failures
+swift test                          # 78 tests, must be 0 failures
 xcodebuild -project App.xcodeproj \
            -scheme DropThings \
            -configuration Debug \
@@ -25,12 +25,18 @@ What you should see:
 
 ## 1. App shell
 
-- [ ] Sidebar in Settings lists `Modules`, `Diagnostics`, `About`, plus one
-      entry per registered module under "Modules".
+- [ ] Sidebar in Settings lists `General`, `Modules`, `Diagnostics`, `About`,
+      plus one entry per registered module under "Modules".
 - [ ] Switching sidebar items updates the detail pane without flicker.
+- [ ] `General` shows `Open DropThings at login`.
+- [ ] Turning `Open DropThings at login` on registers DropThings under
+      System Settings → General → Login Items.
+- [ ] Turning it off unregisters DropThings from Login Items.
 - [ ] `Diagnostics` shows the current state of every `SystemPermission`
       (Accessibility, Screen Recording, Full Disk Access, Automation) and a
       list of recent log entries (empty until you use a module).
+- [ ] If Accessibility appears stuck, `Reset & Request Accessibility` resets
+      the TCC entry and shows the native macOS prompt again.
 - [ ] `About` shows the app name and native utility hub summary.
 
 ## 2. Fake module (diagnostic)
@@ -78,6 +84,9 @@ Full checklist in `docs/scroll-control-manual-checks.md`. Smoke version:
 - [ ] If the system prompt does **not** appear, click `Request Access`
       → macOS shows its native accessibility prompt. DropThings now
       appears in System Settings → Privacy & Security → Accessibility.
+- [ ] If System Settings says DropThings is enabled but Diagnostics still says
+      `AX trusted: no`, open Diagnostics and click `Reset & Request
+      Accessibility`, then approve the prompt again.
 - [ ] Return to DropThings → status pill moves to "Running".
 - [ ] Swipe two fingers up on the trackpad with default settings (Trackpad =
       Natural) → page scrolls down.
