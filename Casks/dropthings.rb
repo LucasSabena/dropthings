@@ -19,7 +19,7 @@ cask "dropthings" do
   desc "Native macOS utility hub"
   homepage "https://github.com/LucasSabena/dropthings"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "DropThings.app"
 
