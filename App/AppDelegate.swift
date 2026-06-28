@@ -20,6 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Force UserDefaults to flush before the runloop tears down. Without
+        // this, a setting changed a few seconds before quit can be lost if the
+        // process is killed (Cmd+Q should normally flush, but `pkill` and
+        // forced reloads do not).
+        UserDefaults.standard.synchronize()
+        UserDefaults(suiteName: "app.dropthings")?.synchronize()
+
         // Fire-and-forget shutdown. We cannot synchronously wait on a MainActor
         // task from the main thread without deadlocking the runloop.
         //

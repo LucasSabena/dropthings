@@ -4,7 +4,32 @@ import DropThingsDesignSystem
 
 struct SettingsRootView: View {
     @EnvironmentObject private var services: AppServices
-    @State private var selection: SidebarItem = .general
+    @AppStorage("ui.settings.sidebarSection") private var sectionRaw: String = SidebarItem.general.storageKey
+    @AppStorage("ui.settings.sidebarModuleID") private var moduleIDRaw: String = ""
+
+    private var currentSelection: SidebarItem {
+        if !moduleIDRaw.isEmpty,
+           services.registry.modules.keys.contains(where: { $0.rawValue == moduleIDRaw }) {
+            return .module(ModuleID(moduleIDRaw))
+        }
+        return SidebarItem.fromStorageKey(sectionRaw) ?? .general
+    }
+
+    private var selectionBinding: Binding<SidebarItem> {
+        Binding(
+            get: { currentSelection },
+            set: { newValue in
+                switch newValue {
+                case .module(let id):
+                    moduleIDRaw = id.rawValue
+                    sectionRaw = SidebarItem.module(id).storageKey
+                default:
+                    sectionRaw = newValue.storageKey
+                    moduleIDRaw = ""
+                }
+            }
+        )
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -17,7 +42,7 @@ struct SettingsRootView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $selection) {
+        List(selection: selectionBinding) {
             Section("App") {
                 Label("General", systemImage: "gearshape")
                     .tag(SidebarItem.general)
@@ -41,7 +66,7 @@ struct SettingsRootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
+        switch currentSelection {
         case .general:
             GeneralSettingsView()
         case .modules:
@@ -68,6 +93,31 @@ enum SidebarItem: Hashable {
     case diagnostics
     case about
     case module(ModuleID)
+
+    var storageKey: String {
+        switch self {
+        case .general: return "general"
+        case .modules: return "modules"
+        case .diagnostics: return "diagnostics"
+        case .about: return "about"
+        case .module(let id): return "module:\(id.rawValue)"
+        }
+    }
+
+    static func fromStorageKey(_ key: String) -> SidebarItem? {
+        switch key {
+        case "general": return .general
+        case "modules": return .modules
+        case "diagnostics": return .diagnostics
+        case "about": return .about
+        default:
+            if key.hasPrefix("module:") {
+                let raw = String(key.dropFirst("module:".count))
+                return .module(ModuleID(raw))
+            }
+            return nil
+        }
+    }
 }
 
 private struct GeneralSettingsView: View {
