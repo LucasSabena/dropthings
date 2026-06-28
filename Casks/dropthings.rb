@@ -12,7 +12,7 @@
 
 cask "dropthings" do
   version "0.1.1"
-  sha256 "ef968be3943bfecb1ce19303e94f676cc851ee8952123f02cf0054703bcb3078"
+  sha256 "78ad34efdefa7097e6f9851967225a5ba56edf088ad03f02d4679c06a6360a7e"
 
   url "https://github.com/LucasSabena/dropthings/releases/download/v#{version}/DropThings-#{version}.dmg"
   name "DropThings"

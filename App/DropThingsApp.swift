@@ -234,10 +234,7 @@ struct DropThingsApp: App {
         MenuBarExtra {
             menuContent
         } label: {
-            Image("DropThingsLogoTransparent")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
+            Image("DropThingsMenuBarIcon")
         }
         .menuBarExtraStyle(.menu)
     }
