@@ -42,12 +42,6 @@ public final class GlobalHotkey: @unchecked Sendable {
         id: 2
     )
 
-    public static let defaultScreenshotHotkey = Definition(
-        keyCode: UInt32(kVK_ANSI_4),
-        modifiers: UInt32(cmdKey | shiftKey),
-        id: 3
-    )
-
     private let definition: Definition
     private let onFire: @MainActor () -> Void
     private var handlerRef: EventHandlerRef?

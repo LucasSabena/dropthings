@@ -5,7 +5,7 @@ DropThings should feel like a normal macOS app to install:
 1. Download a `.dmg`.
 2. Drag `DropThings.app` to `Applications`.
 3. Open the app.
-4. Grant Accessibility or Screen Recording only when a module asks.
+4. Grant Accessibility only when Scroll Control asks.
 
 ## Build A DMG
 

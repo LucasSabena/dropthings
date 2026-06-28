@@ -18,7 +18,7 @@ open .build/xcode/Build/Products/Debug/DropThings.app
 
 What you should see:
 
-- The DropThings icon (square stack) appears in the menu bar.
+- The DropThings logo appears in the menu bar.
 - No dock icon (`LSUIElement = true`).
 - Clicking the menu bar icon shows `Show File Shelf` (when File Shelf is
   registered), `Open Settings…`, `Quit DropThings`.
@@ -31,7 +31,7 @@ What you should see:
 - [ ] `Diagnostics` shows the current state of every `SystemPermission`
       (Accessibility, Screen Recording, Full Disk Access, Automation) and a
       list of recent log entries (empty until you use a module).
-- [ ] `About` shows the app name and "Phase 2 — Scroll Control".
+- [ ] `About` shows the app name and native utility hub summary.
 
 ## 2. Fake module (diagnostic)
 
@@ -96,20 +96,16 @@ Full checklist in `docs/menu-bar-cleaner-manual-checks.md`. Smoke version:
 
 - [ ] First launch shows the welcome window. Skip or "Enable File Shelf
       and continue". Welcome does not show again.
-- [ ] Sidebar → Menu Bar Cleaner → status pill: Needs permission.
-- [ ] Click `Request Access` → system prompt appears. Accept.
-- [ ] Click `Refresh menu bar` → list populates with detected items.
-- [ ] Toggle one item off in the settings list → it disappears from the
-      menu bar.
-- [ ] Look at the right side of the menu bar: there is a separator dot
-      and a `▼ N` reveal button.
-- [ ] Click the reveal button → hidden items become visible; icon flips
-      to `▲` and count clears. Click again to re-hide.
-- [ ] Launch an app that adds a status item (e.g. Spotlight) → it appears
-      in the settings list within ~1 second.
-- [ ] Quit that app → it disappears from the list within ~1 second.
-- [ ] Disable the module from the registry → separator and reveal button
-      disappear; everything restores to visible.
+- [ ] Sidebar → Menu Bar Cleaner → status pill: Running after enabling.
+- [ ] Two DropThings-owned menu bar controls appear: a divider and a
+      chevron.
+- [ ] Hold Command and drag one low-priority icon to the left of the divider.
+- [ ] Click `Collapse icons` in settings or the menu bar chevron → the
+      left-of-divider area moves off-screen.
+- [ ] Click again → the overflow area is visible.
+- [ ] Enable `Collapse on launch`, quit, reopen → the divider starts
+      collapsed.
+- [ ] Disable the module from the registry → divider and chevron disappear.
 
 ## 6. File Shelf pin + persistence
 
@@ -134,24 +130,13 @@ Full checklist in `docs/keep-awake-manual-checks.md`. Smoke version:
 
 Full checklist in `docs/color-picker-manual-checks.md`. Smoke version:
 
-- [ ] Sidebar → Color Picker → `Request Access` for Screen Recording.
-- [ ] Click **Pick color now** (or press ⌥⌘C) → screen freezes into a
-      dimmed overlay with a crosshair.
-- [ ] Click anywhere → overlay closes, hex code lands on the clipboard.
+- [ ] Sidebar → Color Picker → status pill: Running after enabling.
+- [ ] Click **Pick color now** (or press ⌥⌘C) → the native macOS color
+      sampler opens.
+- [ ] Pick a color → hex code lands on the clipboard.
 - [ ] Settings shows the picked color in the **Recent colors** grid.
 
-## 9. Screenshot
-
-Full checklist in `docs/screenshot-manual-checks.md`. Smoke version:
-
-- [ ] Sidebar → Screenshot → `Request Access` for Screen Recording.
-- [ ] Click **Capture screen now** (or press ⌘⇧4) → a new window opens
-      with the captured image.
-- [ ] Click **Save…** → a PNG appears at
-      `~/Downloads/Screenshots/DropThings-<timestamp>.png`.
-- [ ] Click **Copy** → paste in any app → the image appears.
-
-## 10. Settings import / export
+## 9. Settings import / export
 
 - [ ] Menu bar icon → `Export Settings…` → choose a file → the `.plist`
       exists on disk. Run `defaults read app.dropthings` in Terminal to
@@ -160,19 +145,18 @@ Full checklist in `docs/screenshot-manual-checks.md`. Smoke version:
 - [ ] Menu bar icon → `Import Settings…` → choose the file you exported
       before the change → the toggle is restored to the exported value.
 
-## 11. Logs
+## 10. Logs
 
 Console.app → filter `subsystem:app.dropthings`.
 
 - [ ] Modules you interact with produce `info` lines with the right category
       (`file-shelf`, `scroll-control`, `menu-bar-cleaner`, `keep-awake`,
-      `color-picker`, `screenshot`).
+      `color-picker`).
 - [ ] No `error` or `fault` lines under normal use.
 - [ ] `warning` lines appear only when expected (hotkey conflict on File
-      Shelf, tap timeout on Scroll Control, capture blocked on
-      Color Picker / Screenshot when Screen Recording is denied).
+      Shelf, tap timeout on Scroll Control).
 
-## 12. Settings persistence
+## 11. Settings persistence
 
 - [ ] Quit DropThings, reopen → every toggle and settings value is
       remembered.
@@ -181,7 +165,7 @@ Console.app → filter `subsystem:app.dropthings`.
 - [ ] Pinned File Shelf items persist across launches from
       `~/Library/Application Support/app.dropthings/file-shelf-pinned.json`.
 
-## 13. What to do when something fails
+## 12. What to do when something fails
 
 1. Check `Console.app` filtered to `app.dropthings` for the failing
    category. The logger writes one line per event with a useful message.

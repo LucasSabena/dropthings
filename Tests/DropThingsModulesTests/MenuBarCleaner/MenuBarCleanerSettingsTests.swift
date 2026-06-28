@@ -5,16 +5,14 @@ import DropThingsCore
 final class MenuBarCleanerSettingsTests: XCTestCase {
     func testDefaults() {
         let settings = MenuBarCleanerSettings()
-        XCTAssertTrue(settings.hiddenItemIds.isEmpty)
+        XCTAssertFalse(settings.collapseOnLaunch)
     }
 
     @MainActor
     func testRoundTripThroughSettingsStore() {
         let backend = InMemorySettingsBackend()
         let store = SettingsStore(backend: backend)
-        let original = MenuBarCleanerSettings(
-            hiddenItemIds: ["com.apple.Spotlight:Wi-Fi", "com.apple.controlcenter:Battery"]
-        )
+        let original = MenuBarCleanerSettings(collapseOnLaunch: true)
         store.saveMenuBarCleanerSettings(original)
         let loaded = store.loadMenuBarCleanerSettings()
         XCTAssertEqual(loaded, original)
@@ -29,11 +27,9 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         XCTAssertEqual(loaded, MenuBarCleanerSettings())
     }
 
-    func testEqualityByHiddenSet() {
-        let a = MenuBarCleanerSettings(hiddenItemIds: ["a", "b"])
-        let b = MenuBarCleanerSettings(hiddenItemIds: ["b", "a"])
-        let c = MenuBarCleanerSettings(hiddenItemIds: ["a"])
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
+    func testDecodingOldHiddenItemSettingsFallsBackToDefaults() throws {
+        let data = #"{"hiddenItemIds":["old:id"]}"#.data(using: .utf8)!
+        let loaded = try JSONDecoder().decode(MenuBarCleanerSettings.self, from: data)
+        XCTAssertEqual(loaded, MenuBarCleanerSettings())
     }
 }

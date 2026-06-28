@@ -405,12 +405,17 @@ private struct DiagnosticsView: View {
 private struct AboutView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DTSpace.md) {
+            Image("DropThingsLogoTransparent")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .accessibilityHidden(true)
             Text("DropThings")
                 .font(DTTypography.windowTitle)
-            Text("Phase 0 — Foundation")
+            Text("Native macOS utility hub")
                 .font(DTTypography.body)
                 .foregroundStyle(DTColor.textSecondary)
-            Text("A native macOS utility hub. Scroll Control, File Shelf, and Menu Bar Cleaner land in the next phases.")
+            Text("Small focused tools, clear permissions, and a compact control center.")
                 .font(DTTypography.caption)
                 .foregroundStyle(DTColor.textSecondary)
             Spacer()

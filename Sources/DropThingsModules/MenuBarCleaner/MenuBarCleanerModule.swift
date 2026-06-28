@@ -1,236 +1,178 @@
 import AppKit
-import Combine
 import SwiftUI
 import DropThingsCore
 import DropThingsDesignSystem
 import DropThingsPlatform
 import os
 
-/// Hides menu bar items the user does not want to see and keeps the rest at
-/// their natural position. Accessibility is required because the only way
-/// to enumerate and toggle the OS-level menu bar extras is the macOS
-/// accessibility API (`kAXMenuBarExtrasAttribute`).
-///
-/// v1 adds two DropThings-owned status items:
-/// - A separator on the right side of the menu bar so the user can see
-///   where the visible/hidden boundary is.
-/// - A reveal button with a chevron icon. Click toggles between honoring
-///   the user's hide list and showing every item.
+/// Hidden-Bar-style overflow for menu bar items. DropThings owns a divider
+/// and a toggle item; the user Command-drags icons to the left of the divider
+/// once, then Collapse expands the divider so that zone moves off-screen.
 public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public let id = ModuleID.menuBarCleaner
     public let name = "Menu Bar Cleaner"
-    public let summary = "Hide menu bar icons you don't need. Bring them back any time."
-    public let requiredPermissions: [SystemPermission] = [.accessibility]
+    public let summary = "Collapse low-priority menu bar icons behind one control."
+    public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: MenuBarCleanerSettings
-    @Published public private(set) var discoveredItems: [MenuBarItem] = []
-    @Published public private(set) var lastRefreshError: String?
-    @Published public private(set) var isRevealing: Bool = false
+    @Published public private(set) var isCollapsed: Bool = false
+    @Published public private(set) var statusMessage: String?
 
     private let settingsStore: SettingsStore
-    private let permissions: PermissionCenter
-    private let controller: MenuBarController
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "menu-bar-cleaner")
 
-    private var separator: DropThingsStatusItem?
-    private var revealButton: DropThingsStatusItem?
-    private var workspaceObservers: [NSObjectProtocol] = []
+    private var dividerItem: DropThingsStatusItem?
+    private var toggleItem: DropThingsStatusItem?
+    private var screenObserver: NSObjectProtocol?
+    private let expandedDividerLength: CGFloat = 18
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
-        self.permissions = permissions
         self.settings = settings.loadMenuBarCleanerSettings()
-        self.controller = MenuBarController()
     }
 
     public func start() async throws {
-        guard permissions.state(for: .accessibility) == .granted else {
-            state = .needsPermission(missing: [.accessibility])
-            logger.notice("Start blocked: Accessibility not granted")
-            return
-        }
-        refresh()
-        if case .failed = state { return }
         installStatusItems()
-        subscribeToWorkspace()
+        subscribeToScreenChanges()
+        isCollapsed = settings.collapseOnLaunch
+        applyMenuBarState()
         state = .running
-        logger.info("Menu Bar Cleaner started with \(self.discoveredItems.count) items")
+        logger.info("Menu Bar Cleaner started")
     }
 
     public func stop() async {
+        revealForShutdown()
         uninstallStatusItems()
-        unsubscribeFromWorkspace()
-        _ = controller.applyHidden([])
-        discoveredItems = []
+        unsubscribeFromScreenChanges()
         state = .off
-        logger.info("Menu Bar Cleaner stopped; menu bar restored")
+        logger.info("Menu Bar Cleaner stopped")
     }
 
-    // MARK: - Status items
+    // MARK: - Actions
 
-    private func installStatusItems() {
-        // Idempotent: a re-entrant start (e.g. after a permission re-grant
-        // path) must not double-install the separator or the reveal button.
-        guard separator == nil else { return }
-        let separator = DropThingsStatusItem(length: 1)
-        separator.setSymbol("circle.fill", accessibilityDescription: "DropThings divider")
-        separator.show()
-        self.separator = separator
-
-        let reveal = DropThingsStatusItem()
-        reveal.setOnClick { [weak self] in
-            self?.toggleReveal()
-        }
-        updateRevealButton(reveal)
-        reveal.show()
-        self.revealButton = reveal
+    public func toggleCollapsed() {
+        isCollapsed ? reveal() : collapse()
     }
 
-    private func uninstallStatusItems() {
-        revealButton = nil
-        separator = nil
+    public func collapse() {
+        guard !isCollapsed else { return }
+        isCollapsed = true
+        applyMenuBarState()
+        logger.info("Menu bar overflow collapsed")
     }
 
-    private func updateRevealButton(_ button: DropThingsStatusItem) {
-        let hiddenCount = isRevealing ? 0 : settings.hiddenItemIds.count
-        if hiddenCount == 0 {
-            button.setSymbol("checkmark.circle", accessibilityDescription: "All menu bar items visible")
-            button.setTitle("")
-        } else {
-            let symbol = isRevealing ? "chevron.up" : "chevron.down"
-            button.setSymbol(symbol, accessibilityDescription: isRevealing ? "Hide items again" : "Show hidden items")
-            button.setTitle("\(hiddenCount)")
-        }
+    public func reveal() {
+        guard isCollapsed else { return }
+        isCollapsed = false
+        applyMenuBarState()
+        logger.info("Menu bar overflow revealed")
     }
 
-    public func toggleReveal() {
-        isRevealing.toggle()
-        let target: Set<String> = isRevealing ? [] : settings.hiddenItemIds
-        let result = controller.applyHidden(target)
-        reportApplyResult(result, context: isRevealing ? "Reveal-all engaged" : "Reveal-all released, hide list re-applied")
-        if let revealButton {
-            updateRevealButton(revealButton)
-        }
+    private func revealForShutdown() {
+        guard isCollapsed else { return }
+        isCollapsed = false
+        applyMenuBarState()
     }
 
-    // MARK: - Workspace observer
-
-    private func subscribeToWorkspace() {
-        let center = NSWorkspace.shared.notificationCenter
-        let didLaunch = center.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // Re-enumerate after a short delay so the launched app has time
-            // to register its status item.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self?.refresh()
-            }
-        }
-        let didTerminate = center.addObserver(
-            forName: NSWorkspace.didTerminateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self?.refresh()
-            }
-        }
-        workspaceObservers = [didLaunch, didTerminate]
-    }
-
-    private func unsubscribeFromWorkspace() {
-        let center = NSWorkspace.shared.notificationCenter
-        for observer in workspaceObservers {
-            center.removeObserver(observer)
-        }
-        workspaceObservers.removeAll()
-    }
-
-    // MARK: - Discovery
-
-    /// Re-enumerate the menu bar. Call after the user installs or removes
-    /// menu-bar apps so the settings list reflects current state.
-    public func refresh() {
-        do {
-            let items = try controller.refresh()
-            discoveredItems = items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-            lastRefreshError = nil
-            if !isRevealing {
-                let result = controller.applyHidden(settings.hiddenItemIds)
-                reportApplyResult(result, context: "Refreshed menu bar: \(items.count) items")
-            }
-            if let revealButton {
-                updateRevealButton(revealButton)
-            }
-            logger.info("Refreshed menu bar: \(items.count) items")
-        } catch let error as MenuBarController.RefreshError {
-            handle(error: error)
-        } catch {
-            state = .failed(reason: String(describing: error), recovery: "Disable and re-enable the module.")
-            lastRefreshError = String(describing: error)
-        }
-    }
-
-    private func handle(error: MenuBarController.RefreshError) {
-        switch error {
-        case .accessibilityDenied:
-            let missing = permissions.missing(from: requiredPermissions)
-            state = .needsPermission(missing: missing)
-            lastRefreshError = "Accessibility not granted"
-        case .enumerationFailed:
-            state = .degraded(reason: "Could not enumerate menu bar. macOS may be hiding some controls.")
-            lastRefreshError = "Enumeration failed"
-        }
-    }
-
-    // MARK: - Settings surface
-
-    public var hiddenIds: Set<String> { settings.hiddenItemIds }
-
-    public func setHidden(_ id: String, hidden: Bool) {
+    public func setCollapseOnLaunch(_ enabled: Bool) {
         var new = settings
-        if hidden {
-            new.hiddenItemIds.insert(id)
-        } else {
-            new.hiddenItemIds.remove(id)
-        }
-        applySettings(new)
-    }
-
-    public func showAll() {
-        applySettings(MenuBarCleanerSettings())
-    }
-
-    private func applySettings(_ new: MenuBarCleanerSettings) {
+        new.collapseOnLaunch = enabled
         settings = new
         settingsStore.saveMenuBarCleanerSettings(new)
-        if state == .running && !isRevealing {
-            let result = controller.applyHidden(new.hiddenItemIds)
-            reportApplyResult(result, context: "Applied hide list (\(new.hiddenItemIds.count) items hidden)")
-        } else {
-            logger.info("Applied hide list (\(new.hiddenItemIds.count) items hidden)")
-        }
-        if let revealButton {
-            updateRevealButton(revealButton)
-        }
     }
 
-    private func reportApplyResult(_ result: MenuBarController.ApplyResult, context: String) {
-        if result.hasFailures {
-            lastRefreshError = "\(result.failed.count) item(s) could not be hidden. macOS may not allow it for some items."
-            state = .degraded(reason: lastRefreshError!)
-            logger.warning("\(context); \(result.failed.count) failed: \(result.failed)")
-        } else {
-            logger.info(context)
-        }
+    public var collapseOnLaunch: Bool {
+        settings.collapseOnLaunch
     }
 
     // MARK: - SwiftUI surface
 
     public func makeSettingsView() -> AnyView {
         AnyView(MenuBarCleanerSettingsView(module: self))
+    }
+
+    // MARK: - Status items
+
+    private func installStatusItems() {
+        guard dividerItem == nil else { return }
+        let divider = DropThingsStatusItem(length: expandedDividerLength)
+        divider.setAutosaveName("dropthings-menu-bar-cleaner-divider")
+        divider.setSymbol("line.vertical", accessibilityDescription: "DropThings menu bar divider")
+        divider.show()
+        dividerItem = divider
+
+        let toggle = DropThingsStatusItem()
+        toggle.setAutosaveName("dropthings-menu-bar-cleaner-toggle")
+        toggle.setOnClick { [weak self] in
+            self?.toggleCollapsed()
+        }
+        toggle.show()
+        toggleItem = toggle
+        updateToggleItem()
+    }
+
+    private func uninstallStatusItems() {
+        toggleItem = nil
+        dividerItem = nil
+    }
+
+    private func applyMenuBarState() {
+        dividerItem?.setLength(isCollapsed ? collapsedDividerLength : expandedDividerLength)
+        updateToggleItem()
+        validateControlOrder()
+    }
+
+    private func updateToggleItem() {
+        guard let toggleItem else { return }
+        toggleItem.setTitle("")
+        toggleItem.setSymbol(
+            isCollapsed ? "chevron.right.circle.fill" : "chevron.left.circle",
+            accessibilityDescription: isCollapsed ? "Reveal hidden menu bar icons" : "Collapse menu bar icons"
+        )
+    }
+
+    private var collapsedDividerLength: CGFloat {
+        let widestScreen = NSScreen.screens.map(\.frame.width).max() ?? 1728
+        return max(500, min(widestScreen * 2, 10_000))
+    }
+
+    private func validateControlOrder() {
+        guard let dividerX = dividerItem?.buttonOriginX,
+              let toggleX = toggleItem?.buttonOriginX else {
+            statusMessage = nil
+            return
+        }
+        if toggleX < dividerX {
+            statusMessage = "Move the DropThings chevron to the right of the divider with Command-drag."
+        } else if isCollapsed {
+            statusMessage = "Collapsed. Click the DropThings chevron to reveal the hidden side."
+        } else {
+            statusMessage = "Revealed. Icons placed left of the divider will collapse behind it."
+        }
+    }
+
+    // MARK: - Screen observer
+
+    private func subscribeToScreenChanges() {
+        guard screenObserver == nil else { return }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isCollapsed else { return }
+                self.dividerItem?.setLength(self.collapsedDividerLength)
+                self.validateControlOrder()
+            }
+        }
+    }
+
+    private func unsubscribeFromScreenChanges() {
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+            self.screenObserver = nil
+        }
     }
 }

@@ -49,7 +49,7 @@ Exit criteria:
 
 - Study Ice and Hidden Bar behavior deeply.
 - Implement a reveal/hide controller with a menu bar separator item.
-- Support always-visible and hidden groups.
+- Support a visible divider and collapsible hidden side.
 - Support temporary reveal by click or hover.
 - Add reset and troubleshooting actions.
 - Handle notch, small screens, Control Center, and macOS version differences.
@@ -57,7 +57,7 @@ Exit criteria:
 Exit criteria:
 
 - User can hide non-critical menu bar items and reveal them predictably.
-- Revoked Accessibility or Screen Recording permissions are detected.
+- The module does not require high-trust permissions for the basic overflow.
 - The module has a documented compatibility matrix.
 
 ## Phase 4: Polish And Reliability

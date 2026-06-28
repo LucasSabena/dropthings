@@ -33,6 +33,14 @@ public final class DropThingsStatusItem {
         statusItem.button?.title = title
     }
 
+    public func setLength(_ length: CGFloat) {
+        statusItem.length = length
+    }
+
+    public func setAutosaveName(_ name: String) {
+        statusItem.autosaveName = name
+    }
+
     public func setOnClick(_ handler: @escaping @MainActor () -> Void) {
         clickTarget.handler = handler
     }
@@ -47,6 +55,10 @@ public final class DropThingsStatusItem {
 
     public var isVisible: Bool {
         statusItem.isVisible
+    }
+
+    public var buttonOriginX: CGFloat? {
+        statusItem.button?.window?.frame.origin.x
     }
 }
 

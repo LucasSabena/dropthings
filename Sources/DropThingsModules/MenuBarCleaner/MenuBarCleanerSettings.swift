@@ -1,14 +1,23 @@
 import Foundation
 import DropThingsCore
-import DropThingsPlatform
 
-/// Per-item hide preferences. Persisted as a set of `MenuBarItem.id`
-/// values; everything else is left at whatever the OS chose to render.
+/// User preferences for the Hidden-Bar-style overflow area. The user decides
+/// what belongs in that area by holding Command and dragging menu bar items
+/// to the left of DropThings' divider.
 public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
-    public var hiddenItemIds: Set<String>
+    public var collapseOnLaunch: Bool
 
-    public init(hiddenItemIds: Set<String> = []) {
-        self.hiddenItemIds = hiddenItemIds
+    public init(collapseOnLaunch: Bool = false) {
+        self.collapseOnLaunch = collapseOnLaunch
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case collapseOnLaunch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.collapseOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .collapseOnLaunch) ?? false
     }
 }
 

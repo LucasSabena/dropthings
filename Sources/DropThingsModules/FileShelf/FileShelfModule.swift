@@ -101,7 +101,7 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     private func startShakeDetection() {
         let monitor = MousePositionMonitor { [weak self] location in
             guard let self else { return }
-            self.processShakeSample(x: location.x)
+            self.processShakeSample(location: location)
         }
         monitor.start()
         mouseMonitor = monitor
@@ -114,18 +114,16 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         shakeDetector.reset()
     }
 
-    private var samplesProcessed: Int = 0
-
-    private func processShakeSample(x: Double) {
+    private func processShakeSample(location: CGPoint) {
         let sample = ShakeDetector.Sample(
             timestamp: Date().timeIntervalSinceReferenceDate,
-            x: x
+            x: location.x
         )
         shakeDetector.record(sample)
         guard shakeDetector.shouldFire() else { return }
         shakeDetector.reset()
-        logger.info("Shake detected at x=\(x), showing shelf")
-        showPanel()
+        logger.info("Shake detected at \(Int(location.x)),\(Int(location.y)), showing shelf")
+        showPanel(near: location)
     }
 
     public func updateShakeToShow(_ enabled: Bool) {
@@ -186,28 +184,44 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
 
     // MARK: - Panel
 
-    public func showPanel() {
+    public func showPanel(near location: CGPoint? = nil) {
         if panel == nil {
             createPanel()
         }
         guard let panel else { return }
-        if panel.frame.origin == .zero {
-            positionPanelOnRightEdge(panel)
-        }
+        positionPanel(panel, near: location ?? NSEvent.mouseLocation)
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil as Any?)
         isPanelVisible = true
         logger.info("Shelf panel shown at \(panel.frame.origin.x), \(panel.frame.origin.y)")
     }
 
-    private func positionPanelOnRightEdge(_ panel: ShelfPanel) {
-        guard let screen = NSScreen.main else { return }
+    private func positionPanel(_ panel: ShelfPanel, near location: CGPoint) {
+        guard let screen = screen(containing: location) ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let size = panel.frame.size
-        let margin: CGFloat = 24
-        let x = visible.maxX - size.width - margin
-        let y = visible.maxY - size.height - margin - 60
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        let margin: CGFloat = 12
+        let preferredOffset: CGFloat = 18
+        var x = location.x + preferredOffset
+        if x + size.width > visible.maxX - margin {
+            x = location.x - size.width - preferredOffset
+        }
+        let y = location.y - size.height / 2
+        panel.setFrameOrigin(NSPoint(
+            x: Self.clamped(x, min: visible.minX + margin, max: visible.maxX - size.width - margin),
+            y: Self.clamped(y, min: visible.minY + margin, max: visible.maxY - size.height - margin)
+        ))
+    }
+
+    private func screen(containing point: CGPoint) -> NSScreen? {
+        NSScreen.screens.first { screen in
+            NSMouseInRect(point, screen.frame, false)
+        }
+    }
+
+    private static func clamped(_ value: CGFloat, min lower: CGFloat, max upper: CGFloat) -> CGFloat {
+        guard lower <= upper else { return lower }
+        return Swift.min(Swift.max(value, lower), upper)
     }
 
     public func hidePanel() {

@@ -7,7 +7,7 @@ final class ShakeDetectorTests: XCTestCase {
     }
 
     func testEmptyDetectorDoesNotFire() {
-        var detector = ShakeDetector()
+        let detector = ShakeDetector()
         XCTAssertFalse(detector.shouldFire())
     }
 

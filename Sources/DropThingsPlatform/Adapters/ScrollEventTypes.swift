@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import AppKit
 
 /// Heuristic classification of a scroll source. Order matters: trackpad and
 /// Magic Mouse share the inertial-phase path, mouse wheels never report
@@ -26,11 +27,22 @@ public struct ScrollEventInput: Equatable, Sendable {
     /// Discrete step on the secondary axis. Non-zero for mouse wheels when
     /// the wheel tilts.
     public let fixedDeltaX: Int64
+    /// Fixed-point delta on the primary axis. Continuous devices rely on
+    /// this for smooth scrolling.
+    public let fixedPointDeltaY: Double
+    /// Fixed-point delta on the secondary axis.
+    public let fixedPointDeltaX: Double
     /// Phase for inertial trackpad scrolling. `0` means "not a trackpad in
     /// momentum".
     public let phase: Int64
     /// Momentum phase. Non-zero for ongoing inertial scrolling.
     public let momentumPhase: Int64
+    /// macOS marks trackpads and Magic Mouse as continuous; most physical
+    /// wheels are discrete.
+    public let isContinuous: Bool
+    /// Mirrors `NSEvent.isDirectionInvertedFromDevice` for future per-system
+    /// natural-scrolling decisions.
+    public let isDirectionInvertedFromDevice: Bool
 
     public init(
         pointDeltaY: Double,
@@ -38,14 +50,22 @@ public struct ScrollEventInput: Equatable, Sendable {
         fixedDeltaY: Int64,
         fixedDeltaX: Int64,
         phase: Int64,
-        momentumPhase: Int64
+        momentumPhase: Int64,
+        fixedPointDeltaY: Double = 0,
+        fixedPointDeltaX: Double = 0,
+        isContinuous: Bool = false,
+        isDirectionInvertedFromDevice: Bool = false
     ) {
         self.pointDeltaY = pointDeltaY
         self.pointDeltaX = pointDeltaX
         self.fixedDeltaY = fixedDeltaY
         self.fixedDeltaX = fixedDeltaX
+        self.fixedPointDeltaY = fixedPointDeltaY
+        self.fixedPointDeltaX = fixedPointDeltaX
         self.phase = phase
         self.momentumPhase = momentumPhase
+        self.isContinuous = isContinuous
+        self.isDirectionInvertedFromDevice = isDirectionInvertedFromDevice
     }
 
     public static let empty = ScrollEventInput(
@@ -68,6 +88,8 @@ public struct ScrollEventDecision: Equatable, Sendable {
     public let pointDeltaX: Double
     public let fixedDeltaY: Int64
     public let fixedDeltaX: Int64
+    public let fixedPointDeltaY: Double
+    public let fixedPointDeltaX: Double
     public let didMutate: Bool
 
     public init(
@@ -76,6 +98,8 @@ public struct ScrollEventDecision: Equatable, Sendable {
         pointDeltaX: Double,
         fixedDeltaY: Int64,
         fixedDeltaX: Int64,
+        fixedPointDeltaY: Double = 0,
+        fixedPointDeltaX: Double = 0,
         didMutate: Bool
     ) {
         self.deviceKind = deviceKind
@@ -83,6 +107,8 @@ public struct ScrollEventDecision: Equatable, Sendable {
         self.pointDeltaX = pointDeltaX
         self.fixedDeltaY = fixedDeltaY
         self.fixedDeltaX = fixedDeltaX
+        self.fixedPointDeltaY = fixedPointDeltaY
+        self.fixedPointDeltaX = fixedPointDeltaX
         self.didMutate = didMutate
     }
 }
@@ -95,15 +121,22 @@ extension ScrollEventInput {
         let pointX = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
         let fixedY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
         let fixedX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        let fixedPointY = event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1)
+        let fixedPointX = event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2)
         let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
         let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
+        let nsEvent = NSEvent(cgEvent: event)
         return ScrollEventInput(
             pointDeltaY: pointY,
             pointDeltaX: pointX,
             fixedDeltaY: fixedY,
             fixedDeltaX: fixedX,
             phase: phase,
-            momentumPhase: momentum
+            momentumPhase: momentum,
+            fixedPointDeltaY: fixedPointY,
+            fixedPointDeltaX: fixedPointX,
+            isContinuous: event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+            isDirectionInvertedFromDevice: nsEvent?.isDirectionInvertedFromDevice ?? false
         )
     }
 }
@@ -113,9 +146,11 @@ extension ScrollEventDecision {
     /// already determined `didMutate` to avoid touching the event when no
     /// change is needed.
     public func apply(to event: CGEvent) {
-        event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: pointDeltaY)
-        event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: pointDeltaX)
         event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: fixedDeltaY)
         event.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: fixedDeltaX)
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: fixedPointDeltaY)
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: fixedPointDeltaX)
+        event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: pointDeltaY)
+        event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: pointDeltaX)
     }
 }

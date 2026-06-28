@@ -7,38 +7,29 @@ import DropThingsPlatform
 import os
 
 /// Picks any pixel color from the screen and copies its hex code to the
-/// clipboard. The user enters picking mode via ⌥⌘C (configurable later);
-/// the screen freezes into a dimmed overlay with a crosshair cursor; the
-/// next click samples the pixel under the cursor.
+/// clipboard. The module uses AppKit's native `NSColorSampler`, which gives
+/// the user the standard macOS eyedropper instead of a custom screenshot
+/// overlay.
 public final class ColorPickerModule: DropThingsModule, ObservableObject {
     public let id = ModuleID.colorPicker
     public let name = "Color Picker"
     public let summary = "Pick a color from anywhere on screen."
-    public let requiredPermissions: [SystemPermission] = [.screenRecording]
+    public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: ColorPickerSettings
 
     private let settingsStore: SettingsStore
-    private let permissions: PermissionCenter
-    private let capture = ScreenCapture()
     private var hotkey: GlobalHotkey?
-    private var overlay: ColorPickerOverlayWindow?
-    private var capturedImage: CGImage?
+    private var activeSampler: NSColorSampler?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "color-picker")
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
-        self.permissions = permissions
         self.settings = settings.loadColorPickerSettings()
     }
 
     public func start() async throws {
-        guard permissions.state(for: .screenRecording) == .granted else {
-            state = .needsPermission(missing: [.screenRecording])
-            logger.notice("Start blocked: Screen Recording not granted")
-            return
-        }
         registerHotkey()
         state = .running
         logger.info("Color Picker started")
@@ -46,39 +37,32 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     public func stop() async {
         unregisterHotkey()
-        dismissOverlay()
+        activeSampler = nil
         state = .off
         logger.info("Color Picker stopped")
     }
 
     // MARK: - Public actions
 
-    /// Trigger picking mode programmatically (settings button or menu
-    /// entry). Safe to call when the screen recording permission is missing
-    /// — the function returns silently and logs a notice.
+    /// Trigger the system color sampler programmatically (settings button or
+    /// hotkey). Safe to call repeatedly; the second call is ignored while the
+    /// native sampler is already active.
     public func startPicking() {
-        guard permissions.state(for: .screenRecording) == .granted else {
-            logger.notice("Pick blocked: Screen Recording not granted")
-            return
-        }
-        guard overlay == nil else { return }
-        do {
-            let image = try capture.captureScreen()
-            capturedImage = image
-            let overlay = ColorPickerOverlayWindow(capturedImage: image)
-            overlay.onPick = { [weak self] location in
-                self?.handlePick(at: location)
+        guard activeSampler == nil else { return }
+        let sampler = NSColorSampler()
+        activeSampler = sampler
+        sampler.show { [weak self] color in
+            Task { @MainActor in
+                guard let self else { return }
+                self.activeSampler = nil
+                guard let color else {
+                    self.logger.notice("Picking cancelled")
+                    return
+                }
+                self.handlePickedColor(color)
             }
-            overlay.onCancel = { [weak self] in
-                self?.dismissOverlay()
-            }
-            overlay.makeKeyAndOrderFront(nil)
-            NSCursor.crosshair.push()
-            self.overlay = overlay
-            logger.info("Picking mode entered")
-        } catch {
-            logger.error("Capture failed: \(error)")
         }
+        logger.info("Native color sampler opened")
     }
 
     public func clearHistory() {
@@ -189,26 +173,19 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     // MARK: - Pick handling
 
-    private func handlePick(at location: CGPoint) {
-        guard let image = capturedImage else {
-            dismissOverlay()
+    private func handlePickedColor(_ color: NSColor) {
+        guard let rgbColor = color.usingColorSpace(.deviceRGB) ?? color.usingColorSpace(.sRGB) else {
+            logger.warning("Picked color could not be converted to RGB")
             return
         }
-        // Convert from overlay-local AppKit coords to the correct image
-        // pixel. AppKit is bottom-left; CGImage is top-left; multi-monitor
-        // arrangements add horizontal/vertical offsets that a simple Y-flip
-        // gets wrong. The mapper owns that math.
-        let mapper = ScreenCoordinateMapper.current()
-        let imagePoint = mapper.imagePoint(forAppKitPoint: location)
-        guard let rgb = PixelSampler.sample(at: imagePoint, in: image) else {
-            dismissOverlay()
-            return
-        }
-        let picked = PickedColor.from(rgb: rgb)
+        let picked = PickedColor(
+            r: Self.componentToByte(rgbColor.redComponent),
+            g: Self.componentToByte(rgbColor.greenComponent),
+            b: Self.componentToByte(rgbColor.blueComponent)
+        )
         recordPick(picked)
         copyToPasteboard(picked)
-        logger.notice("Picked \(picked.hex) at AppKit \(Int(location.x)),\(Int(location.y)) → image \(Int(imagePoint.x)),\(Int(imagePoint.y))")
-        dismissOverlay()
+        logger.notice("Picked \(picked.hex)")
     }
 
     private func recordPick(_ picked: PickedColor) {
@@ -218,12 +195,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         applySettings(new)
     }
 
-    private func dismissOverlay() {
-        overlay?.orderOut(nil)
-        overlay = nil
-        capturedImage = nil
-        if NSCursor.current == NSCursor.crosshair {
-            NSCursor.pop()
-        }
+    private static func componentToByte(_ value: CGFloat) -> Int {
+        min(max(Int((value * 255).rounded()), 0), 255)
     }
 }

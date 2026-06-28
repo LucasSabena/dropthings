@@ -42,3 +42,37 @@ Result:
 - Before implementing the advanced picker, screenshot editor, or revised
   permission screens, run the Lazyweb design workflow and record the concrete
   findings here.
+
+## 2026-06-28 - Module Repair Pass
+
+Task: repair confusing module UX for File Shelf, Scroll Control, Menu Bar
+Cleaner, Color Picker, hotkeys, and remove Screenshot from the active app.
+
+Workflow note:
+
+- No Lazyweb MCP tool is available in this session, so this pass used the
+  existing Lazyweb gate note plus targeted open-source/product research.
+- Reviewed temporary local clones of:
+  - LinearMouse: scroll event tap architecture and complete scroll delta writes.
+  - Scroll Reverser: practical mouse vs trackpad heuristics using continuous
+    events, phases, and gesture context.
+  - Hidden Bar: divider-length overflow model, Command-drag setup, and
+    widest-screen collapse length.
+  - Ice: modern menu bar manager constraints, status item discovery, and
+    menu-bar UX expectations.
+- Checked Apple API direction for replacing the custom color picker overlay
+  with `NSColorSampler` and for using an all-spaces utility `NSPanel`.
+
+Design implication:
+
+- Prefer honest, direct controls over technical lists. Menu Bar Cleaner should
+  behave like a visible divider + chevron overflow, not a fragile per-process
+  AX toggle list.
+- Hotkeys must show the current shortcut as a first-class value and keep
+  "change" separate from "clear".
+- Color Picker should use the native macOS sampler before building a custom
+  magnifier/capture flow.
+- File Shelf should appear near the pointer when summoned by shake/hotkey and
+  stay available across Spaces.
+- Screenshot is removed from the active module set until it can be rebuilt as
+  a useful region capture/editor.

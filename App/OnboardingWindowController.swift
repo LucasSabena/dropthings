@@ -55,9 +55,11 @@ struct OnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DTSpace.lg) {
             VStack(alignment: .leading, spacing: DTSpace.sm) {
-                Image(systemName: "square.stack.3d.up")
-                    .font(.system(size: 36))
-                    .foregroundStyle(DTColor.accent)
+                Image("DropThingsLogoTransparent")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
                 Text("Welcome to DropThings")
                     .font(DTTypography.windowTitle)
                 Text("A native macOS utility hub. One app, many small tools.")

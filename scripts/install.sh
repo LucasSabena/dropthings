@@ -107,6 +107,6 @@ echo
 echo "Installed: $INSTALL_PATH"
 echo "Open with: open \"$INSTALL_PATH\""
 echo
-echo "Grant Accessibility / Screen Recording from System Settings →"
-echo "Privacy & Security when a module asks. The Diagnostics panel"
+echo "Grant Accessibility from System Settings → Privacy & Security"
+echo "when Scroll Control asks. The Diagnostics panel"
 echo "inside DropThings shows your bundle path so you can verify the grant."

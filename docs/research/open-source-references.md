@@ -48,15 +48,16 @@
 ### Ice
 
 - URL: https://github.com/jordanbaird/Ice
+- License: GPL-3.0.
 - Why it matters: modern open-source menu bar manager with hiding, showing, Ice Bar, ordering, and appearance customization.
-- Use: primary reference for feasibility and permission model.
+- Use: primary reference for feasibility and permission model. Do not copy code into DropThings unless the license strategy changes.
 
 ### Hidden Bar
 
 - URL: https://github.com/dwarvesf/hidden
 - License: MIT.
 - Why it matters: simpler open-source menu bar hiding utility.
-- Use: study minimal implementation and UX.
+- Use: study minimal implementation and UX. Current DropThings overflow model follows the same product pattern, implemented independently.
 
 ## Apple Documentation
 
@@ -66,4 +67,3 @@
 - `NSDraggingDestination`: https://developer.apple.com/documentation/AppKit/NSDraggingDestination
 - `NSStatusItem`: https://developer.apple.com/documentation/AppKit/NSStatusItem
 - `NSStatusBar`: https://developer.apple.com/documentation/AppKit/NSStatusBar
-

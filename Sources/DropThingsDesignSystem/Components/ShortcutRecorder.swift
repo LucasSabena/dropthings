@@ -26,38 +26,76 @@ public struct ShortcutRecorder: View {
 
     public var body: some View {
         HStack(spacing: DTSpace.sm) {
-            Text(title)
-                .font(DTTypography.body)
-            Spacer()
-            if isRecording {
-                Text("Press a shortcut…")
-                    .font(DTTypography.caption.monospaced())
-                    .foregroundStyle(DTColor.accent)
-                    .frame(minWidth: 180, alignment: .trailing)
-            } else if let def = definition {
-                Text(def.displayString)
-                    .font(DTTypography.body.monospaced())
-                    .foregroundStyle(DTColor.textPrimary)
-                    .frame(minWidth: 180, alignment: .trailing)
-            } else {
-                Text("Not bound")
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text(title)
+                    .font(DTTypography.body)
+                Text(isRecording ? "Press the new shortcut now" : "Current shortcut")
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
-                    .frame(minWidth: 180, alignment: .trailing)
             }
-            Button(isRecording ? "Cancel" : (definition == nil ? "Record" : "Re-record")) {
+            Spacer()
+
+            shortcutBadge
+
+            Button {
                 if isRecording { stopRecording() } else { startRecording() }
+            } label: {
+                Label(isRecording ? "Cancel" : "Change", systemImage: isRecording ? "xmark" : "keyboard")
             }
             .controlSize(.small)
+
             if !isRecording, definition != nil {
-                Button("Clear", role: .destructive) {
+                Button(role: .destructive) {
                     definition = nil
                     onChange?(nil)
+                } label: {
+                    Image(systemName: "trash")
                 }
                 .controlSize(.small)
+                .help("Clear shortcut")
             }
         }
         .onDisappear { stopRecording() }
+    }
+
+    @ViewBuilder
+    private var shortcutBadge: some View {
+        if isRecording {
+            Text("Recording")
+                .font(DTTypography.caption.monospaced())
+                .foregroundStyle(DTColor.accent)
+                .padding(.horizontal, DTSpace.sm)
+                .padding(.vertical, DTSpace.xs)
+                .frame(minWidth: 110)
+                .background(DTColor.accent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous))
+        } else if let def = definition {
+            Text(def.displayString)
+                .font(DTTypography.body.monospaced().weight(.semibold))
+                .foregroundStyle(DTColor.textPrimary)
+                .padding(.horizontal, DTSpace.sm)
+                .padding(.vertical, DTSpace.xs)
+                .frame(minWidth: 110)
+                .background(DTColor.surfaceRaised)
+                .clipShape(RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous)
+                        .strokeBorder(DTColor.border, lineWidth: 0.5)
+                )
+        } else {
+            Text("None")
+                .font(DTTypography.caption)
+                .foregroundStyle(DTColor.textSecondary)
+                .padding(.horizontal, DTSpace.sm)
+                .padding(.vertical, DTSpace.xs)
+                .frame(minWidth: 110)
+                .background(DTColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous)
+                        .strokeBorder(DTColor.border, lineWidth: 0.5)
+                )
+        }
     }
 
     private func startRecording() {

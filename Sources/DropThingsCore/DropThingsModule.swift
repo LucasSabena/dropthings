@@ -39,7 +39,6 @@ extension DropThingsModule {
         case .menuBarCleaner: return "menubar.rectangle"
         case .keepAwake: return "moon.zzz"
         case .colorPicker: return "eyedropper"
-        case .screenshot: return "camera.viewfinder"
         default: return "square.stack.3d.up"
         }
     }

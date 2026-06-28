@@ -42,6 +42,7 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         installTap()
         registerHotkey()
         if case .failed = state { return }
+        if case .degraded = state { return }
         state = .running
         logger.info("Scroll Control started")
     }
@@ -87,6 +88,11 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         let hotkeyChanged = sanitized.hotkey != settings.hotkey
         settings = sanitized
         settingsStore.saveScrollSettings(sanitized)
+        if state == .running && !isPaused {
+            tap?.stop()
+            tap = nil
+            installTap()
+        }
         if hotkeyChanged && state == .running {
             unregisterHotkey()
             registerHotkey()

@@ -12,13 +12,14 @@
 
 Accessibility:
 
-- Needed for scroll event taps and likely menu bar control.
+- Needed for scroll event taps.
 - Required by many system utility apps.
 
 Screen Recording:
 
-- May be needed by Menu Bar Cleaner if visual inspection is required.
-- Avoid if an Accessibility-only approach is reliable.
+- Not needed by active modules after removing Screenshot and switching Color
+  Picker to the native sampler.
+- Avoid unless a future module genuinely captures pixels or images.
 
 Full Disk Access:
 
@@ -44,7 +45,6 @@ Risks to document before implementation:
 
 - Event tap misuse or accidental input modification.
 - File shelf exposing sensitive dropped files in previews.
-- Menu bar inspection requiring high-trust permissions.
+- Menu bar layout relying on macOS status-item ordering and Command-drag setup.
 - Supply-chain risk from dependencies.
 - Notarization/signing integrity.
-

@@ -1,7 +1,7 @@
 # Modules
 
 See also `docs/modulos/` for the 2026-06-28 audit and planning notes for
-Keep Awake, Color Picker, Screenshot, and permissions diagnostics.
+Keep Awake, Color Picker, and permissions diagnostics.
 
 ## Module 1: Scroll Control
 
@@ -69,7 +69,7 @@ Risks:
 
 ## Module 3: Menu Bar Cleaner
 
-Goal: hide low-priority menu bar icons and reveal them with a small control, similar to Windows overflow.
+Goal: collapse low-priority menu bar icons behind a small visible control, similar to a compact overflow.
 
 References:
 
@@ -80,14 +80,13 @@ References:
 Likely APIs:
 
 - `NSStatusItem` for DropThings controls.
-- Accessibility APIs for observing/manipulating status items.
-- Screen Recording may be required for visual detection.
+- `NSStatusItem.length` for the collapsible divider.
+- Command-drag setup for icon placement, owned by macOS.
 
 Settings:
 
-- Always visible group.
-- Hidden group.
-- Reveal on click.
+- Collapse/reveal on click.
+- Collapse on launch.
 - Reveal on hover.
 - Auto-hide delay.
 - Compact mode for small screens and notched MacBooks.
@@ -95,8 +94,8 @@ Settings:
 Risks:
 
 - This is the most macOS-version-sensitive module.
-- Some system items may not be movable or hideable.
-- Requires high-trust permissions.
+- macOS owns status item ordering; DropThings cannot place other apps' icons programmatically.
+- Some future macOS versions may change menu bar layout behavior.
 
 ## Future Module Template
 

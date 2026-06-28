@@ -25,5 +25,4 @@ extension ModuleID {
     public static let menuBarCleaner = ModuleID("modules.menu-bar-cleaner")
     public static let keepAwake = ModuleID("modules.keep-awake")
     public static let colorPicker = ModuleID("modules.color-picker")
-    public static let screenshot = ModuleID("modules.screenshot")
 }

@@ -1,7 +1,5 @@
 import SwiftUI
-import DropThingsCore
 import DropThingsDesignSystem
-import DropThingsPlatform
 
 struct MenuBarCleanerSettingsView: View {
     @ObservedObject var module: MenuBarCleanerModule
@@ -9,125 +7,74 @@ struct MenuBarCleanerSettingsView: View {
     var body: some View {
         SettingsSection(
             title: "Menu Bar Cleaner",
-            caption: "Hide menu bar icons you do not need. Click the reveal button in the menu bar to show them again."
+            caption: "Create a collapsible overflow area in the macOS menu bar."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
-                actionRow
-                revealStatusRow
-                itemsList
-                if let err = module.lastRefreshError {
-                    InlineAlert(style: .warning, message: err)
-                }
-            }
-        }
-    }
+                statusRow
 
-    private var actionRow: some View {
-        HStack {
-            Button {
-                module.refresh()
-            } label: {
-                Label("Refresh menu bar", systemImage: "arrow.clockwise")
-            }
-            .controlSize(.regular)
-
-            Spacer()
-
-            if !module.hiddenIds.isEmpty {
-                Button("Show all") {
-                    module.showAll()
-                }
-                .controlSize(.small)
-            }
-        }
-    }
-
-    private var revealStatusRow: some View {
-        HStack(spacing: DTSpace.sm) {
-            Image(systemName: module.isRevealing ? "eye" : "eye.slash")
-                .foregroundStyle(DTColor.accent)
-            Text(revealStatusText)
-                .font(DTTypography.caption)
-                .foregroundStyle(DTColor.textSecondary)
-            Spacer()
-            Button {
-                module.toggleReveal()
-            } label: {
-                Text(module.isRevealing ? "Re-hide items" : "Reveal all now")
-            }
-            .controlSize(.small)
-            .disabled(module.hiddenIds.isEmpty)
-        }
-    }
-
-    private var revealStatusText: String {
-        if module.isRevealing {
-            return "All items are temporarily visible. Click the menu bar chevron or this button to re-hide."
-        }
-        let count = module.hiddenIds.count
-        if count == 0 {
-            return "Nothing is hidden. Toggle items off below or install a few menu bar apps."
-        }
-        return "\(count) item\(count == 1 ? "" : "s") hidden. Click the menu bar chevron to reveal."
-    }
-
-    @ViewBuilder
-    private var itemsList: some View {
-        if module.discoveredItems.isEmpty {
-            Text(emptyMessage)
-                .font(DTTypography.caption)
-                .foregroundStyle(DTColor.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            VStack(spacing: 0) {
-                ForEach(module.discoveredItems) { item in
-                    itemRow(item)
-                    if item.id != module.discoveredItems.last?.id {
-                        Divider()
+                HStack(spacing: DTSpace.sm) {
+                    Button {
+                        module.toggleCollapsed()
+                    } label: {
+                        Label(module.isCollapsed ? "Reveal icons" : "Collapse icons",
+                              systemImage: module.isCollapsed ? "chevron.right.circle" : "chevron.left.circle")
                     }
+                    .controlSize(.regular)
+
+                    Button {
+                        module.reveal()
+                    } label: {
+                        Label("Keep visible", systemImage: "eye")
+                    }
+                    .controlSize(.regular)
+                    .disabled(!module.isCollapsed)
+                }
+
+                Toggle("Collapse on launch", isOn: Binding(
+                    get: { module.collapseOnLaunch },
+                    set: { module.setCollapseOnLaunch($0) }
+                ))
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: DTSpace.xs) {
+                    guideRow(number: "1", text: "Hold Command and drag the DropThings divider to the menu bar position you want.")
+                    guideRow(number: "2", text: "Command-drag low-priority icons to the left of that divider.")
+                    guideRow(number: "3", text: "Click the DropThings chevron to collapse or reveal that side.")
                 }
             }
         }
     }
 
-    private var emptyMessage: String {
-        switch module.state {
-        case .needsPermission:
-            return "Grant Accessibility to enumerate menu bar items."
-        case .failed(let reason, _):
-            return reason
-        case .degraded(let reason):
-            return reason
-        default:
-            return "Click Refresh menu bar to detect items."
-        }
-    }
-
-    private func itemRow(_ item: MenuBarItem) -> some View {
-        HStack(spacing: DTSpace.sm) {
-            Image(systemName: module.hiddenIds.contains(item.id) ? "eye.slash" : "menubar.rectangle")
+    private var statusRow: some View {
+        HStack(alignment: .top, spacing: DTSpace.sm) {
+            Image(systemName: module.isCollapsed ? "eye.slash" : "eye")
                 .foregroundStyle(DTColor.accent)
                 .frame(width: 18)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(item.title)
-                    .font(DTTypography.body)
-                    .lineLimit(1)
-                if let bundleId = item.ownerBundleId {
-                    Text(bundleId)
-                        .font(DTTypography.caption)
-                        .foregroundStyle(DTColor.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text(module.isCollapsed ? "Overflow collapsed" : "Overflow visible")
+                    .font(DTTypography.body.weight(.semibold))
+                Text(module.statusMessage ?? "DropThings adds a divider and a chevron to your menu bar.")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Toggle("", isOn: Binding(
-                get: { !module.hiddenIds.contains(item.id) },
-                set: { isVisible in module.setHidden(item.id, hidden: !isVisible) }
-            ))
-            .labelsHidden()
         }
-        .padding(.vertical, DTSpace.xs)
+    }
+
+    private func guideRow(number: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: DTSpace.sm) {
+            Text(number)
+                .font(DTTypography.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(DTColor.textSecondary)
+                .frame(width: 18, height: 18)
+                .background(DTColor.surfaceRaised)
+                .clipShape(Circle())
+            Text(text)
+                .font(DTTypography.caption)
+                .foregroundStyle(DTColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
-

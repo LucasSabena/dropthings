@@ -42,7 +42,6 @@ final class AppServices: ObservableObject {
         registry.register(MenuBarCleanerModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
-        registry.register(ScreenshotModule(settings: settings, permissions: permissions))
 
         settingsWindow.setContent(
             SettingsRootView().environmentObject(self)
@@ -144,7 +143,10 @@ struct DropThingsApp: App {
         MenuBarExtra {
             menuContent
         } label: {
-            Image(systemName: "square.stack.3d.up")
+            Image("DropThingsLogoTransparent")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
         }
         .menuBarExtraStyle(.menu)
     }

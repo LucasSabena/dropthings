@@ -368,3 +368,37 @@ Tradeoff:
 - The NSOpenPanel that lets the user pick the folder is a macOS-native flow that looks slightly heavier than a "type a path" text field. Acceptable because folder picking is rare (once per session, usually).
 - A user who denies the bookmark scope silently loses the override. We log a warning and fall back; we do not block saves.
 
+## 2026-06-28: Screenshot Removed From Active Modules
+
+Decision: remove Screenshot from the registered app modules until it can be
+rebuilt as a region capture/editor that is worth shipping.
+
+Consequences:
+
+- No Screenshot entry appears in Settings.
+- Screenshot source files, active manual checks, and tests are removed.
+- Screen Recording is no longer required by any active module.
+
+## 2026-06-28: Color Picker Uses Native Sampler
+
+Decision: supersede the custom full-screen capture overlay with AppKit's
+native `NSColorSampler`.
+
+Consequences:
+
+- Color Picker no longer requires Screen Recording.
+- The user sees the standard macOS color picking behavior.
+- The removed overlay/capture code cannot regress multi-display picking.
+
+## 2026-06-28: Menu Bar Cleaner Uses Divider Overflow
+
+Decision: supersede the AX `AXVisible` per-item model with a Hidden-Bar-style
+divider and chevron. The user Command-drags icons to the left of the divider;
+DropThings collapses that area by widening its own `NSStatusItem`.
+
+Consequences:
+
+- Menu Bar Cleaner no longer needs Accessibility permission.
+- The UI explains one visible mechanism instead of listing unstable AX items.
+- DropThings does not programmatically reposition or hide other apps' status
+  items.

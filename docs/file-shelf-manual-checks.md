@@ -9,7 +9,7 @@ shelf wiring in `App/`.
 
 1. `xcodebuild -project App.xcodeproj -scheme DropThings -configuration Debug -derivedDataPath .build/xcode build` → `** BUILD SUCCEEDED **`.
 2. `open .build/xcode/Build/Products/Debug/DropThings.app`.
-3. The DropThings icon appears in the menu bar (square stack symbol). No dock icon (`LSUIElement = true`).
+3. The DropThings logo appears in the menu bar. No dock icon (`LSUIElement = true`).
 
 ## Settings shell
 

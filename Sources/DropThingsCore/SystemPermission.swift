@@ -28,7 +28,7 @@ extension SystemPermission {
         case .accessibility:
             return "Required to observe and modify input events."
         case .screenRecording:
-            return "Required to read pixels from other apps and capture screenshots."
+            return "Required by modules that capture visible screen content."
         case .fullDiskAccess:
             return "Required to read files outside the app sandbox."
         case .automation:

@@ -12,13 +12,13 @@ public struct ScrollEventTransformer: Sendable {
     }
 
     /// Classify a scroll event by device category. The heuristic looks at the
-    /// inertial-scroll phases: trackpads and Magic Mouse set a non-zero phase
-    /// during and after the user's gesture, mouse wheels always report zero.
-    /// Between trackpad and Magic Mouse we differentiate by point delta:
-    /// trackpads send high-resolution points, Magic Mouse sends the same data
-    /// but only on contact (and discrete step events when the finger leaves
-    /// the surface).
+    /// continuous flag first: physical wheels are normally discrete. Trackpads
+    /// advertise scroll or momentum phases; Magic Mouse often appears as a
+    /// continuous point-delta event without those phases.
     public func classify(_ input: ScrollEventInput) -> ScrollDeviceKind {
+        if !input.isContinuous && (input.fixedDeltaY != 0 || input.fixedDeltaX != 0) {
+            return .mouseWheel
+        }
         let hasPhase = input.phase != 0 || input.momentumPhase != 0
         if hasPhase {
             return .trackpad
@@ -26,9 +26,8 @@ public struct ScrollEventTransformer: Sendable {
         if input.fixedDeltaY != 0 || input.fixedDeltaX != 0 {
             return .mouseWheel
         }
-        if input.pointDeltaY != 0 || input.pointDeltaX != 0 {
-            // No phase, no fixed steps, but there are point deltas: this is
-            // Magic Mouse finger-scroll on the touch surface.
+        if input.pointDeltaY != 0 || input.pointDeltaX != 0
+            || input.fixedPointDeltaY != 0 || input.fixedPointDeltaX != 0 {
             return .magicMouse
         }
         return .unknown
@@ -37,26 +36,35 @@ public struct ScrollEventTransformer: Sendable {
     public func transform(_ input: ScrollEventInput) -> ScrollEventDecision {
         let kind = classify(input)
         let direction = settings.direction(for: kind)
+        let invert = direction == .inverted
+        let verticalFactor = invert ? -settings.scrollMultiplier : 1
+        let horizontalFactor: Double = {
+            guard settings.horizontalScrollEnabled else { return 0 }
+            return invert ? -settings.scrollMultiplier : 1
+        }()
 
-        guard direction == .inverted else {
-            return ScrollEventDecision(
-                deviceKind: kind,
-                pointDeltaY: input.pointDeltaY,
-                pointDeltaX: input.pointDeltaX,
-                fixedDeltaY: input.fixedDeltaY,
-                fixedDeltaX: input.fixedDeltaX,
-                didMutate: false
-            )
-        }
-
-        let multiplier = settings.scrollMultiplier
+        let pointX = input.pointDeltaX * horizontalFactor
+        let fixedX = Self.scaledInteger(input.fixedDeltaX, by: horizontalFactor)
+        let fixedPointX = input.fixedPointDeltaX * horizontalFactor
+        let horizontalWasSuppressed = !settings.horizontalScrollEnabled
+            && (input.pointDeltaX != 0 || input.fixedDeltaX != 0 || input.fixedPointDeltaX != 0)
         return ScrollEventDecision(
             deviceKind: kind,
-            pointDeltaY: -input.pointDeltaY * multiplier,
-            pointDeltaX: settings.horizontalScrollEnabled ? -input.pointDeltaX * multiplier : 0,
-            fixedDeltaY: Int64((Double(-input.fixedDeltaY) * multiplier).rounded()),
-            fixedDeltaX: settings.horizontalScrollEnabled ? Int64((Double(-input.fixedDeltaX) * multiplier).rounded()) : 0,
-            didMutate: true
+            pointDeltaY: input.pointDeltaY * verticalFactor,
+            pointDeltaX: pointX,
+            fixedDeltaY: Self.scaledInteger(input.fixedDeltaY, by: verticalFactor),
+            fixedDeltaX: fixedX,
+            fixedPointDeltaY: input.fixedPointDeltaY * verticalFactor,
+            fixedPointDeltaX: fixedPointX,
+            didMutate: invert || horizontalWasSuppressed
         )
+    }
+
+    private static func scaledInteger(_ value: Int64, by factor: Double) -> Int64 {
+        guard value != 0, factor != 0 else { return 0 }
+        let scaled = Double(value) * factor
+        let rounded = Int64(scaled.rounded())
+        if rounded != 0 { return rounded }
+        return scaled > 0 ? 1 : -1
     }
 }

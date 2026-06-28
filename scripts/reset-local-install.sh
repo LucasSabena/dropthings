@@ -28,7 +28,6 @@ defaults delete "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 
 echo "==> Resetting privacy grants"
 tccutil reset Accessibility "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
-tccutil reset ScreenCapture "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 
 echo "==> Done"
 echo "DropThings local install and user state were removed."

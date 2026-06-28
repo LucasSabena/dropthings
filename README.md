@@ -17,10 +17,9 @@ accounts, no network calls.
 |---|---|---|
 | **File Shelf** | Drop files here. Pick them up in any app. Pin items to keep them across restarts. | — |
 | **Scroll Control** | Natural scroll on the trackpad, Windows-style wheel on the mouse. Independent direction per device. | Accessibility |
-| **Menu Bar Cleaner** | Hide menu bar icons you do not need. Click to reveal them temporarily. | Accessibility |
+| **Menu Bar Cleaner** | Collapse low-priority menu bar icons behind one visible control. | — |
 | **Keep Awake** | One toggle. Mac stays awake as if you were using it. | — |
-| **Color Picker** | Pick any color from your screen. Hex on the clipboard. Persistent history. | Screen Recording |
-| **Screenshot** | Capture the screen. Save to a folder of your choice. | Screen Recording |
+| **Color Picker** | Pick any color with the native macOS sampler. Hex on the clipboard. Persistent history. | — |
 
 Every module:
 
@@ -86,16 +85,14 @@ the permission it needs only when you enable that module.
 | Module | Permission | Why it needs it |
 |---|---|---|
 | Scroll Control | Accessibility | Read and rewrite scroll events |
-| Menu Bar Cleaner | Accessibility | Enumerate and toggle menu bar items |
-| Color Picker | Screen Recording | Read pixels from other apps |
-| Screenshot | Screen Recording | Capture the visible screen |
+| Menu Bar Cleaner | — | Uses DropThings-owned menu bar controls |
+| Color Picker | — | Uses the native macOS color sampler |
 
 If a module says it needs a permission but the system does not seem to know
 about DropThings:
 
 ```bash
 tccutil reset Accessibility app.dropthings
-tccutil reset ScreenCapture app.dropthings
 ```
 
 Then quit DropThings and reopen it. The Settings → **Diagnostics** panel
@@ -123,7 +120,6 @@ Quick walkthroughs per module:
 - [Scroll Control](docs/scroll-control-manual-checks.md)
 - [Menu Bar Cleaner](docs/menu-bar-cleaner-manual-checks.md)
 - [Color Picker](docs/color-picker-manual-checks.md)
-- [Screenshot](docs/screenshot-manual-checks.md)
 
 ---
 
@@ -182,10 +178,10 @@ Next on the queue (in priority order):
 
 1. **Clipboard History** — global hotkey, persistent history, exclusion list for sensitive apps.
 2. **Command Palette** — single hotkey to invoke any module's actions.
-3. **Region capture + annotations** — extend Screenshot with drag-to-select and an in-place editor (rectangle, arrow, freehand, text, blur).
-4. **Color Picker Pro** — magnifier, formats (HEX/RGB/HSL), similar colors.
-5. **Window Snapper** — Rectangle-style halves, quarters, maximize.
-6. **Focus / Presentation Mode** — workflow that orchestrates existing modules.
+3. **Color Picker Pro** — magnifier, formats (HEX/RGB/HSL), similar colors.
+4. **Window Snapper** — Rectangle-style halves, quarters, maximize.
+5. **Focus / Presentation Mode** — workflow that orchestrates existing modules.
+6. **Screenshot Studio** — deferred until region capture and annotation UX are worth shipping.
 
 Full backlog with rationale: [`docs/modulos/backlog-modulos-futuros.md`](docs/modulos/backlog-modulos-futuros.md).
 

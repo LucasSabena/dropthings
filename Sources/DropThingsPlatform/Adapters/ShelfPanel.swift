@@ -17,7 +17,7 @@ public final class ShelfPanel: NSPanel {
         becomesKeyOnlyIfNeeded = true
         hidesOnDeactivate = false
         level = .floating
-        collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         animationBehavior = .utilityWindow
         isReleasedWhenClosed = false
         minSize = NSSize(width: 280, height: 180)
