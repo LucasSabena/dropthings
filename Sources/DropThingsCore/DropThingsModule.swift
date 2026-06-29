@@ -8,7 +8,7 @@ import SwiftUI
 /// AppKit or SwiftUI in practice, so the protocol makes that isolation
 /// explicit instead of letting each conformer invent its own concurrency story.
 @MainActor
-public protocol DropThingsModule: AnyObject {
+public protocol DropThingsModule: AnyObject, CommandSource {
     var id: ModuleID { get }
     var name: String { get }
     var summary: String { get }
@@ -39,7 +39,17 @@ extension DropThingsModule {
         case .menuBarCleaner: return "menubar.rectangle"
         case .keepAwake: return "moon.zzz"
         case .colorPicker: return "eyedropper"
+        case .commandPalette: return "command"
+        case .snippets: return "doc.text"
+        case .textTools: return "textformat"
+        case .screenshotRegion: return "camera.viewfinder"
         default: return "square.stack.3d.up"
         }
     }
+}
+
+extension DropThingsModule {
+    /// Every module is a potential Command Palette source. Default is empty;
+    /// modules override to expose actions.
+    public var commands: [CommandDescriptor] { [] }
 }

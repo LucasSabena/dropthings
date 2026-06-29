@@ -47,6 +47,18 @@ final class AppServices: ObservableObject {
         registry.register(MenuBarCleanerModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
+        registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
+        registry.register(CommandPaletteModule(
+            settings: settings,
+            permissions: permissions,
+            commandSource: { [weak registry] in
+                registry?.modules.values.flatMap { $0.commands } ?? []
+            }
+        ))
+        registry.register(ScreenshotRegionModule(settings: settings, permissions: permissions))
+        registry.register(WindowSnapModule(settings: settings, permissions: permissions))
+        registry.register(SnippetsModule(settings: settings))
+        registry.register(TextToolsModule(settings: settings))
 
         settingsWindow.setContent(
             SettingsRootView().environmentObject(self)

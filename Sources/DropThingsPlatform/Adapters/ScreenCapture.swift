@@ -15,6 +15,13 @@ public enum ScreenCapture {
             width: size,
             height: size
         )
+        return Self.rect(rect)
+    }
+
+    /// Capture an arbitrary rectangle in global screen space. Returns `nil`
+    /// when the rect is empty or when screen capture is not permitted.
+    public static func rect(_ rect: CGRect) -> CGImage? {
+        guard !rect.isEmpty, rect.width > 0, rect.height > 0 else { return nil }
         return CGWindowListCreateImage(
             rect,
             .optionOnScreenOnly,

@@ -25,4 +25,10 @@ extension ModuleID {
     public static let menuBarCleaner = ModuleID("modules.menu-bar-cleaner")
     public static let keepAwake = ModuleID("modules.keep-awake")
     public static let colorPicker = ModuleID("modules.color-picker")
+    public static let clipboardHistory = ModuleID("modules.clipboard-history")
+    public static let commandPalette = ModuleID("modules.command-palette")
+    public static let screenshotRegion = ModuleID("modules.screenshot-region")
+    public static let windowSnap = ModuleID("modules.window-snap")
+    public static let snippets = ModuleID("modules.snippets")
+    public static let textTools = ModuleID("modules.text-tools")
 }
