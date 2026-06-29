@@ -42,13 +42,28 @@ echo "==> Version $VERSION (build $BUILD)"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-# Sign the app if a Developer ID is configured.
+# Sign the app. With a Developer ID we sign with that identity (Gatekeeper
+# clean). Without one we sign ad-hoc; the app's entitlements carry
+# com.apple.security.cs.disable-library-validation so dyld accepts the
+# ad-hoc-signed embedded Sparkle.framework despite the Team-ID mismatch
+# that Hardened Runtime library validation would otherwise reject.
+#
+# Sparkle.framework must be re-signed in the same pass as the app so both
+# share a consistent signature. `--deep` walks nested code; we sign the
+# framework explicitly first to guarantee it is covered even if `--deep`
+# is ever removed.
+ENTITLEMENTS="$PROJECT_ROOT/App/DropThings.entitlements"
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
     echo "==> Signing app with $DEVELOPER_ID"
     codesign --force --options runtime --deep --sign "$DEVELOPER_ID" "$APP_PATH"
 else
-    echo "==> No DEVELOPER_ID set; skipping app signing (Gatekeeper will warn)"
+    echo "==> No DEVELOPER_ID set; ad-hoc signing (Gatekeeper will warn)"
+    codesign --force --options runtime --sign - \
+        "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+    codesign --force --options runtime \
+        --entitlements "$ENTITLEMENTS" --sign - "$APP_PATH"
 fi
+codesign --verify --verbose "$APP_PATH"
 
 echo "==> Creating DMG"
 STAGING_DIR="$DIST_DIR/dmg-staging"
