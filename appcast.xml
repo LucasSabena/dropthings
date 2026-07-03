@@ -3,13 +3,13 @@
     <channel>
         <title>DropThings</title>
         <item>
-            <title>0.1.9</title>
-            <pubDate>Sun, 28 Jun 2026 21:17:44 -0300</pubDate>
-            <sparkle:version>10</sparkle:version>
-            <sparkle:shortVersionString>0.1.9</sparkle:shortVersionString>
+            <title>0.3.0</title>
+            <pubDate>Thu, 02 Jul 2026 23:06:00 -0300</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/LucasSabena/dropthings/releases/download/v0.1.9/DropThings-0.1.9.zip" length="5043454" type="application/octet-stream"/>
+            <enclosure url="https://github.com/LucasSabena/dropthings/releases/download/v0.3.0/DropThings-0.3.0.zip" length="5335142" type="application/octet-stream"/>
         </item>
     </channel>
 </rss>
