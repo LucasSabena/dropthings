@@ -32,6 +32,42 @@ public enum FileShelfItemKind: Hashable, Sendable, Codable {
         case .text: return "text.alignleft"
         }
     }
+
+    /// Short uppercase type label for the row/card badge ("PNG", "PDF",
+    /// "FOLDER", "TEXT"). Derived from the path extension so it reflects
+    /// what the user actually dropped, not a guess from a handful of UTIs.
+    public var fileTypeLabel: String {
+        switch self {
+        case .file(let url): return Self.typeLabel(forExtension: url.pathExtension)
+        case .folder: return "FOLDER"
+        case .text: return "TEXT"
+        }
+    }
+
+    /// The raw path extension for file items (lowercased); `nil` for
+    /// folders and text. Exposed so settings/UX can branch on format
+    /// without re-parsing the URL.
+    public var fileExtension: String? {
+        switch self {
+        case .file(let url):
+            let ext = url.pathExtension
+            return ext.isEmpty ? nil : ext.lowercased()
+        case .folder, .text:
+            return nil
+        }
+    }
+
+    /// Normalizes an extension to a short badge label. Collapses the few
+    /// aliases a user is likely to see (`jpeg`→`JPG`) and uppercases the
+    /// rest, so an unknown format still shows something honest.
+    static func typeLabel(forExtension ext: String) -> String {
+        let lower = ext.lowercased()
+        let alias: [String: String] = [
+            "jpeg": "JPG"
+        ]
+        if let mapped = alias[lower] { return mapped }
+        return lower.isEmpty ? "FILE" : lower.uppercased()
+    }
 }
 
 /// One item sitting on the shelf. Identity is derived from the payload so two
@@ -62,6 +98,8 @@ public struct FileShelfItem: Identifiable, Hashable, Sendable, Codable {
     public var displayName: String { kind.displayName }
     public var displayPath: String? { kind.displayPath }
     public var iconName: String { kind.iconName }
+    public var fileTypeLabel: String { kind.fileTypeLabel }
+    public var fileExtension: String? { kind.fileExtension }
 
     /// File/folder URL for actions that need one. `nil` for text items.
     public var fileURL: URL? {

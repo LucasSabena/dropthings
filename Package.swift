@@ -55,7 +55,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DropThingsModulesTests",
-            dependencies: ["DropThingsCore", "DropThingsModules"],
+            dependencies: ["DropThingsCore", "DropThingsModules", "DropThingsPlatform"],
             path: "Tests/DropThingsModulesTests"
         )
     ]

@@ -11,29 +11,43 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
     public var maxItems: Int
     public var clearOnQuit: Bool
     public var shakeToShow: Bool
+    public var flickToShow: Bool
+    public var shakeSensitivity: ShakeSensitivity
+    public var layout: ShelfLayout
     public var hotkey: GlobalHotkey.Definition?
 
     public init(
         maxItems: Int = FileShelfSettings.maxItemsDefault,
         clearOnQuit: Bool = true,
         shakeToShow: Bool = false,
+        flickToShow: Bool = false,
+        shakeSensitivity: ShakeSensitivity = .medium,
+        layout: ShelfLayout = .list,
         hotkey: GlobalHotkey.Definition? = GlobalHotkey.defaultShelfHotkey
     ) {
         self.maxItems = maxItems
         self.clearOnQuit = clearOnQuit
         self.shakeToShow = shakeToShow
+        self.flickToShow = flickToShow
+        self.shakeSensitivity = shakeSensitivity
+        self.layout = layout
         self.hotkey = hotkey
     }
 
     enum CodingKeys: String, CodingKey {
-        case maxItems, clearOnQuit, shakeToShow, hotkey
+        case maxItems, clearOnQuit, shakeToShow, flickToShow, shakeSensitivity, layout, hotkey
     }
 
-    public init(from decoder: Decoder) throws {
+    /// Decodes defensively: every field added after launch uses
+        /// `decodeIfPresent` so an older stored blob still decodes.
+        public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems) ?? FileShelfSettings.maxItemsDefault
         self.clearOnQuit = try c.decodeIfPresent(Bool.self, forKey: .clearOnQuit) ?? true
         self.shakeToShow = try c.decodeIfPresent(Bool.self, forKey: .shakeToShow) ?? false
+        self.flickToShow = try c.decodeIfPresent(Bool.self, forKey: .flickToShow) ?? false
+        self.shakeSensitivity = try c.decodeIfPresent(ShakeSensitivity.self, forKey: .shakeSensitivity) ?? .medium
+        self.layout = try c.decodeIfPresent(ShelfLayout.self, forKey: .layout) ?? .list
         self.hotkey = try c.decodeIfPresent(GlobalHotkey.Definition.self, forKey: .hotkey)
             ?? GlobalHotkey.defaultShelfHotkey
     }
@@ -42,6 +56,9 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
         maxItems: Int,
         clearOnQuit: Bool,
         shakeToShow: Bool,
+        flickToShow: Bool,
+        shakeSensitivity: ShakeSensitivity,
+        layout: ShelfLayout,
         hotkey: GlobalHotkey.Definition?
     ) -> FileShelfSettings {
         let clamped = min(max(maxItems, 1), maxItemsHardLimit)
@@ -49,6 +66,9 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
             maxItems: clamped,
             clearOnQuit: clearOnQuit,
             shakeToShow: shakeToShow,
+            flickToShow: flickToShow,
+            shakeSensitivity: shakeSensitivity,
+            layout: layout,
             hotkey: hotkey
         )
     }

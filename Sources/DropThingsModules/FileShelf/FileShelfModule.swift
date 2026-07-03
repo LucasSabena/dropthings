@@ -16,8 +16,42 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
-    @Published public private(set) var items: [FileShelfItem] = []
     @Published public private(set) var isPanelVisible: Bool = false
+    @Published public private(set) var selectedItemIDs: Set<String> = []
+
+    /// All shelf collections (tabs). The source of truth; `items` is a
+    /// computed view over the active collection so the rest of the module
+    /// and the UI keep working without knowing about collections.
+    @Published public private(set) var collections: [ShelfCollection] = []
+    @Published public private(set) var activeCollectionID: String?
+
+    /// The collection currently being renamed, if any. Drives an inline
+    /// text field in the tab bar; `nil` means no rename in progress.
+    @Published public private(set) var renamingID: String?
+
+    /// Items of the currently active collection, in storage order. The
+    /// selection logic and views read this; mutations go through
+    /// `mutateActiveItems` so they always land in the right collection.
+    public var items: [FileShelfItem] {
+        activeCollection?.items ?? []
+    }
+
+    /// The collection the user is currently looking at.
+    public var activeCollection: ShelfCollection? {
+        guard let id = activeCollectionID else {
+            return collections.first
+        }
+        return collections.first { $0.id == id } ?? collections.first
+    }
+
+    /// Applies `transform` to the active collection's items in place and
+    /// publishes the change. Every item mutation routes through here so the
+    /// collections model stays the single source of truth.
+    private func mutateActiveItems(_ transform: (inout [FileShelfItem]) -> Void) {
+        guard let id = activeCollectionID ?? collections.first?.id else { return }
+        guard let index = collections.firstIndex(where: { $0.id == id }) else { return }
+        transform(&collections[index].items)
+    }
 
     private let settingsStore: SettingsStore
     private var settings: FileShelfSettings
@@ -29,6 +63,15 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     private var hotkey: GlobalHotkey?
     private var mouseMonitor: MousePositionMonitor?
     private var shakeDetector = ShakeDetector()
+    private var flickDetector = FlickDetector()
+    private let ingestCoordinator = ShelfIngestCoordinator(
+        downloader: WebItemDownloader(),
+        imageSaver: ImageSaver()
+    )
+
+    /// One-line ingest error surfaced to the UI so a failed browser drop
+    /// is never silent. Cleared on the next successful ingest.
+    @Published public private(set) var ingestError: String?
 
     public init(settings: SettingsStore) {
         self.settingsStore = settings
@@ -37,25 +80,28 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
 
     public func start() async throws {
         loadPinnedFromDisk()
+        ensureDefaultCollection()
         registerHotkey()
-        if settings.shakeToShow {
-            startShakeDetection()
+        if settings.shakeToShow || settings.flickToShow {
+            startGestureDetection()
         }
         if case .degraded = state {
             logger.notice("File Shelf started in degraded mode (hotkey conflict)")
         } else {
             state = .running
-            logger.info("File Shelf started; \(self.items.count) items (\(self.pinnedCount) pinned)")
+            logger.info("File Shelf started; \(self.collections.count) collection(s), \(self.items.count) items in active (\(self.pinnedCount) pinned)")
         }
     }
 
     public func stop() async {
         unregisterHotkey()
-        stopShakeDetection()
+        stopGestureDetection()
         closePanel()
         savePinnedToDisk()
         if settings.clearOnQuit {
-            items.removeAll()
+            for index in collections.indices {
+                collections[index].items.removeAll()
+            }
         }
         state = .off
         logger.info("File Shelf stopped")
@@ -96,45 +142,91 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         togglePanel()
     }
 
-    // MARK: - Shake-to-show
+    // MARK: - Gesture detection (shake + flick)
 
-    private func startShakeDetection() {
+    /// One cooldown window after any gesture fires so a single motion
+    /// cannot double-trigger. Half a second is long enough to feel
+    /// deliberate, short enough to allow a follow-up.
+    private var lastGestureFire: Date?
+    private static let gestureCooldown: TimeInterval = 0.5
+
+    private func startGestureDetection() {
         let monitor = MousePositionMonitor { [weak self] location in
             guard let self else { return }
-            self.processShakeSample(location: location)
+            self.processGestureSample(location: location)
         }
         monitor.start()
         mouseMonitor = monitor
-        let shake = ShakeDetector()
-        logger.notice("Shake-to-show armed (\(shake.minFlips) flips, \(Int(shake.minDisplacement))pt min, \(String(format: "%.1f", shake.windowDuration))s window). Move mouse left-right-left-right to test.")
+        logger.notice("Gesture detection armed (shake=\(self.settings.shakeToShow), flick=\(self.settings.flickToShow)).")
     }
 
-    private func stopShakeDetection() {
+    private func stopGestureDetection() {
         mouseMonitor?.stop()
         mouseMonitor = nil
         shakeDetector.reset()
+        flickDetector.reset()
     }
 
-    private func processShakeSample(location: CGPoint) {
-        let sample = ShakeDetector.Sample(
-            timestamp: Date().timeIntervalSinceReferenceDate,
-            x: location.x
-        )
-        shakeDetector.record(sample)
-        guard shakeDetector.shouldFire() else { return }
-        shakeDetector.reset()
-        logger.info("Shake detected at \(Int(location.x)),\(Int(location.y)), showing shelf")
-        showPanel(near: location)
+    private func processGestureSample(location: CGPoint) {
+        // Cooldown guard shared by both gestures.
+        if let last = lastGestureFire, Date().timeIntervalSince(last) < Self.gestureCooldown {
+            return
+        }
+        let now = Date().timeIntervalSinceReferenceDate
+
+        // Shake (any orientation via dominant axis).
+        if settings.shakeToShow {
+            let sample = ShakeDetector.Sample(timestamp: now, x: location.x, y: location.y)
+            shakeDetector.record(sample)
+            if shakeDetector.shouldFire() {
+                shakeDetector.reset()
+                lastGestureFire = Date()
+                logger.info("Shake detected at \(Int(location.x)),\(Int(location.y)); showing shelf near pointer")
+                showPanel(near: location)
+                return
+            }
+        }
+
+        // Flick up to the top of the screen → drop from the notch.
+        if settings.flickToShow, let screen = screen(containing: location) {
+            let sample = FlickDetector.Sample(
+                timestamp: now,
+                y: location.y,
+                ceilingY: screen.frame.maxY
+            )
+            flickDetector.record(sample)
+            if flickDetector.shouldFire() {
+                flickDetector.reset()
+                lastGestureFire = Date()
+                logger.info("Flick detected at top of screen; showing shelf from notch")
+                showPanelFromNotch(on: screen)
+                return
+            }
+        }
     }
 
     public func updateShakeToShow(_ enabled: Bool) {
         var new = settings
         new.shakeToShow = enabled
         applySettings(new)
-        if enabled && mouseMonitor == nil && state == .running {
-            startShakeDetection()
-        } else if !enabled {
-            stopShakeDetection()
+        reconcileGestureMonitor()
+    }
+
+    public func updateFlickToShow(_ enabled: Bool) {
+        var new = settings
+        new.flickToShow = enabled
+        applySettings(new)
+        reconcileGestureMonitor()
+    }
+
+    /// Start the shared monitor only when at least one gesture is on;
+    /// stop it when neither is, so we never poll the mouse for nothing.
+    private func reconcileGestureMonitor() {
+        let anyOn = settings.shakeToShow || settings.flickToShow
+        if anyOn && mouseMonitor == nil && state == .running {
+            startGestureDetection()
+        } else if !anyOn {
+            stopGestureDetection()
         }
     }
 
@@ -143,7 +235,15 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     public var itemsLimit: Int { settings.maxItems }
     public var clearOnQuit: Bool { settings.clearOnQuit }
     public var shakeToShow: Bool { settings.shakeToShow }
+    public var flickToShow: Bool { settings.flickToShow }
+    public var shakeSensitivity: ShakeSensitivity { settings.shakeSensitivity }
+    public var layout: ShelfLayout { settings.layout }
     public var fileShelfSettings: FileShelfSettings { settings }
+
+    /// Clear the last ingest error banner.
+    public func dismissIngestError() {
+        ingestError = nil
+    }
 
     public func updateItemsLimit(_ value: Int) {
         var new = settings
@@ -151,6 +251,9 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
             maxItems: value,
             clearOnQuit: settings.clearOnQuit,
             shakeToShow: settings.shakeToShow,
+            flickToShow: settings.flickToShow,
+            shakeSensitivity: settings.shakeSensitivity,
+            layout: settings.layout,
             hotkey: settings.hotkey
         ).maxItems
         applySettings(new)
@@ -162,12 +265,28 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         applySettings(new)
     }
 
+    public func setLayout(_ layout: ShelfLayout) {
+        var new = settings
+        new.layout = layout
+        applySettings(new)
+    }
+
+    public func setShakeSensitivity(_ sensitivity: ShakeSensitivity) {
+        var new = settings
+        new.shakeSensitivity = sensitivity
+        applySettings(new)
+        // Rebuild the live detector so the new thresholds take effect now.
+        if shakeDetector.sensitivity != sensitivity {
+            shakeDetector = ShakeDetector(sensitivity: sensitivity)
+        }
+    }
+
     private func applySettings(_ new: FileShelfSettings) {
         let hotkeyChanged = settings.hotkey != new.hotkey
         settings = new
         settingsStore.saveFileShelfSettings(new)
         if items.count > new.maxItems {
-            items.removeFirst(items.count - new.maxItems)
+            mutateActiveItems { $0 = Self.trimmed($0, maxItems: new.maxItems) }
         }
         if hotkeyChanged {
             unregisterHotkey()
@@ -200,6 +319,40 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         isPanelVisible = true
         logger.info("Shelf panel shown at \(panel.frame.origin.x), \(panel.frame.origin.y)")
     }
+
+    /// Summon the shelf so it drops down from the top center of `screen`
+    /// (under the notch / menu bar), with a short slide animation. This is
+    /// the payoff for the flick gesture: throw the mouse to the top, the
+    /// shelf appears where the eye already is.
+    public func showPanelFromNotch(on screen: NSScreen) {
+        if panel == nil {
+            createPanel()
+        }
+        guard let panel else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        let size = panel.frame.size
+        let visible = screen.visibleFrame
+        // Centered horizontally, just below the menu bar / notch.
+        let finalX = visible.midX - size.width / 2
+        let finalY = visible.maxY - size.height - Self.notchTopGap
+        let finalFrame = NSRect(x: finalX, y: finalY, width: size.width, height: size.height)
+
+        // Animate a short drop from just above the final position.
+        let startY = visible.maxY + size.height
+        panel.setFrame(NSRect(x: finalX, y: startY, width: size.width, height: size.height), display: false)
+        panel.makeKeyAndOrderFront(nil as Any?)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(finalFrame, display: true)
+        }
+        isPanelVisible = true
+        logger.info("Shelf panel dropped from notch at \(finalX), \(finalY)")
+    }
+
+    /// Pixels to leave between the shelf's top edge and the visible top of
+    /// the screen, so it sits under the menu bar rather than glued to it.
+    private static let notchTopGap: CGFloat = 6
 
     private func positionPanel(_ panel: ShelfPanel, near location: CGPoint) {
         guard let screen = screen(containing: location) ?? NSScreen.main else { return }
@@ -245,70 +398,237 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     // MARK: - Items
 
     public func clearItems() {
-        guard !items.isEmpty else { return }
-        items.removeAll()
+        guard !(activeCollection?.items.isEmpty ?? true) else { return }
+        mutateActiveItems { $0.removeAll() }
         savePinnedToDisk()
         logger.info("Shelf cleared")
     }
 
     public func removeItem(id: String) {
-        items.removeAll { $0.id == id }
+        mutateActiveItems { $0.removeAll { $0.id == id } }
+        selectedItemIDs.remove(id)
         savePinnedToDisk()
     }
 
-    // MARK: - Pin
+    // MARK: - Selection
+
+    /// Items currently selected, in display order (matches `sortedItems`).
+    public var selectedItems: [FileShelfItem] {
+        let ordered = ShelfDisplayOrder.sort(items)
+        return ordered.filter { selectedItemIDs.contains($0.id) }
+    }
+
+    /// Plain click (no modifier): select only this item.
+    /// ⌘-click: toggle this item in the selection.
+    /// ⇧-click: select a range from the anchor to this item.
+    public func handleSelect(id: String, command: Bool, shift: Bool) {
+        let ordered = ShelfDisplayOrder.sort(items).map(\.id)
+        if shift, let anchor = selectionAnchor {
+            selectedItemIDs = Set(Self.range(from: anchor, to: id, in: ordered))
+            return
+        }
+        if command {
+            if selectedItemIDs.contains(id) {
+                selectedItemIDs.remove(id)
+            } else {
+                selectedItemIDs.insert(id)
+            }
+            selectionAnchor = id
+            return
+        }
+        selectedItemIDs = [id]
+        selectionAnchor = id
+    }
+
+    public func clearSelection() {
+        selectedItemIDs.removeAll()
+        selectionAnchor = nil
+    }
+
+    /// The id from which a ⇧-click range extends. Reset on plain click.
+    private var selectionAnchor: String?
+
+    /// Pure range helper: returns the set of ids spanning from `anchor` to
+    /// `target` in `ordered` (inclusive on both ends). Exposed as static so
+    /// the shift-click semantics are unit-testable without UI state.
+    nonisolated static func range(from anchor: String, to target: String, in ordered: [String]) -> Set<String> {
+        guard let a = ordered.firstIndex(of: anchor),
+              let b = ordered.firstIndex(of: target) else {
+            return [target]
+        }
+        let lower = Swift.min(a, b)
+        let upper = Swift.max(a, b)
+        return Set(ordered[lower...upper])
+    }
+
+    // MARK: - Batch actions on selection
+
+    /// Remove every selected item. No-op when nothing is selected.
+    public func removeSelected() {
+        guard !selectedItemIDs.isEmpty else { return }
+        mutateActiveItems { $0.removeAll { selectedItemIDs.contains($0.id) } }
+        selectedItemIDs.removeAll()
+        selectionAnchor = nil
+        savePinnedToDisk()
+    }
+
+    /// Reveal every selected file/folder in Finder. Text items are skipped.
+    public func revealSelected() {
+        let urls = selectedItems.compactMap(\.fileURL)
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    /// Copy the paths of every selected file/folder to the pasteboard,
+    /// one path per line.
+    public func copyPathsSelected() {
+        let paths = selectedItems.compactMap(\.fileURL).map(\.path)
+        guard !paths.isEmpty else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(paths.joined(separator: "\n"), forType: .string)
+    }
+
+    // MARK: - Collections (tabs)
+
+    /// Add a fresh collection and make it active. The name is auto-picked
+    /// so it never collides with an existing tab.
+    public func addCollection() {
+        let existingNames = collections.map(\.name)
+        let collection = ShelfCollection.newDefault(existingNames: existingNames)
+        collections.append(collection)
+        activeCollectionID = collection.id
+        selectedItemIDs.removeAll()
+        selectionAnchor = nil
+        logger.info("Added collection '\(collection.name)'")
+    }
+
+    /// Rename the active collection. No-op when the name is empty.
+    public func renameActiveCollection(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let id = activeCollectionID,
+              let index = collections.firstIndex(where: { $0.id == id }) else { return }
+        collections[index].name = trimmed
+    }
+
+    /// Remove the active collection. Keeps at least one tab: if this is
+    /// the last one, it is cleared instead of deleted.
+    public func removeActiveCollection() {
+        guard let id = activeCollectionID else { return }
+        if collections.count <= 1 {
+            mutateActiveItems { $0.removeAll() }
+            savePinnedToDisk()
+            return
+        }
+        collections.removeAll { $0.id == id }
+        activeCollectionID = collections.first?.id
+        selectedItemIDs.removeAll()
+        selectionAnchor = nil
+        savePinnedToDisk()
+        logger.info("Removed collection \(id)")
+    }
+
+    /// Switch the active tab. No-op if the id is unknown.
+    public func selectCollection(id: String) {
+        guard collections.contains(where: { $0.id == id }) else { return }
+        activeCollectionID = id
+        selectedItemIDs.removeAll()
+        selectionAnchor = nil
+    }
+
+    /// Start an inline rename of the given collection.
+    public func beginRename(id: String) {
+        guard collections.contains(where: { $0.id == id }) else { return }
+        renamingID = id
+    }
+
+    /// Commit a rename. `newName` empty cancels the rename without changes.
+    public func commitRename(_ newName: String) {
+        guard let id = renamingID else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty,
+           let index = collections.firstIndex(where: { $0.id == id }) {
+            collections[index].name = trimmed
+        }
+        renamingID = nil
+    }
+
+    /// Cancel an in-progress rename.
+    public func cancelRename() {
+        renamingID = nil
+    }
 
     public var pinnedCount: Int {
-        items.filter(\.isPinned).count
+        (activeCollection?.items ?? []).filter(\.isPinned).count
     }
 
     public func setPinned(_ id: String, pinned: Bool) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        let item = items[index]
-        guard item.isPinned != pinned else { return }
-        items[index] = item.pinning(pinned)
+        var changed = false
+        mutateActiveItems { items in
+            guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+            guard items[index].isPinned != pinned else { return }
+            items[index] = items[index].pinning(pinned)
+            changed = true
+        }
+        guard changed else { return }
         savePinnedToDisk()
-        logger.info("Item \(item.displayName) \(pinned ? "pinned" : "unpinned")")
+        logger.info("Item \(id) \(pinned ? "pinned" : "unpinned")")
     }
 
     public func clearUnpinned() {
-        let before = items.count
-        items.removeAll { !$0.isPinned }
-        let removed = before - items.count
+        let before = activeCollection?.items.count ?? 0
+        mutateActiveItems { $0.removeAll { !$0.isPinned } }
+        let removed = before - (activeCollection?.items.count ?? 0)
         if removed > 0 {
             logger.info("Cleared \(removed) unpinned item(s)")
         }
     }
 
     private func loadPinnedFromDisk() {
-        let pinned = persistence.loadPinnedItems()
-        guard !pinned.isEmpty else { return }
-        var existingIds = Set(items.map(\.id))
-        var restored = 0
-        for pin in pinned {
-            if !existingIds.contains(pin.id) {
-                items.append(pin)
-                existingIds.insert(pin.id)
-                restored += 1
+        let loaded = persistence.loadCollections()
+        guard !loaded.isEmpty else { return }
+        // Preserve any in-memory collections (e.g. a fresh empty default)
+        // by merging: on-disk collections seed the list; an existing
+        // in-memory collection with the same id keeps its identity but
+        // adopts the loaded pinned items.
+        var existing = collections
+        for loadedCollection in loaded {
+            if let index = existing.firstIndex(where: { $0.id == loadedCollection.id }) {
+                let memoryItems = existing[index].items
+                let memoryIds = Set(memoryItems.map(\.id))
+                let merged = memoryItems + loadedCollection.items.filter { !memoryIds.contains($0.id) }
+                existing[index].items = merged
+            } else {
+                existing.append(loadedCollection)
             }
         }
+        collections = existing
+        if activeCollectionID == nil { activeCollectionID = collections.first?.id }
+        let restored = loaded.flatMap(\.items).count
         if restored > 0 {
-            logger.info("Restored \(restored) pinned item(s) from disk")
+            logger.info("Restored \(restored) pinned item(s) from disk across \(loaded.count) collection(s)")
         }
     }
 
     private func savePinnedToDisk() {
-        let pinned = items.filter(\.isPinned)
+        // Persist every collection's pinned items. Unpinned items stay
+        // session-only, exactly as before the collections change.
+        let toSave = collections.map { collection in
+            ShelfCollection(
+                id: collection.id,
+                name: collection.name,
+                items: collection.items.filter(\.isPinned),
+                createdAt: collection.createdAt
+            )
+        }
         do {
-            try persistence.savePinnedItems(pinned)
+            try persistence.saveCollections(toSave)
             if case .degraded = state {
                 state = .running
             }
         } catch {
             logger.error("Could not save pinned items: \(error)")
-            // Surface the failure instead of staying silent at `.running`.
-            // The shelf still works in-memory for the session, but the
-            // user should know pinned items are not being persisted.
             state = .degraded(reason: "Could not save pinned items to disk: \(error.localizedDescription). Pinned items will be lost when the app quits.")
         }
     }
@@ -347,25 +667,115 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         }
     }
 
-    /// Called from `ShelfContentView.performDragOperation`. Dedups, enforces
-    /// the cap, and ensures the panel is visible so the user sees what landed.
+    /// Provider for a drag that starts on `item`. When `item` is part of
+    /// the current selection, the drag carries *all* selected items so the
+    /// user can drop a whole batch into another app at once. When it is
+    /// not selected, the drag carries just that single item (and the
+    /// selection is narrowed to it, matching Finder behavior).
+    public func dragItemProviderForDrag(from item: FileShelfItem) -> NSItemProvider {
+        let dragging: [FileShelfItem]
+        if selectedItemIDs.contains(item.id) {
+            dragging = selectedItems
+        } else {
+            // Dragging an unselected item narrows selection to it.
+            selectedItemIDs = [item.id]
+            selectionAnchor = item.id
+            dragging = [item]
+        }
+        return Self.itemProvider(for: dragging)
+    }
+
+    /// Builds a single `NSItemProvider` that advertises every item. For
+    /// a single item it wraps that item directly; for many it uses
+    /// `NSItemProvider(loadingItem:)`-style multi-attachment via a
+    /// `suggestedName` and registered objects. URLs and strings both
+    /// conform to `NSItemProviderWriting`, so we register one provider
+    /// per item and rely on the system pasteboard to multiplex them at
+    /// drag time through the row's `.onDrag`.
+    nonisolated static func itemProvider(for items: [FileShelfItem]) -> NSItemProvider {
+        guard let first = items.first else { return NSItemProvider() }
+        if items.count == 1 {
+            switch first.kind {
+            case .file(let url), .folder(let url):
+                return NSItemProvider(object: url as NSURL)
+            case .text(let text):
+                return NSItemProvider(object: text as NSString)
+            }
+        }
+        // Multi-item: attach every writable object to the same provider.
+        let provider = NSItemProvider()
+        for item in items {
+            switch item.kind {
+            case .file(let url), .folder(let url):
+                provider.registerObject(url as NSURL, visibility: .all)
+            case .text(let text):
+                provider.registerObject(text as NSString, visibility: .all)
+            }
+        }
+        return provider
+    }
+
+    /// Called from `ShelfContentView.performDragOperation`. Reads rich
+    /// candidates so a browser image drop is downloaded to disk (not just
+    /// kept as a URL), resolves them via the ingest coordinator, then
+    /// dedups/caps and shows the panel. Failures set `ingestError` instead
+    /// of disappearing.
     public func handleDrop(pasteboard: NSPasteboard) {
-        let kinds = reader.read(from: pasteboard)
-        guard !kinds.isEmpty else {
+        let candidates = reader.candidates(from: pasteboard)
+        guard !candidates.isEmpty else {
             logger.notice("Drop ignored: pasteboard had no supported items")
             return
         }
-        ingest(kinds)
         showPanel()
+        Task { @MainActor [weak self] in
+            await self?.resolveAndIngest(candidates)
+        }
+    }
+
+    /// Resolves each candidate (downloading/saving as needed) and ingests
+    /// the resulting kinds in one batch.
+    @MainActor
+    private func resolveAndIngest(_ candidates: [PasteboardCandidate]) async {
+        var kinds: [FileShelfItemKind] = []
+        var failures: [String] = []
+        for candidate in candidates {
+            let outcome = await ingestCoordinator.resolve(candidate) { _ in }
+            switch outcome {
+            case .item(let kind):
+                kinds.append(kind)
+            case .failed(let url, let error):
+                let what = url?.lastPathComponent ?? "item"
+                failures.append("\(what): \(error.localizedDescription)")
+                logger.warning("Ingest failed for \(what): \(error)")
+            }
+        }
+        if !kinds.isEmpty {
+            ingest(kinds)
+            ingestError = nil
+        }
+        if !failures.isEmpty {
+            ingestError = "Could not add \(failures.count) item(s): " + failures.joined(separator: "; ")
+        }
     }
 
     private func ingest(_ kinds: [FileShelfItemKind]) {
+        ensureDefaultCollection()
         let original = Set(items.map(\.id))
-        items = Self.merged(items, with: kinds, maxItems: settings.maxItems)
-        let added = items.filter { !original.contains($0.id) }.count
+        let merged = Self.merged(items, with: kinds, maxItems: settings.maxItems)
+        mutateActiveItems { $0 = merged }
+        let added = merged.filter { !original.contains($0.id) }.count
         if added > 0 {
-            logger.info("Ingested \(added) item(s); shelf size now \(self.items.count)")
+            logger.info("Ingested \(added) item(s); shelf size now \(merged.count)")
         }
+    }
+
+    /// Make sure there is at least one collection to drop into. A fresh
+    /// install starts with one default-named collection.
+    private func ensureDefaultCollection() {
+        guard collections.isEmpty else { return }
+        let collection = ShelfCollection(name: ShelfCollection.defaultName)
+        collections = [collection]
+        activeCollectionID = collection.id
     }
 
     /// Pure merge + cap logic. Dedups by `FileShelfItem.id`, then trims from
@@ -408,6 +818,14 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
 
     public func makeSettingsView() -> AnyView {
         AnyView(FileShelfSettingsView(module: self))
+    }
+
+    /// Test-only hook to seed items without going through the AppKit drop
+    /// path. `internal` so it is visible to `@testable import` but never
+    /// reaches the public module surface that callers depend on.
+    internal func setItemsForTesting(_ newItems: [FileShelfItem]) {
+        ensureDefaultCollection()
+        mutateActiveItems { $0 = newItems }
     }
 
     // MARK: - Internal
