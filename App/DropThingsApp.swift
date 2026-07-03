@@ -33,7 +33,7 @@ final class AppServices: ObservableObject {
 
     private init() {
         self.settings = .userDefaults(suiteName: "app.dropthings")
-        self.permissions = PermissionCenter()
+        self.permissions = PermissionCenter(settings: settings)
         self.diagnostics = DiagnosticsStore()
         self.registry = ModuleRegistry(settings: settings, permissions: permissions)
         self.updates = SparkleUpdaterController()
@@ -166,6 +166,7 @@ final class AppServices: ObservableObject {
         } catch {
             diagnostics.record(level: .warning, category: "permissions", message: "Accessibility reset failed: \(error.localizedDescription)")
         }
+        permissions.resetPromptState(for: .accessibility)
         permissions.refresh()
         _ = permissions.requestPermission(.accessibility)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in

@@ -51,6 +51,7 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         if case .failed = state { return }
         if case .degraded = state { return }
         state = .running
+        applyPauseOnLaunchIfNeeded()
         logger.info("Scroll Control started")
     }
 
@@ -108,13 +109,31 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         if isPaused {
             installTap()
             isPaused = false
+            setPauseOnLaunch(false)
             logger.info("Scroll Control resumed")
         } else {
             tap?.stop()
             tap = nil
             isPaused = true
+            setPauseOnLaunch(true)
             logger.info("Scroll Control paused — events pass through unchanged")
         }
+    }
+
+    private func setPauseOnLaunch(_ value: Bool) {
+        guard settings.pauseOnLaunch != value else { return }
+        var new = settings
+        new.pauseOnLaunch = value
+        settings = new
+        settingsStore.saveScrollSettings(new)
+    }
+
+    private func applyPauseOnLaunchIfNeeded() {
+        guard settings.pauseOnLaunch else { return }
+        tap?.stop()
+        tap = nil
+        isPaused = true
+        logger.info("Scroll Control started paused — events pass through unchanged")
     }
 
     // MARK: - Settings surface
@@ -127,6 +146,7 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             horizontalScrollEnabled: newSettings.horizontalScrollEnabled,
             scrollMultiplier: newSettings.scrollMultiplier,
             hotkey: newSettings.hotkey,
+            pauseOnLaunch: newSettings.pauseOnLaunch,
             appOverrides: newSettings.appOverrides
         )
         let tapNeedsReinstall = sanitized.appOverrides != settings.appOverrides
@@ -235,11 +255,13 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             let display = definition.displayString
             switch error {
             case .installHandlerFailed(let status):
-                logger.warning("Could not install hotkey handler for \(display) (\(status))")
+                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Pause and resume from the menu bar instead.")
             case .registerFailed(let status):
-                logger.warning("Could not register hotkey \(display) (Carbon error \(status)). Toggle from the menu bar instead.")
+                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the menu bar.")
             }
+            logger.warning("Could not register \(display): \(error)")
         } catch {
+            state = .degraded(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }

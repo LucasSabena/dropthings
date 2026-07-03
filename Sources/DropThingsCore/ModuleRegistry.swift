@@ -58,6 +58,11 @@ public final class ModuleRegistry: ObservableObject {
         enabledMap[id.rawValue] = enabled
         persistEnabledMap(enabledMap)
         if enabled {
+            if let module = modules[id] {
+                for permission in module.requiredPermissions {
+                    permissions.resetPromptState(for: permission)
+                }
+            }
             Task { await start(id: id) }
         } else {
             Task { await stop(id: id) }

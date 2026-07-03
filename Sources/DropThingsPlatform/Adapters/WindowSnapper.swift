@@ -226,6 +226,10 @@ public final class WindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
         guard windowError == .success, let windowRef else {
             return .failure(.noFocusedWindow)
         }
+        guard CFGetTypeID(windowRef) == AXUIElementGetTypeID() else {
+            return .failure(.cannotReadWindowFrame)
+        }
+        // Type ID verified above, so the cast cannot fail at runtime.
         let window = windowRef as! AXUIElement
 
         guard let currentFrame = currentFrame(of: window) else {
@@ -250,8 +254,14 @@ public final class WindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
               AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success else {
             return nil
         }
+        guard CFGetTypeID(positionValue) == AXValueGetTypeID(),
+              CFGetTypeID(sizeValue) == AXValueGetTypeID() else {
+            return nil
+        }
+
         var position = CGPoint.zero
         var size = CGSize.zero
+        // Type IDs verified above, so these casts cannot fail at runtime.
         guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
               AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
             return nil

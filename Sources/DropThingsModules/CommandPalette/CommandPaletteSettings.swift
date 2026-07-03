@@ -60,6 +60,6 @@ public extension SettingsStore {
 
 public extension GlobalHotkey {
     static var defaultCommandPaletteHotkey: Definition? {
-        Definition(keyCode: UInt32(kVK_Space), modifiers: UInt32(controlKey), id: 4)
+        Definition(keyCode: UInt32(kVK_Space), modifiers: UInt32(controlKey), id: 3)
     }
 }

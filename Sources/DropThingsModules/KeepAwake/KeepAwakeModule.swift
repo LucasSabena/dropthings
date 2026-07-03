@@ -22,12 +22,19 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     @Published public private(set) var lastError: String?
 
     private let settingsStore: SettingsStore
-    private let assertion = KeepAwakeAssertion()
+    private let assertion: KeepAwakeAssertionProtocol
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "keep-awake")
 
     public init(settings: SettingsStore) {
         self.settingsStore = settings
         self.settings = settings.loadKeepAwakeSettings()
+        self.assertion = KeepAwakeAssertion()
+    }
+
+    internal init(settings: SettingsStore, assertion: KeepAwakeAssertionProtocol) {
+        self.settingsStore = settings
+        self.settings = settings.loadKeepAwakeSettings()
+        self.assertion = assertion
     }
 
     public func start() async throws {
@@ -85,7 +92,7 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     private func applySettings(_ new: KeepAwakeSettings) {
         settings = new
         persistSettings()
-        if state == .running {
+        if state.isStarted {
             applyState(new.enabled)
         }
     }
@@ -100,11 +107,13 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
                 try assertion.acquireKeepAwakeAssertions()
                 syncAssertionState()
                 lastError = nil
+                recoverFromDegradedIfNeeded()
                 logger.info("Assertions acquired (ids=\(self.assertion.currentAssertionIDs.map(String.init).joined(separator: ",")))")
             } else {
                 assertion.release()
                 syncAssertionState()
                 lastError = nil
+                recoverFromDegradedIfNeeded()
                 logger.info("Assertion released")
             }
         } catch let error as KeepAwakeAssertion.FailureReason {
@@ -117,6 +126,12 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
             syncAssertionState()
             lastError = "Could not keep Mac awake: \(error)"
             state = .degraded(reason: "Could not keep Mac awake: \(error)")
+        }
+    }
+
+    private func recoverFromDegradedIfNeeded() {
+        if case .degraded = state {
+            state = .running
         }
     }
 

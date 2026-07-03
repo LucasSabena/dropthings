@@ -6,11 +6,25 @@ import DropThingsCore
 final class ShelfCollectionTests: XCTestCase {
     private let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
 
-    private func makeModule(items: [FileShelfItem] = []) -> FileShelfModule {
+    private func makeModule(
+        items: [FileShelfItem] = [],
+        persistence: ShelfPersistence? = nil
+    ) -> FileShelfModule {
         let store = SettingsStore(backend: InMemorySettingsBackend())
-        let module = FileShelfModule(settings: store)
+        let module: FileShelfModule
+        if let persistence {
+            module = FileShelfModule(settings: store, persistence: persistence)
+        } else {
+            module = FileShelfModule(settings: store)
+        }
         module.setItemsForTesting(items)
         return module
+    }
+
+    private func makePersistence() -> ShelfPersistence {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dropthings-shelf-test-\(UUID().uuidString)", isDirectory: true)
+        return ShelfPersistence(directory: dir)
     }
 
     func testStartsWithOneDefaultCollection() {
@@ -41,6 +55,32 @@ final class ShelfCollectionTests: XCTestCase {
         module.beginRename(id: module.activeCollectionID!)
         module.commitRename("   ")
         XCTAssertEqual(module.activeCollection?.name, original)
+    }
+
+    func testRenamePersistsToDisk() throws {
+        let persistence = makePersistence()
+        let module = makeModule(persistence: persistence)
+        module.beginRename(id: module.activeCollectionID!)
+        module.commitRename("Trabajo")
+
+        let loaded = persistence.loadCollections()
+        XCTAssertEqual(loaded.first?.name, "Trabajo")
+    }
+
+    func testRenamePersistsAcrossStopStart() async throws {
+        let persistence = makePersistence()
+        let module = makeModule(persistence: persistence)
+        module.beginRename(id: module.activeCollectionID!)
+        module.commitRename("Trabajo")
+        await module.stop()
+
+        let newModule = FileShelfModule(
+            settings: SettingsStore(backend: InMemorySettingsBackend()),
+            persistence: persistence
+        )
+        try await newModule.start()
+        XCTAssertEqual(newModule.activeCollection?.name, "Trabajo")
+        await newModule.stop()
     }
 
     func testRemoveLastCollectionClearsInsteadOfDeleting() {

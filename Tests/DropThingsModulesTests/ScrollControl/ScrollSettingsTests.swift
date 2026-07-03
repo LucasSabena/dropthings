@@ -10,6 +10,7 @@ final class ScrollSettingsTests: XCTestCase {
         XCTAssertEqual(settings.magicMouseDirection, .natural)
         XCTAssertTrue(settings.horizontalScrollEnabled)
         XCTAssertEqual(settings.scrollMultiplier, 1.0)
+        XCTAssertFalse(settings.pauseOnLaunch)
     }
 
     func testDirectionForKind() {
@@ -53,7 +54,8 @@ final class ScrollSettingsTests: XCTestCase {
             mouseWheelDirection: .natural,
             magicMouseDirection: .inverted,
             horizontalScrollEnabled: false,
-            scrollMultiplier: 1.75
+            scrollMultiplier: 1.75,
+            pauseOnLaunch: true
         )
         store.saveScrollSettings(original)
         let loaded = store.loadScrollSettings()
@@ -61,6 +63,27 @@ final class ScrollSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testSanitizedPreservesPauseOnLaunch() {
+        let settings = ScrollSettings.sanitized(
+            trackpadDirection: .natural,
+            mouseWheelDirection: .natural,
+            magicMouseDirection: .natural,
+            horizontalScrollEnabled: true,
+            scrollMultiplier: 1.0,
+            hotkey: nil,
+            pauseOnLaunch: true
+        )
+        XCTAssertTrue(settings.pauseOnLaunch)
+    }
+
+    func testOldBlobWithoutPauseOnLaunchDecodesToFalse() throws {
+        let json = """
+        {"trackpadDirection":"natural","mouseWheelDirection":"inverted","magicMouseDirection":"natural","horizontalScrollEnabled":true,"scrollMultiplier":1.5}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ScrollSettings.self, from: json)
+        XCTAssertFalse(decoded.pauseOnLaunch)
+    }
+
     func testCorruptedJSONFallsBackToDefaults() {
         let backend = InMemorySettingsBackend()
         backend.setData(Data([0x00, 0xFF, 0x00]), forKey: ScrollSettingsKey.settings.rawValue)

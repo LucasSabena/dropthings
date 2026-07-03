@@ -39,6 +39,9 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
     public var horizontalScrollEnabled: Bool
     public var scrollMultiplier: Double
     public var hotkey: GlobalHotkey.Definition?
+    /// When `true`, the module installs the event tap on start but keeps it
+    /// paused so scroll events pass through unchanged until the user resumes.
+    public var pauseOnLaunch: Bool
     /// Per-app direction overrides. A non-empty entry for the frontmost
     /// app wins over the device category default.
     public var appOverrides: [ScrollAppOverride]
@@ -50,6 +53,7 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
         horizontalScrollEnabled: Bool = true,
         scrollMultiplier: Double = 1.0,
         hotkey: GlobalHotkey.Definition? = nil,
+        pauseOnLaunch: Bool = false,
         appOverrides: [ScrollAppOverride] = []
     ) {
         self.trackpadDirection = trackpadDirection
@@ -58,12 +62,14 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
         self.horizontalScrollEnabled = horizontalScrollEnabled
         self.scrollMultiplier = scrollMultiplier
         self.hotkey = hotkey
+        self.pauseOnLaunch = pauseOnLaunch
         self.appOverrides = appOverrides
     }
 
     enum CodingKeys: String, CodingKey {
         case trackpadDirection, mouseWheelDirection, magicMouseDirection
         case horizontalScrollEnabled, scrollMultiplier, hotkey
+        case pauseOnLaunch
         case appOverrides
     }
 
@@ -75,6 +81,7 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
         self.horizontalScrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .horizontalScrollEnabled) ?? true
         self.scrollMultiplier = try c.decodeIfPresent(Double.self, forKey: .scrollMultiplier) ?? 1.0
         self.hotkey = try c.decodeIfPresent(GlobalHotkey.Definition.self, forKey: .hotkey)
+        self.pauseOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .pauseOnLaunch) ?? false
         self.appOverrides = try c.decodeIfPresent([ScrollAppOverride].self, forKey: .appOverrides) ?? []
     }
 
@@ -88,6 +95,7 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
         horizontalScrollEnabled: Bool,
         scrollMultiplier: Double,
         hotkey: GlobalHotkey.Definition?,
+        pauseOnLaunch: Bool = false,
         appOverrides: [ScrollAppOverride] = []
     ) -> ScrollSettings {
         let clampedMultiplier = min(max(scrollMultiplier, multiplierMin), multiplierMax)
@@ -107,6 +115,7 @@ public struct ScrollSettings: Sendable, Equatable, Codable {
             horizontalScrollEnabled: horizontalScrollEnabled,
             scrollMultiplier: clampedMultiplier,
             hotkey: hotkey,
+            pauseOnLaunch: pauseOnLaunch,
             appOverrides: deduped
         )
     }

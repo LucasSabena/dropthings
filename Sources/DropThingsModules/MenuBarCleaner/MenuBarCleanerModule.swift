@@ -351,23 +351,53 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     }
 
     private func collapsedDividerLength(for divider: MenuBarCleanerDivider) -> CGFloat {
-        let widestScreen = NSScreen.screens.map(\.frame.width).max() ?? 1728
-        return max(divider.collapsedLength, min(widestScreen * 2, 10_000))
+        let item = dividerItems[divider.id]
+        let screen = item?.button?.window?.screen
+            ?? toggleItem?.button?.window?.screen
+            ?? NSScreen.main
+        let visibleWidth = screen?.visibleFrame.width ?? 1728
+        return Self.collapsedDividerLength(for: divider, screenVisibleWidth: visibleWidth)
     }
 
     private func validateControlOrder() {
-        guard let mainItem = dividerItems[MenuBarCleanerDivider.mainID],
-              let dividerX = mainItem.buttonOriginX,
-              let toggleX = toggleItem?.buttonOriginX else {
-            statusMessage = nil
-            return
+        let dividerX = dividerItems[MenuBarCleanerDivider.mainID]?.buttonOriginX
+        let toggleX = toggleItem?.buttonOriginX
+        statusMessage = Self.statusMessage(dividerX: dividerX, toggleX: toggleX, isCollapsed: isCollapsed)
+    }
+
+    // MARK: - Testable helpers
+
+    /// Computes the divider length that pushes items off the visible menu bar.
+    /// - Parameters:
+    ///   - divider: The divider whose length is being computed.
+    ///   - screenVisibleWidth: The width of the visible frame of the screen where
+    ///     the divider resides.
+    nonisolated static func collapsedDividerLength(
+        for divider: MenuBarCleanerDivider,
+        screenVisibleWidth: CGFloat
+    ) -> CGFloat {
+        max(divider.collapsedLength, screenVisibleWidth + divider.expandedLength + 40)
+    }
+
+    /// Returns the user-facing status message for the current control order.
+    /// - Parameters:
+    ///   - dividerX: The divider button's origin x, if known.
+    ///   - toggleX: The toggle button's origin x, if known.
+    ///   - isCollapsed: Whether the module is currently collapsed.
+    nonisolated static func statusMessage(
+        dividerX: CGFloat?,
+        toggleX: CGFloat?,
+        isCollapsed: Bool
+    ) -> String {
+        guard dividerX != nil, toggleX != nil else {
+            return "DropThings controls are being installed in the menu bar."
         }
-        if toggleX < dividerX {
-            statusMessage = "Move the DropThings chevron to the right of the main divider with Command-drag."
+        if toggleX! < dividerX! {
+            return "The chevron is on the wrong side. Command-drag the DropThings chevron so it sits to the right of the divider."
         } else if isCollapsed {
-            statusMessage = "Collapsed. Click the DropThings chevron to reveal the hidden side."
+            return "Collapsed. Click the DropThings chevron to reveal the hidden side."
         } else {
-            statusMessage = "Revealed. Icons placed left of the divider will collapse behind it."
+            return "Revealed. Icons placed left of the divider will collapse behind it."
         }
     }
 

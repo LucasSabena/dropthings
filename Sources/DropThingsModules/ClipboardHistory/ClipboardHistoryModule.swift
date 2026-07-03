@@ -17,10 +17,10 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
 
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: ClipboardHistorySettings
-    @Published public private(set) var items: [ClipboardItem] = []
+    @Published public internal(set) var items: [ClipboardItem] = []
 
     private let settingsStore: SettingsStore
-    private let permissions: PermissionCenter
+    internal let permissions: PermissionCenter
     private let monitor: ClipboardMonitor
     private var hotkey: GlobalHotkey?
     private var panel: ClipboardHistoryPanelController?
@@ -80,8 +80,11 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     }
 
     public func toggleHistoryPanel() {
-        // NSPanel state is tricky from SwiftUI; ask the controller directly.
-        panel?.show()
+        if panel?.isVisible == true {
+            hideHistoryPanel()
+        } else {
+            showHistoryPanel()
+        }
     }
 
     public func toggleIncognito() {
@@ -328,19 +331,14 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         items.insert(item, at: firstUnpinned)
     }
 
-    private func trimToMax() {
-        guard items.count > settings.maxHistory else { return }
-        let overflow = items.count - settings.maxHistory
-        var removed = 0
-        // Evict from the end (oldest, least important) first.
-        while removed < overflow, !items.isEmpty {
-            let last = items.removeLast()
-            if last.isPinned || last.isFavorite {
-                // Don't drop pinned/favorites silently; put them back at front.
-                items.insert(last, at: 0)
-            } else {
-                removed += 1
+    func trimToMax() {
+        while items.count > settings.maxHistory {
+            guard let last = items.last, !last.isPinned, !last.isFavorite else {
+                // All remaining overflow items are pinned/favorite; stop evicting
+                // rather than silently deleting protected items or looping forever.
+                break
             }
+            items.removeLast()
         }
     }
 
@@ -382,6 +380,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
+        guard hotkey == nil else { return }
         guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.showHistoryPanel()

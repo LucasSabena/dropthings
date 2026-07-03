@@ -108,6 +108,7 @@ public final class TextToolsModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
+        guard hotkey == nil else { return }
         guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.showPanel()

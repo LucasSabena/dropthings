@@ -1,12 +1,22 @@
 import Foundation
 import IOKit.pwr_mgt
 
+/// Abstract interface for the KeepAwake assertion adapter so tests can
+/// substitute a fake and avoid real IOKit calls.
+@MainActor
+public protocol KeepAwakeAssertionProtocol: AnyObject {
+    var isActive: Bool { get }
+    var currentAssertionIDs: [UInt32] { get }
+    func acquireKeepAwakeAssertions() throws
+    func release()
+}
+
 /// Single-purpose wrapper around `IOPMAssertionCreateWithName` /
 /// `IOPMAssertionRelease`. Holds one assertion per reason so Keep Awake can
 /// prevent both system idle sleep and display sleep at the same time.
 /// `acquire` is idempotent: a second call before `release` is a no-op.
 @MainActor
-public final class KeepAwakeAssertion {
+public final class KeepAwakeAssertion: KeepAwakeAssertionProtocol {
     public enum FailureReason: Error, Equatable {
         case alreadyHeld
         case osStatus(Int32)

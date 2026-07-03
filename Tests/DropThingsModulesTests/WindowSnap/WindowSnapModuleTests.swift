@@ -21,7 +21,7 @@ final class FakeWindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
 
 /// Deterministic permission backend for module tests.
 @MainActor
-final class FakePermissionBackend: PermissionBackend, @unchecked Sendable {
+private final class FakePermissionBackend: PermissionBackend, @unchecked Sendable {
     var states: [SystemPermission: SystemPermissionState] = [:]
     var openCount: [SystemPermission: Int] = [:]
 

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import DropThingsCore
 import DropThingsDesignSystem
@@ -26,6 +27,7 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     private var hotkey: GlobalHotkey?
     private var overlay: RegionSelectionOverlay?
     private var isCapturing = false
+    private var activationObserver: NSObjectProtocol?
 
     public init(
         settings: SettingsStore,
@@ -43,11 +45,13 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     public func start() async throws {
         registerHotkey()
         state = .running
+        subscribeToActivation()
         logger.info("Screenshot Region started")
     }
 
     public func stop() async {
         unregisterHotkey()
+        unsubscribeFromActivation()
         overlay?.cancel()
         overlay = nil
         state = .off
@@ -162,6 +166,7 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
+        guard hotkey == nil else { return }
         guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
@@ -193,6 +198,39 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         captureRegion()
     }
 
+    // MARK: - Permission recovery
+
+    private func subscribeToActivation() {
+        guard activationObserver == nil else { return }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkPermissionRecovery()
+            }
+        }
+    }
+
+    private func unsubscribeFromActivation() {
+        if let observer = activationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            activationObserver = nil
+        }
+    }
+
+    /// If the module is stuck waiting for Screen Recording and the user has
+    /// since granted it, automatically return to `.running` so the next
+    /// capture attempt works without a manual refresh.
+    internal func checkPermissionRecovery() {
+        guard case .needsPermission = state else { return }
+        let missing = permissions.missing(from: requiredPermissions)
+        guard missing.isEmpty else { return }
+        state = .running
+        logger.info("Screen Recording granted; recovered from needsPermission")
+    }
+
     // MARK: - Capture flow
 
     private func handleOverlayResult(_ result: RegionSelectionOverlay.Result) {
@@ -216,8 +254,8 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
 
         let saveURL = resolveSaveURL()
         do {
-            try createDirectoryIfNeeded(for: saveURL)
-            let fileURL = saveURL.appendingPathComponent(filename())
+            let directoryURL = try createDirectoryIfNeeded(for: saveURL)
+            let fileURL = directoryURL.appendingPathComponent(filename())
             try save(image: image, to: fileURL)
             lastSavedURL = fileURL
             if settings.copyPreviewToPasteboard {
@@ -231,10 +269,11 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         }
     }
 
-    private func resolveSaveURL() -> URL {
+    internal func resolveSaveURL() -> URL {
         if let path = settings.saveLocationPath {
             let url = URL(fileURLWithPath: path)
-            if fileManager.fileExists(atPath: url.path) {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
                 return url
             }
         }
@@ -242,11 +281,20 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
             ?? fileManager.temporaryDirectory
     }
 
-    private func createDirectoryIfNeeded(for url: URL) throws {
+    internal func createDirectoryIfNeeded(for url: URL) throws -> URL {
         var isDirectory: ObjCBool = false
         let exists = fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
-        if exists && isDirectory.boolValue { return }
+        if exists {
+            if isDirectory.boolValue { return url }
+            // The configured path points to a file. Don't delete it; fall back
+            // to a safe directory instead.
+            let fallback = fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
+                ?? fileManager.temporaryDirectory
+            try fileManager.createDirectory(at: fallback, withIntermediateDirectories: true)
+            return fallback
+        }
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     private func filename() -> String {

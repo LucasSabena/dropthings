@@ -1,0 +1,103 @@
+import XCTest
+import AppKit
+@testable import DropThingsModules
+import DropThingsCore
+import DropThingsPlatform
+
+/// Fake assertion adapter so `KeepAwakeModule` tests never touch IOKit.
+@MainActor
+final class FakeKeepAwakeAssertion: KeepAwakeAssertionProtocol, @unchecked Sendable {
+    var shouldFailNextAcquisition = false
+    var failureReason: KeepAwakeAssertion.FailureReason = .osStatus(-1)
+
+    private(set) var acquireCallCount = 0
+    private(set) var releaseCallCount = 0
+    private(set) var isActive = false
+    private(set) var currentAssertionIDs: [UInt32] = []
+
+    func acquireKeepAwakeAssertions() throws {
+        acquireCallCount += 1
+        if shouldFailNextAcquisition {
+            throw failureReason
+        }
+        isActive = true
+        currentAssertionIDs = [1, 2]
+    }
+
+    func release() {
+        releaseCallCount += 1
+        isActive = false
+        currentAssertionIDs = []
+    }
+}
+
+@MainActor
+final class KeepAwakeModuleTests: XCTestCase {
+    private var backend: InMemorySettingsBackend!
+    private var store: SettingsStore!
+    private var assertion: FakeKeepAwakeAssertion!
+
+    override func setUp() {
+        super.setUp()
+        backend = InMemorySettingsBackend()
+        store = SettingsStore(backend: backend)
+        assertion = FakeKeepAwakeAssertion()
+    }
+
+    private func makeModule(enabled: Bool = false) -> KeepAwakeModule {
+        store.saveKeepAwakeSettings(KeepAwakeSettings(enabled: enabled))
+        return KeepAwakeModule(settings: store, assertion: assertion)
+    }
+
+    func testSuccessfulAssertionSetsRunning() async throws {
+        let module = makeModule(enabled: true)
+        try await module.start()
+
+        XCTAssertEqual(module.state, .running)
+        XCTAssertTrue(assertion.isActive)
+        XCTAssertEqual(assertion.acquireCallCount, 1)
+        XCTAssertNil(module.lastError)
+    }
+
+    func testFailedAcquisitionSetsDegraded() async throws {
+        let module = makeModule(enabled: false)
+        try await module.start()
+        XCTAssertEqual(module.state, .running)
+
+        assertion.shouldFailNextAcquisition = true
+        module.setKeepingAwake(true)
+
+        if case .degraded = module.state {
+            // Expected
+        } else {
+            XCTFail("Expected degraded state, got \(module.state)")
+        }
+        XCTAssertFalse(assertion.isActive)
+        XCTAssertNotNil(module.lastError)
+    }
+
+    func testTogglingAfterFailureRecoversToRunning() async throws {
+        let module = makeModule(enabled: false)
+        try await module.start()
+
+        assertion.shouldFailNextAcquisition = true
+        module.setKeepingAwake(true)
+        if case .degraded = module.state { } else {
+            XCTFail("Expected degraded state after failed acquisition")
+        }
+        XCTAssertNotNil(module.lastError)
+
+        // A successful release (disable) should clear degraded and the error.
+        assertion.shouldFailNextAcquisition = false
+        module.setKeepingAwake(false)
+        XCTAssertEqual(module.state, .running)
+        XCTAssertNil(module.lastError)
+        XCTAssertFalse(assertion.isActive)
+
+        // A successful acquire should stay running.
+        module.setKeepingAwake(true)
+        XCTAssertEqual(module.state, .running)
+        XCTAssertNil(module.lastError)
+        XCTAssertTrue(assertion.isActive)
+    }
+}

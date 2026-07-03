@@ -70,7 +70,7 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     private var settings: FileShelfSettings
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "file-shelf")
     private let reader = PasteboardItemReader()
-    private let persistence = ShelfPersistence.shared
+    private let persistence: ShelfPersistence
     private var panel: ShelfPanel?
     private var contentView: ShelfContentView?
     private var hotkey: GlobalHotkey?
@@ -86,8 +86,13 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     /// is never silent. Cleared on the next successful ingest.
     @Published public private(set) var ingestError: String?
 
-    public init(settings: SettingsStore) {
+    public convenience init(settings: SettingsStore) {
+        self.init(settings: settings, persistence: .shared)
+    }
+
+    internal init(settings: SettingsStore, persistence: ShelfPersistence) {
         self.settingsStore = settings
+        self.persistence = persistence
         self.settings = settings.loadFileShelfSettings()
     }
 
@@ -123,6 +128,7 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
+        guard hotkey == nil else { return }
         guard let definition = settings.hotkey else { return }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
@@ -563,6 +569,7 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         if !trimmed.isEmpty,
            let index = collections.firstIndex(where: { $0.id == id }) {
             collections[index].name = trimmed
+            savePinnedToDisk()
         }
         renamingID = nil
     }

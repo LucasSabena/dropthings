@@ -81,14 +81,24 @@ public struct MacOSPermissionBackend: PermissionBackend {
 /// Tracks permission state for every module and exposes a single observable
 /// surface to the UI. Re-checking is cheap; we do not poll, we re-check on
 /// `refresh()` and on app activation.
+///
+/// macOS does not expose a true "denied" state for Accessibility or Screen
+/// Recording; the APIs only return `.granted` or `.notDetermined`. We infer
+/// `.denied` by remembering whether we already showed the system prompt for a
+/// permission. If the flag is set and the permission is still not granted, the
+/// user declined it.
 @MainActor
 public final class PermissionCenter: ObservableObject {
+    public static let promptedKey = SettingsKey("core.permissions.prompted")
+
     @Published public private(set) var states: [SystemPermission: SystemPermissionState] = [:]
 
     private let backend: PermissionBackend
+    private let settings: SettingsStore?
 
-    public init(backend: PermissionBackend = MacOSPermissionBackend()) {
+    public init(backend: PermissionBackend = MacOSPermissionBackend(), settings: SettingsStore? = nil) {
         self.backend = backend
+        self.settings = settings
         refresh()
     }
 
@@ -99,9 +109,15 @@ public final class PermissionCenter: ObservableObject {
     /// Re-query every known permission. Call on app activation and after the
     /// user returns from System Settings.
     public func refresh() {
+        let prompted = promptedPermissions()
         var next: [SystemPermission: SystemPermissionState] = [:]
         for permission in SystemPermission.allCases {
-            next[permission] = backend.currentState(for: permission)
+            let backendState = backend.currentState(for: permission)
+            if prompted.contains(permission.rawValue), backendState != .granted {
+                next[permission] = .denied
+            } else {
+                next[permission] = backendState
+            }
         }
         states = next
     }
@@ -114,20 +130,40 @@ public final class PermissionCenter: ObservableObject {
     /// Trigger macOS's native permission prompt for the given permission.
     /// Without this, the app never appears in System Settings and the user
     /// has no way to grant the permission through normal UI flows.
+    ///
+    /// For Accessibility and Screen Recording we record that the prompt was
+    /// shown so a later `refresh()` can report `.denied` if the user declined.
     @MainActor
     @discardableResult
     public func requestPermission(_ permission: SystemPermission) -> Bool {
-        guard let backend = backend as? MacOSPermissionBackend else {
-            return backend.openSystemSettings(for: permission)
+        let result: Bool
+        if let backend = backend as? MacOSPermissionBackend {
+            switch permission {
+            case .accessibility:
+                result = backend.requestAccessibility()
+            case .screenRecording:
+                result = backend.requestScreenRecording()
+            case .fullDiskAccess, .automation:
+                result = backend.openSystemSettings(for: permission)
+            }
+        } else {
+            result = backend.openSystemSettings(for: permission)
         }
-        switch permission {
-        case .accessibility:
-            return backend.requestAccessibility()
-        case .screenRecording:
-            return backend.requestScreenRecording()
-        case .fullDiskAccess, .automation:
-            return backend.openSystemSettings(for: permission)
+
+        if permission.supportsSystemPrompt {
+            markPrompted(permission)
         }
+        return result
+    }
+
+    /// Clear the "prompt was shown" inference for a permission. Call when the
+    /// user explicitly repairs permissions (Diagnostics) or re-enables a module
+    /// so a fresh system prompt can be shown instead of staying stuck on
+    /// `.denied`.
+    public func resetPromptState(for permission: SystemPermission) {
+        var prompted = promptedPermissions()
+        guard prompted.remove(permission.rawValue) != nil else { return }
+        persistPrompted(prompted)
     }
 
     /// Convenience for the module detail pane: which of `required` are still
@@ -138,5 +174,34 @@ public final class PermissionCenter: ObservableObject {
             missing.insert(permission)
         }
         return missing
+    }
+
+    // MARK: - Prompted persistence
+
+    private func markPrompted(_ permission: SystemPermission) {
+        var prompted = promptedPermissions()
+        guard prompted.insert(permission.rawValue).inserted else { return }
+        persistPrompted(prompted)
+    }
+
+    private func promptedPermissions() -> Set<String> {
+        guard let settings else { return [] }
+        guard let data = settings.data(Self.promptedKey) else { return [] }
+        return (try? JSONDecoder().decode(Set<String>.self, from: data)) ?? []
+    }
+
+    private func persistPrompted(_ prompted: Set<String>) {
+        guard let settings else { return }
+        guard let data = try? JSONEncoder().encode(prompted) else { return }
+        settings.setData(data, Self.promptedKey)
+    }
+}
+
+private extension SystemPermission {
+    var supportsSystemPrompt: Bool {
+        switch self {
+        case .accessibility, .screenRecording: return true
+        case .fullDiskAccess, .automation: return false
+        }
     }
 }

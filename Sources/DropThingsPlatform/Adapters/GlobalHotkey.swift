@@ -85,8 +85,16 @@ public final class GlobalHotkey: @unchecked Sendable {
                     &hotKeyID
                 )
                 if paramStatus == noErr && hotKeyID.id == hotkey.definition.id {
-                    DispatchQueue.main.async {
+                    // Carbon delivers hotkey events on its own thread. Bounce
+                    // to the main actor, but if we are already there call the
+                    // action directly to avoid the latency/loss surface of an
+                    // async hop.
+                    if Thread.isMainThread {
                         hotkey.onFire()
+                    } else {
+                        DispatchQueue.main.async {
+                            hotkey.onFire()
+                        }
                     }
                 }
                 return noErr

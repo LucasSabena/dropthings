@@ -116,6 +116,7 @@ public final class CommandPaletteModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
+        guard hotkey == nil else { return }
         guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.toggle()

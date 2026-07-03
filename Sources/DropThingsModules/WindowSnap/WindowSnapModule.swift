@@ -101,6 +101,7 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkeys
 
     private func registerHotkeys() {
+        guard hotkeys.isEmpty else { return }
         var registered: [GlobalHotkey] = []
         for action in WindowSnapAction.allCases {
             guard let definition = settings.hotkey(for: action) else { continue }

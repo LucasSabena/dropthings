@@ -18,6 +18,10 @@ final class ClipboardHistoryPanelController {
         self.module = module
     }
 
+    var isVisible: Bool {
+        panel?.isVisible ?? false
+    }
+
     func show() {
         if panel == nil {
             let panel = NSPanel(

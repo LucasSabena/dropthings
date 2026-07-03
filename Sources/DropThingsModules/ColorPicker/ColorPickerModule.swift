@@ -27,9 +27,21 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     private var loupeWindow: ColorPickerLoupeWindowController?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "color-picker")
 
-    public init(settings: SettingsStore, permissions: PermissionCenter) {
+    public typealias ColorConverter = (NSColor) -> NSColor?
+    private let colorConverter: ColorConverter
+
+    public nonisolated static func defaultColorConverter(_ color: NSColor) -> NSColor? {
+        color.usingColorSpace(.deviceRGB) ?? color.usingColorSpace(.sRGB)
+    }
+
+    public init(
+        settings: SettingsStore,
+        permissions: PermissionCenter,
+        colorConverter: @escaping ColorConverter = ColorPickerModule.defaultColorConverter
+    ) {
         self.settingsStore = settings
         self.permissions = permissions
+        self.colorConverter = colorConverter
         self.settings = settings.loadColorPickerSettings()
     }
 
@@ -133,22 +145,16 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     }
 
     public func setHistoryLimit(_ limit: Int) {
-        var new = settings
-        new.historyLimit = ColorPickerSettings.sanitized(
-            hotkeyEnabled: settings.hotkeyEnabled,
-            history: settings.history,
-            historyLimit: limit,
-            hotkey: settings.hotkey,
-            copyFormat: settings.copyFormat
-        ).historyLimit
-        new.history = ColorPickerSettings.sanitized(
-            hotkeyEnabled: settings.hotkeyEnabled,
-            history: settings.history,
-            historyLimit: new.historyLimit,
-            hotkey: settings.hotkey,
-            copyFormat: settings.copyFormat
-        ).history
-        applySettings(new)
+        var candidate = settings
+        candidate.historyLimit = limit
+        let sanitized = ColorPickerSettings.sanitized(
+            hotkeyEnabled: candidate.hotkeyEnabled,
+            history: candidate.history,
+            historyLimit: candidate.historyLimit,
+            hotkey: candidate.hotkey,
+            copyFormat: candidate.copyFormat
+        )
+        applySettings(sanitized)
     }
 
     public func setCopyFormat(_ format: ColorCopyFormat) {
@@ -238,8 +244,9 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     // MARK: - Pick handling
 
-    private func handlePickedColor(_ color: NSColor) {
-        guard let rgbColor = color.usingColorSpace(.deviceRGB) ?? color.usingColorSpace(.sRGB) else {
+    internal func handlePickedColor(_ color: NSColor) {
+        guard let rgbColor = colorConverter(color) else {
+            state = .degraded(reason: "Picked color could not be converted to RGB.")
             logger.warning("Picked color could not be converted to RGB")
             return
         }
@@ -250,6 +257,9 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         )
         recordPick(picked)
         copyToPasteboard(picked)
+        if case .degraded = state {
+            state = .running
+        }
         logger.notice("Picked \(picked.hex)")
     }
 

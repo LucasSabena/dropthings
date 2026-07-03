@@ -23,7 +23,9 @@ struct ScrollControlSettingsView: View {
                 if module.isPaused {
                     InlineAlert(
                         style: .warning,
-                        message: "Paused. Scroll events pass through unchanged until you press the shortcut again or click Resume."
+                        message: module.scrollSettings.pauseOnLaunch
+                            ? "Scroll Control is paused and will resume paused on launch. Press the shortcut or click Resume to start modifying scroll events."
+                            : "Paused. Scroll events pass through unchanged until you press the shortcut again or click Resume."
                     )
                     Button("Resume now") {
                         module.togglePause()
@@ -162,11 +164,21 @@ private struct AppOverrideRow: View {
     let onUpdate: (String, ScrollDirection, Double) -> Void
     let onRemove: () -> Void
 
+    private var displayName: String { applicationName(forBundleID: override.bundleID) }
+
     var body: some View {
         HStack(spacing: DTSpace.sm) {
-            Text(override.bundleID)
-                .font(DTTypography.caption.monospaced())
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(displayName)
+                    .font(DTTypography.body)
+                    .lineLimit(1)
+                if displayName != override.bundleID {
+                    Text(override.bundleID)
+                        .font(DTTypography.caption.monospaced())
+                        .foregroundStyle(DTColor.textSecondary)
+                        .lineLimit(1)
+                }
+            }
             Spacer()
             Picker("", selection: Binding(
                 get: { override.direction },
