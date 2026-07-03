@@ -49,6 +49,19 @@ public final class CommandPaletteModule: DropThingsModule, ObservableObject {
         logger.info("Command Palette stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Open Command Palette",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.show()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     public func show() {

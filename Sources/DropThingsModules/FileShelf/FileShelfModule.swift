@@ -36,6 +36,19 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         activeCollection?.items ?? []
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Show File Shelf",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.showPanel()
+                }
+            }
+        )
+    }
+
     /// The collection the user is currently looking at.
     public var activeCollection: ShelfCollection? {
         guard let id = activeCollectionID else {

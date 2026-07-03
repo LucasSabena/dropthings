@@ -9,6 +9,10 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         XCTAssertEqual(settings.hoverRevealDelay, 0)
         XCTAssertEqual(settings.profiles.count, 3)
         XCTAssertTrue(settings.alwaysVisibleBundleIDs.isEmpty)
+        XCTAssertFalse(settings.drawerMode)
+        XCTAssertEqual(settings.dividers.count, 1)
+        XCTAssertEqual(settings.dividers.first?.id, MenuBarCleanerDivider.mainID)
+        XCTAssertTrue(settings.dividers.first?.isOverflow == true)
     }
 
     func testProfileIDsAreStable() {
@@ -25,7 +29,12 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         let original = MenuBarCleanerSettings(
             collapseOnLaunch: true,
             hoverRevealDelay: 0.5,
-            alwaysVisibleBundleIDs: ["com.apple.Safari"]
+            alwaysVisibleBundleIDs: ["com.apple.Safari"],
+            drawerMode: true,
+            dividers: [
+                .defaultMain,
+                MenuBarCleanerDivider(name: "Focus", symbolName: "circle.fill", isOverflow: false)
+            ]
         )
         store.saveMenuBarCleanerSettings(original)
         let loaded = store.loadMenuBarCleanerSettings()
@@ -54,5 +63,7 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.hoverRevealDelay, 0)
         XCTAssertEqual(decoded.profiles.count, 3)
         XCTAssertTrue(decoded.alwaysVisibleBundleIDs.isEmpty)
+        XCTAssertFalse(decoded.drawerMode)
+        XCTAssertEqual(decoded.dividers.count, 1)
     }
 }

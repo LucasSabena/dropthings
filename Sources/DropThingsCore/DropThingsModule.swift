@@ -1,6 +1,21 @@
 import Foundation
 import SwiftUI
 
+/// A single runnable action surfaced by a module for the menu bar and similar
+/// one-tap entry points. Keep it stateless from the caller's point of view —
+/// the module decides whether the action is available and what it does.
+public struct ModulePrimaryAction: Sendable {
+    public let title: String
+    public let iconName: String
+    public let action: @Sendable () -> Void
+
+    public init(title: String, iconName: String, action: @escaping @Sendable () -> Void) {
+        self.title = title
+        self.iconName = iconName
+        self.action = action
+    }
+}
+
 /// Contract every module implements. The protocol stays small on purpose; add
 /// members only after two real modules need the same shape.
 ///
@@ -17,6 +32,11 @@ public protocol DropThingsModule: AnyObject, CommandSource {
 
     /// Current state, observed by the registry.
     var state: ModuleState { get }
+
+    /// Optional primary action exposed in the menu bar when the module is
+    /// active. `nil` means the module has no one-tap action and the menu bar
+    /// will fall back to opening the module's settings.
+    var primaryAction: ModulePrimaryAction? { get }
 
     /// Begin doing work. Must be idempotent: calling `start()` on a running
     /// module should be a no-op.
@@ -52,4 +72,8 @@ extension DropThingsModule {
     /// Every module is a potential Command Palette source. Default is empty;
     /// modules override to expose actions.
     public var commands: [CommandDescriptor] { [] }
+
+    /// Most modules do not expose a one-tap menu-bar action. Conforming types
+    /// override this when they have a clear primary action.
+    public var primaryAction: ModulePrimaryAction? { nil }
 }

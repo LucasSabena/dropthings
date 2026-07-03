@@ -11,8 +11,8 @@
 #   brew install --cask LucasSabena/dropthings/dropthings
 
 cask "dropthings" do
-  version "0.1.5"
-  sha256 "994036ffa2435d2afec40a9a6ad8724fc7ac7c4f67590535aed6b218b279c89b"
+  version "0.3.1"
+  sha256 "ba05ba57ab89facb72f6a90c203ad1deb564cfee74be6d142358bce5b6f8c745"
 
   url "https://github.com/LucasSabena/dropthings/releases/download/v#{version}/DropThings-#{version}.dmg"
   name "DropThings"

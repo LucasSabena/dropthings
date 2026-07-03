@@ -56,6 +56,19 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         logger.info("Clipboard History stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Open Clipboard History",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.showHistoryPanel()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     public func showHistoryPanel() {

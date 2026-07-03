@@ -19,16 +19,38 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     @Published public private(set) var isCollapsed: Bool = false
     @Published public private(set) var statusMessage: String?
 
+    /// One-tap entry point from the menu bar. In drawer mode this opens the
+    /// overflow drawer; otherwise it toggles collapse directly.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: settings.drawerMode ? "Open Menu Bar Cleaner" : (isCollapsed ? "Reveal icons" : "Collapse icons"),
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.settings.drawerMode {
+                        self.showOverflowPanel()
+                    } else {
+                        self.toggleCollapsed()
+                    }
+                }
+            }
+        )
+    }
+
     private let settingsStore: SettingsStore
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "menu-bar-cleaner")
 
-    private var dividerItem: DropThingsStatusItem?
+    /// The chevron that opens the drawer or toggles collapse.
     private var toggleItem: DropThingsStatusItem?
+    /// All divider status items, keyed by divider id. The main divider is
+    /// always present; extra dividers are visual group separators.
+    private var dividerItems: [UUID: DropThingsStatusItem] = [:]
     private var hoverView: HoverTrackingView?
     private var screenObserver: NSObjectProtocol?
     private var hoverTimer: Timer?
     private var wasHoverRevealed: Bool = false
-    private let expandedDividerLength: CGFloat = 18
+    private var overflowPanel: MenuBarCleanerOverflowPanelController?
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
@@ -102,6 +124,13 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         settings.hoverRevealDelay
     }
 
+    public func setDrawerMode(_ enabled: Bool) {
+        var new = settings
+        new.drawerMode = enabled
+        saveSettings(new)
+        installClickHandler()
+    }
+
     public func setActiveProfile(_ profileID: UUID?) {
         var new = settings
         new.activeProfileID = profileID
@@ -139,6 +168,32 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         saveSettings(new)
     }
 
+    // MARK: - Dividers
+
+    public func addDivider(name: String, symbolName: String = "line.vertical", isOverflow: Bool = false) {
+        var new = settings
+        let divider = MenuBarCleanerDivider(name: name, symbolName: symbolName, isOverflow: isOverflow)
+        new.dividers.append(divider)
+        saveSettings(new)
+        installDividerStatusItem(divider)
+    }
+
+    public func removeDivider(_ dividerID: UUID) {
+        guard dividerID != MenuBarCleanerDivider.mainID else { return }
+        var new = settings
+        new.dividers.removeAll { $0.id == dividerID }
+        saveSettings(new)
+        dividerItems[dividerID] = nil
+    }
+
+    public func updateDivider(_ divider: MenuBarCleanerDivider) {
+        var new = settings
+        guard let index = new.dividers.firstIndex(where: { $0.id == divider.id }) else { return }
+        new.dividers[index] = divider
+        saveSettings(new)
+        applyMenuBarState()
+    }
+
     public func toggleAlwaysVisible(_ bundleID: String) {
         var new = settings
         if new.alwaysVisibleBundleIDs.contains(bundleID) {
@@ -154,8 +209,12 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         var new = settings
         new.alwaysVisibleBundleIDs = []
         new.activeProfileID = nil
+        new.dividers = [.defaultMain]
+        new.drawerMode = false
         saveSettings(new)
-        logger.notice("Menu Bar Cleaner reset: all icons visible, always-visible list cleared, no active profile")
+        uninstallStatusItems()
+        installStatusItems()
+        logger.notice("Menu Bar Cleaner reset: all icons visible, always-visible list cleared, no active profile, dividers reset")
     }
 
     // MARK: - SwiftUI surface
@@ -191,26 +250,45 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     // MARK: - Status items
 
     private func installStatusItems() {
-        guard dividerItem == nil else { return }
-        let divider = DropThingsStatusItem(length: expandedDividerLength)
-        divider.setAutosaveName("dropthings-menu-bar-cleaner-divider")
-        divider.setSymbol("line.vertical", accessibilityDescription: "DropThings menu bar divider")
-        divider.show()
-        dividerItem = divider
+        guard toggleItem == nil else { return }
 
         let toggle = DropThingsStatusItem()
         toggle.setAutosaveName("dropthings-menu-bar-cleaner-toggle")
-        toggle.setOnClick { [weak self] in
-            self?.toggleCollapsed()
-        }
         toggle.show()
         toggleItem = toggle
+
+        for divider in settings.dividers {
+            installDividerStatusItem(divider)
+        }
+
         installHoverTracking()
-        updateToggleItem()
+        installClickHandler()
+        applyMenuBarState()
+    }
+
+    private func installDividerStatusItem(_ divider: MenuBarCleanerDivider) {
+        let item = DropThingsStatusItem(length: divider.expandedLength)
+        item.setAutosaveName("dropthings-menu-bar-cleaner-divider-\(divider.id.uuidString)")
+        item.setSymbol(divider.symbolName, accessibilityDescription: "DropThings menu bar divider: \(divider.name)")
+        item.show()
+        dividerItems[divider.id] = item
+    }
+
+    private func installClickHandler() {
+        guard let toggleItem else { return }
+        toggleItem.setOnClick { [weak self] in
+            guard let self else { return }
+            if self.settings.drawerMode {
+                self.showOverflowPanel()
+            } else {
+                self.toggleCollapsed()
+            }
+        }
     }
 
     private func installHoverTracking() {
         guard let button = toggleItem?.button else { return }
+        hoverView?.removeFromSuperview()
         let hover = HoverTrackingView()
         hover.onEnter = { [weak self] in
             Task { @MainActor [weak self] in
@@ -232,13 +310,35 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         hoverView?.removeFromSuperview()
         hoverView = nil
         toggleItem = nil
-        dividerItem = nil
+        dividerItems.removeAll()
     }
 
     private func applyMenuBarState() {
-        dividerItem?.setLength(isCollapsed ? collapsedDividerLength : expandedDividerLength)
+        for divider in settings.dividers {
+            guard let item = dividerItems[divider.id] else { continue }
+            let length: CGFloat
+            if isCollapsed && divider.isOverflow {
+                length = collapsedDividerLength(for: divider)
+            } else {
+                length = divider.expandedLength
+            }
+            item.setLength(length)
+        }
         updateToggleItem()
         validateControlOrder()
+    }
+
+    // MARK: - Overflow drawer
+
+    public func showOverflowPanel() {
+        if overflowPanel == nil {
+            overflowPanel = MenuBarCleanerOverflowPanelController(module: self)
+        }
+        overflowPanel?.show(relativeTo: toggleItem?.button)
+    }
+
+    public func hideOverflowPanel() {
+        overflowPanel?.hide()
     }
 
     private func updateToggleItem() {
@@ -250,19 +350,20 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         )
     }
 
-    private var collapsedDividerLength: CGFloat {
+    private func collapsedDividerLength(for divider: MenuBarCleanerDivider) -> CGFloat {
         let widestScreen = NSScreen.screens.map(\.frame.width).max() ?? 1728
-        return max(500, min(widestScreen * 2, 10_000))
+        return max(divider.collapsedLength, min(widestScreen * 2, 10_000))
     }
 
     private func validateControlOrder() {
-        guard let dividerX = dividerItem?.buttonOriginX,
+        guard let mainItem = dividerItems[MenuBarCleanerDivider.mainID],
+              let dividerX = mainItem.buttonOriginX,
               let toggleX = toggleItem?.buttonOriginX else {
             statusMessage = nil
             return
         }
         if toggleX < dividerX {
-            statusMessage = "Move the DropThings chevron to the right of the divider with Command-drag."
+            statusMessage = "Move the DropThings chevron to the right of the main divider with Command-drag."
         } else if isCollapsed {
             statusMessage = "Collapsed. Click the DropThings chevron to reveal the hidden side."
         } else {
@@ -304,8 +405,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isCollapsed else { return }
-                self.dividerItem?.setLength(self.collapsedDividerLength)
-                self.validateControlOrder()
+                self.applyMenuBarState()
             }
         }
     }

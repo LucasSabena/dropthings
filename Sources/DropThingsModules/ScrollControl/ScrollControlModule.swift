@@ -86,6 +86,19 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         }
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: isPaused ? "Resume Scroll Control" : "Pause Scroll Control",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.togglePause()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     /// Pause the event tap so scroll events pass through unmodified, or

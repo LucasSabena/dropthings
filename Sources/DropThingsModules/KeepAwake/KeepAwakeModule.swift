@@ -53,6 +53,19 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
         logger.info("Keep Awake stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: isAssertionActive ? "Disable Keep Awake" : "Enable Keep Awake",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.toggleKeepingAwake()
+                }
+            }
+        )
+    }
+
     /// Toggle the awake state. When `true`, holds a system sleep
     /// assertion until `false` (or the module is stopped). The setting
     /// persists across launches.
@@ -60,6 +73,11 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
         var new = settings
         new.enabled = enabled
         applySettings(new)
+    }
+
+    /// Flip the current keep-awake state without knowing the current value.
+    public func toggleKeepingAwake() {
+        setKeepingAwake(!settings.enabled)
     }
 
     public var keepAwakeSettings: KeepAwakeSettings { settings }

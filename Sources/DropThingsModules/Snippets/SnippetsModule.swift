@@ -44,6 +44,19 @@ public final class SnippetsModule: DropThingsModule, ObservableObject {
         logger.info("Snippets stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Open Snippets",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.showPanel()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     public func showPanel() {

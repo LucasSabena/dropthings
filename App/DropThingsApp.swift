@@ -199,6 +199,18 @@ final class AppServices: ObservableObject {
     func showAboutWindow() {
         settingsWindow.show()
     }
+
+    func showSettings(moduleID: ModuleID? = nil) {
+        if let moduleID {
+            // Publish the selection through @AppStorage keys so the split view
+            // navigates to the module detail pane.
+            UserDefaults.standard.set(SidebarItem.module(moduleID).storageKey,
+                                      forKey: "ui.settings.sidebarSection")
+            UserDefaults.standard.set(moduleID.rawValue,
+                                      forKey: "ui.settings.sidebarModuleID")
+        }
+        settingsWindow.show()
+    }
 }
 
 @MainActor
@@ -264,34 +276,20 @@ struct DropThingsApp: App {
 
     @ViewBuilder
     private var menuContent: some View {
-        if let shelf = services.registry.modules[.fileShelf] as? FileShelfModule {
-            Button("Show File Shelf") {
-                shelf.showPanel()
-            }
-            .keyboardShortcut("s", modifiers: [.command, .option])
+        activeModulesSection
 
-            Divider()
-        }
+        Divider()
 
         Button("Open Settings…") {
-            services.settingsWindow.show()
+            services.showSettings()
         }
         .keyboardShortcut(",")
 
         Button("Check for Updates…") {
             services.updates.checkNow()
-            services.settingsWindow.show()
+            services.showSettings()
         }
         .disabled(services.updates.state == .checking)
-
-        Divider()
-
-        Button("Export Settings…") {
-            services.exportSettings()
-        }
-        Button("Import Settings…") {
-            services.importSettings()
-        }
 
         Divider()
 
@@ -299,5 +297,43 @@ struct DropThingsApp: App {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    /// One-tap shortcuts for every active module that exposes a primary action.
+    /// Modules without an action are omitted; the user can still reach them
+    /// through Settings.
+    @ViewBuilder
+    private var activeModulesSection: some View {
+        let activeModules = services.registry.modules
+            .filter { services.registry.states[$0.key]?.isActive == true }
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+
+        if activeModules.isEmpty {
+            Text("No active modules")
+                .font(DTTypography.caption)
+                .foregroundStyle(DTColor.textSecondary)
+                .disabled(true)
+        } else {
+            ForEach(activeModules, id: \.key) { entry in
+                moduleMenuItem(module: entry.value)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func moduleMenuItem(module: any DropThingsModule) -> some View {
+        if let action = module.primaryAction {
+            Button {
+                action.action()
+            } label: {
+                Label(action.title, systemImage: action.iconName)
+            }
+        } else {
+            Button {
+                services.showSettings(moduleID: module.id)
+            } label: {
+                Label(module.name, systemImage: module.iconName)
+            }
+        }
     }
 }

@@ -54,6 +54,19 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         logger.info("Screenshot Region stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Capture Region",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.captureRegion()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     /// Trigger the region overlay programmatically (settings button or hotkey).

@@ -15,6 +15,7 @@ final class SnippetsModuleTests: XCTestCase {
         backend = InMemorySettingsBackend()
         store = SettingsStore(backend: backend)
         module = SnippetsModule(settings: store)
+        NSPasteboard.general.clearContents()
     }
 
     func testInitLoadsDefaults() {
@@ -83,6 +84,7 @@ final class SnippetsModuleTests: XCTestCase {
         XCTAssertEqual(commands[0].subtitle, "Hello")
 
         commands[0].action()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "Hello")
     }
 }

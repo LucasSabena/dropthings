@@ -1,9 +1,10 @@
 import Foundation
 import DropThingsCore
 
-/// User preferences for the Hidden-Bar-style overflow area. The user decides
-/// what belongs in that area by holding Command and dragging menu bar items
-/// to the left of DropThings' divider.
+/// User preferences for the menu bar overflow area. The user decides what
+/// belongs hidden by Command-dragging menu bar items to the left of DropThings'
+/// divider; DropThings can also open an overflow drawer and install extra
+/// named dividers for visual grouping.
 public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
     public var collapseOnLaunch: Bool
     /// Delay before hover reveals the overflow area. `0` means hover reveal
@@ -16,23 +17,33 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
     /// Bundle identifiers of status items that should stay visible even when
     /// the overflow area is collapsed.
     public var alwaysVisibleBundleIDs: [String]
+    /// When `true`, clicking the DropThings chevron opens an overflow drawer
+    /// instead of immediately collapsing the menu bar.
+    public var drawerMode: Bool
+    /// Named dividers installed in the menu bar. The first item is always the
+    /// main overflow divider; additional dividers act as visual group separators.
+    public var dividers: [MenuBarCleanerDivider]
 
     public init(
         collapseOnLaunch: Bool = false,
         hoverRevealDelay: TimeInterval = 0,
         profiles: [MenuBarCleanerProfile] = [MenuBarCleanerProfile(id: .work), MenuBarCleanerProfile(id: .focus), MenuBarCleanerProfile(id: .presentation)],
         activeProfileID: UUID? = nil,
-        alwaysVisibleBundleIDs: [String] = []
+        alwaysVisibleBundleIDs: [String] = [],
+        drawerMode: Bool = false,
+        dividers: [MenuBarCleanerDivider] = [.defaultMain]
     ) {
         self.collapseOnLaunch = collapseOnLaunch
         self.hoverRevealDelay = hoverRevealDelay
         self.profiles = profiles
         self.activeProfileID = activeProfileID
         self.alwaysVisibleBundleIDs = alwaysVisibleBundleIDs
+        self.drawerMode = drawerMode
+        self.dividers = dividers
     }
 
     enum CodingKeys: String, CodingKey {
-        case collapseOnLaunch, hoverRevealDelay, profiles, activeProfileID, alwaysVisibleBundleIDs
+        case collapseOnLaunch, hoverRevealDelay, profiles, activeProfileID, alwaysVisibleBundleIDs, drawerMode, dividers
     }
 
     public init(from decoder: Decoder) throws {
@@ -43,10 +54,16 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
             ?? [MenuBarCleanerProfile(id: .work), MenuBarCleanerProfile(id: .focus), MenuBarCleanerProfile(id: .presentation)]
         self.activeProfileID = try c.decodeIfPresent(UUID.self, forKey: .activeProfileID)
         self.alwaysVisibleBundleIDs = try c.decodeIfPresent([String].self, forKey: .alwaysVisibleBundleIDs) ?? []
+        self.drawerMode = try c.decodeIfPresent(Bool.self, forKey: .drawerMode) ?? false
+        self.dividers = try c.decodeIfPresent([MenuBarCleanerDivider].self, forKey: .dividers) ?? [.defaultMain]
     }
 
     public var activeProfile: MenuBarCleanerProfile? {
         profiles.first { $0.id == activeProfileID }
+    }
+
+    public var mainDivider: MenuBarCleanerDivider {
+        dividers.first { $0.id == MenuBarCleanerDivider.mainID } ?? .defaultMain
     }
 }
 

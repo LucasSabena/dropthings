@@ -41,6 +41,19 @@ public final class TextToolsModule: DropThingsModule, ObservableObject {
         logger.info("Text Tools stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Open Text Tools",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.showPanel()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     public func showPanel() {

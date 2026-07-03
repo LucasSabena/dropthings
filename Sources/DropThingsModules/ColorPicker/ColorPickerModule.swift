@@ -47,6 +47,19 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         logger.info("Color Picker stopped")
     }
 
+    /// One-tap entry point from the menu bar.
+    public var primaryAction: ModulePrimaryAction? {
+        ModulePrimaryAction(
+            title: "Pick Color",
+            iconName: iconName,
+            action: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.startPicking()
+                }
+            }
+        )
+    }
+
     // MARK: - Public actions
 
     /// Trigger the system color sampler programmatically (settings button or
