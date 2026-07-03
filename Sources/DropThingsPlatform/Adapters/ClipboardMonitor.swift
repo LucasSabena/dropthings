@@ -9,14 +9,22 @@ public final class ClipboardMonitor {
         public let text: String?
         public let url: URL?
         public let fileURLs: [URL]
+        /// TIFF data when the pasteboard holds an image (copied screenshot,
+        /// image from Preview, etc.). `nil` otherwise.
+        public let imageData: Data?
+        /// sRGB hex `#RRGGBB` when the pasteboard holds an `NSColor` (Xcode,
+        /// Finder, design tools). `nil` otherwise.
+        public let colorHex: String?
         public let isTransient: Bool
         public let isConcealed: Bool
         public let sourceBundleID: String?
 
-        public init(text: String?, url: URL?, fileURLs: [URL], isTransient: Bool, isConcealed: Bool, sourceBundleID: String?) {
+        public init(text: String?, url: URL?, fileURLs: [URL], imageData: Data? = nil, colorHex: String? = nil, isTransient: Bool, isConcealed: Bool, sourceBundleID: String?) {
             self.text = text
             self.url = url
             self.fileURLs = fileURLs
+            self.imageData = imageData
+            self.colorHex = colorHex
             self.isTransient = isTransient
             self.isConcealed = isConcealed
             self.sourceBundleID = sourceBundleID
@@ -70,6 +78,14 @@ public final class ClipboardMonitor {
         var text: String?
         var url: URL?
         var fileURLs: [URL] = []
+        var imageData: Data?
+        var colorHex: String?
+
+        // Image first: if the pasteboard carries image data (TIFF/PNG), capture
+        // it and prefer it over any co-text. A copied screenshot has no string.
+        if let tiff = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
+            imageData = tiff
+        }
 
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
             text = string
@@ -79,10 +95,22 @@ public final class ClipboardMonitor {
         }
 
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
-            fileURLs = urls
+            // A copied image file shows up as a file URL; treat it as image
+            // data only when there is no separate image payload and no text,
+            // so a screenshot copied as a file still becomes a filePath item.
+            if imageData == nil {
+                fileURLs = urls
+            }
         }
 
-        if text == nil && fileURLs.isEmpty && url == nil {
+        // Color: read as NSColor and normalize to a hex string. Xcode/Finder
+        // and design tools put a color object on the pasteboard via NSColor's
+        // NSPasteboardWriting conformance.
+        if let nsColor = pasteboard.readObjects(forClasses: [NSColor.self], options: nil)?.first as? NSColor {
+            colorHex = ClipboardColorHex.hex(from: nsColor)
+        }
+
+        if text == nil && fileURLs.isEmpty && url == nil && imageData == nil && colorHex == nil {
             return nil
         }
 
@@ -90,6 +118,8 @@ public final class ClipboardMonitor {
             text: text,
             url: url,
             fileURLs: fileURLs,
+            imageData: imageData,
+            colorHex: colorHex,
             isTransient: isTransient,
             isConcealed: isConcealed,
             sourceBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier

@@ -20,6 +20,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     @Published public private(set) var items: [ClipboardItem] = []
 
     private let settingsStore: SettingsStore
+    private let permissions: PermissionCenter
     private let monitor: ClipboardMonitor
     private var hotkey: GlobalHotkey?
     private var panel: ClipboardHistoryPanelController?
@@ -27,6 +28,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
+        self.permissions = permissions
         self.settings = settings.loadClipboardHistorySettings()
         let monitor = ClipboardMonitor()
         self.monitor = monitor
@@ -94,6 +96,51 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         applySettings(new)
     }
 
+    public func setPasteOnEnter(_ enabled: Bool) {
+        var new = settings
+        new.pasteOnEnter = enabled
+        applySettings(new)
+    }
+
+    // MARK: - Paste / copy actions
+
+    /// Copy an item to the pasteboard without closing the panel. Bound to `C`.
+    public func copyItem(_ item: ClipboardItem) {
+        copyToPasteboard(item)
+    }
+
+    /// The primary action (Enter). When `pasteOnEnter` is on and Accessibility
+    /// is granted, this copies the item, hides the panel, reactivates the app
+    /// that had focus, and synthesizes ⌘V so it lands at the cursor. When the
+    /// permission is missing or the feature is off, it falls back to copying
+    /// and surfaces what happened via the returned result so the UI can show a
+    /// hint instead of failing silently.
+    @discardableResult
+    public func pasteOrCopy(_ item: ClipboardItem) -> PasteResult {
+        copyToPasteboard(item)
+        guard settings.pasteOnEnter else {
+            return .copiedOnly
+        }
+        guard KeystrokeSynthesizer.isAccessibilityGranted() else {
+            // Prompt once; the panel/UI can re-check state afterwards.
+            permissions.requestPermission(.accessibility)
+            return .needsAccessibility
+        }
+        panel?.hide()
+        panel?.reactivatePreviousApp()
+        // Small delay so the target app is frontmost before we post the key.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            KeystrokeSynthesizer.postPaste()
+        }
+        return .pasted
+    }
+
+    public enum PasteResult: Sendable {
+        case pasted
+        case copiedOnly
+        case needsAccessibility
+    }
+
     public func addExcludedBundleID(_ bundleID: String) {
         var new = settings
         if !new.excludedBundleIDs.contains(bundleID) {
@@ -123,6 +170,16 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         case .filePath:
             let url = URL(fileURLWithPath: item.content)
             pb.writeObjects([url as NSPasteboardWriting])
+        case .image:
+            if let image = item.nsImage {
+                pb.writeObjects([image as NSPasteboardWriting])
+            }
+        case .color:
+            if let color = item.nsColor {
+                pb.writeObjects([color as NSPasteboardWriting])
+            }
+            // Always also expose the hex string so plain-text paste targets work.
+            pb.setString(item.content, forType: .string)
         }
         logger.notice("Copied history item \(item.id) to pasteboard")
     }
@@ -185,6 +242,18 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         var results: [ClipboardItem] = []
         let source = monitorItem.sourceBundleID
 
+        // Images take priority: a screenshot copy has no useful string form.
+        if let data = monitorItem.imageData {
+            results.append(ClipboardItem(type: .image, content: "Image", imageData: data, sourceBundleID: source))
+            return results
+        }
+
+        // Colors: store as hex so they survive as a plain, comparable string.
+        if let hex = monitorItem.colorHex {
+            results.append(ClipboardItem(type: .color, content: hex, sourceBundleID: source))
+            return results
+        }
+
         if let text = monitorItem.text, !text.isEmpty {
             let trimmed = String(text.prefix(ClipboardHistorySettings.contentLengthMax))
             if monitorItem.url != nil, let urlString = monitorItem.url?.absoluteString {
@@ -202,14 +271,15 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     }
 
     private func add(_ item: ClipboardItem) {
-        // Deduplicate: if the same content already exists, bump it to top.
-        if let existingIndex = items.firstIndex(where: { $0.type == item.type && $0.content == item.content }) {
+        // Deduplicate: same content, or for images same pixel data, bumps to top.
+        if let existingIndex = items.firstIndex(where: { Self.isSameContent($0, item) }) {
             let existing = items.remove(at: existingIndex)
             let updated = ClipboardItem(
                 id: existing.id,
                 timestamp: Date(),
                 type: existing.type,
                 content: existing.content,
+                imageData: existing.imageData ?? item.imageData,
                 sourceBundleID: item.sourceBundleID,
                 isPinned: existing.isPinned,
                 isFavorite: existing.isFavorite
@@ -219,6 +289,15 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
             insertPrioritized(item)
         }
         trimToMax()
+    }
+
+    /// Equality for dedup. Images match by raw pixel data; everything else by
+    /// `(type, content)`.
+    private static func isSameContent(_ a: ClipboardItem, _ b: ClipboardItem) -> Bool {
+        if a.type == .image && b.type == .image {
+            return a.imageData == b.imageData
+        }
+        return a.type == b.type && a.content == b.content
     }
 
     private func insertPrioritized(_ item: ClipboardItem) {
@@ -269,7 +348,8 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
             maxHistory: new.maxHistory,
             pinnedItems: new.pinnedItems,
             excludedBundleIDs: new.excludedBundleIDs,
-            incognito: new.incognito
+            incognito: new.incognito,
+            pasteOnEnter: new.pasteOnEnter
         )
         let hotkeyChanged = settings.hotkey != sanitized.hotkey
             || settings.hotkeyEnabled != sanitized.hotkeyEnabled
