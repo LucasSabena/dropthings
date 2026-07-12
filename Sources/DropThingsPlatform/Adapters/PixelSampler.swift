@@ -1,9 +1,7 @@
 import AppKit
 import CoreGraphics
 
-/// Reads the pixel color at a specific point inside a `CGImage`. The image
-/// is assumed to be 8 bits per channel, RGBA, premultiplied last (the
-/// layout `CGWindowListCreateImage` produces).
+/// Reads the pixel color at a specific point inside a 32-bit `CGImage`.
 public enum PixelSampler {
     public struct RGB: Equatable, Sendable, Hashable {
         public let r: Int
@@ -26,7 +24,7 @@ public enum PixelSampler {
 
         public var nsColor: NSColor {
             NSColor(
-                calibratedRed: CGFloat(r) / 255,
+                srgbRed: CGFloat(r) / 255,
                 green: CGFloat(g) / 255,
                 blue: CGFloat(b) / 255,
                 alpha: 1.0
@@ -52,10 +50,32 @@ public enum PixelSampler {
 
         let bytesPerRow = image.bytesPerRow
         let bytesPerPixel = image.bitsPerPixel / 8
+        guard bytesPerPixel >= 4,
+              let channels = channelOffsets(for: image.bitmapInfo) else { return nil }
         let offset = y * bytesPerRow + x * bytesPerPixel
-        let r = Int(bytes[offset])
-        let g = Int(bytes[offset + 1])
-        let b = Int(bytes[offset + 2])
+        let r = Int(bytes[offset + channels.r])
+        let g = Int(bytes[offset + channels.g])
+        let b = Int(bytes[offset + channels.b])
         return RGB(r: r, g: g, b: b)
+    }
+
+    private static func channelOffsets(for bitmapInfo: CGBitmapInfo) -> (r: Int, g: Int, b: Int)? {
+        guard let alpha = CGImageAlphaInfo(
+            rawValue: bitmapInfo.rawValue & CGBitmapInfo.alphaInfoMask.rawValue
+        ) else { return nil }
+        let littleEndian = bitmapInfo.intersection(.byteOrderMask) == .byteOrder32Little
+
+        switch alpha {
+        case .premultipliedFirst, .first, .noneSkipFirst:
+            return littleEndian ? (2, 1, 0) : (1, 2, 3)
+        case .premultipliedLast, .last, .noneSkipLast:
+            return littleEndian ? (3, 2, 1) : (0, 1, 2)
+        case CGImageAlphaInfo.none:
+            return littleEndian ? (2, 1, 0) : (0, 1, 2)
+        case .alphaOnly:
+            return nil
+        @unknown default:
+            return nil
+        }
     }
 }

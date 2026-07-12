@@ -4,13 +4,16 @@ import Carbon.HIToolbox
 import DropThingsCore
 import DropThingsPlatform
 
-/// Kinds of content the clipboard history can capture. Text, URLs, and file
-/// paths persist when pinned; images and colors are kept in memory only.
+/// Kinds of content the clipboard history can capture. File-backed entries and
+/// colors can persist when pinned; raw image bytes remain session-only.
 public enum ClipboardItemType: String, Codable, Sendable, CaseIterable {
     case plainText
     case url
     case filePath
+    case folder
     case image
+    case video
+    case audio
     case color
 }
 
@@ -78,13 +81,20 @@ public struct ClipboardItem: Identifiable, Codable, Sendable, Equatable {
 
     // MARK: Persistence
 
-    /// `true` for types that survive a restart when pinned. Images and colors
-    /// are memory-only by design (privacy + size).
+    /// `true` for types that survive a restart when pinned. Raw image bytes are
+    /// memory-only by design; file-backed images are restored through paths.
     public static func isPersistable(type: ClipboardItemType) -> Bool {
         switch type {
-        case .plainText, .url, .filePath: return true
-        case .image, .color: return false
+        case .plainText, .url, .filePath, .folder, .video, .audio, .color: return true
+        case .image: return false
         }
+    }
+
+    public static func isPersistable(_ item: ClipboardItem) -> Bool {
+        if item.type == .image {
+            return item.imageData == nil && item.fileURL != nil
+        }
+        return isPersistable(type: item.type)
     }
 
     // MARK: Display helpers
@@ -94,7 +104,11 @@ public struct ClipboardItem: Identifiable, Codable, Sendable, Equatable {
         case .plainText: return content
         case .url: return content
         case .filePath: return URL(fileURLWithPath: content).lastPathComponent
-        case .image: return "Image"
+        case .folder: return URL(fileURLWithPath: content).lastPathComponent
+        case .image:
+            return fileURL?.lastPathComponent ?? "Image"
+        case .video, .audio:
+            return URL(fileURLWithPath: content).lastPathComponent
         case .color: return content
         }
     }
@@ -109,11 +123,17 @@ public struct ClipboardItem: Identifiable, Codable, Sendable, Equatable {
             return "URL"
         case .filePath:
             return URL(fileURLWithPath: content).path
+        case .folder:
+            return "Folder · \(URL(fileURLWithPath: content).path)"
         case .image:
             if let size = imagePixelSize() {
                 return "\(size.width) × \(size.height) px"
             }
             return "Image"
+        case .video:
+            return fileInfo?.byteCount.map(Self.byteCountString) ?? "Video"
+        case .audio:
+            return fileInfo?.byteCount.map(Self.byteCountString) ?? "Audio"
         case .color:
             return "Color"
         }
@@ -122,8 +142,11 @@ public struct ClipboardItem: Identifiable, Codable, Sendable, Equatable {
     /// Decoded image for previews/thumbnails. Cheap to call; the decode is
     /// fast for the small images we store.
     public var nsImage: NSImage? {
-        guard let data = imageData else { return nil }
-        return NSImage(data: data)
+        if let data = imageData {
+            return NSImage(data: data)
+        }
+        guard type == .image, let fileURL else { return nil }
+        return NSImage(contentsOf: fileURL)
     }
 
     /// Parsed color for `.color` items; nil for everything else. The hex
@@ -144,12 +167,49 @@ public struct ClipboardItem: Identifiable, Codable, Sendable, Equatable {
         }
         return nil
     }
+
+    /// Local URL for file-backed entries. Raw clipboard images have no URL;
+    /// copied image files do, which lets Quick Look and drag-out preserve the
+    /// original file rather than flattening it to TIFF.
+    public var fileURL: URL? {
+        switch type {
+        case .filePath, .folder, .video, .audio:
+            return URL(fileURLWithPath: content)
+        case .image where imageData == nil && content.hasPrefix("/"):
+            return URL(fileURLWithPath: content)
+        default:
+            return nil
+        }
+    }
+
+    public var fileInfo: FileContentInfo? {
+        fileURL.map { FileContentInfo.inspect($0) }
+    }
+
+    public var systemImageName: String {
+        switch type {
+        case .plainText: return "text.quote"
+        case .url: return "link"
+        case .filePath: return fileInfo?.kind.systemImageName ?? "doc"
+        case .folder: return "folder.fill"
+        case .image: return "photo"
+        case .video: return "film"
+        case .audio: return "waveform"
+        case .color: return "paintpalette"
+        }
+    }
+
+    private static func byteCountString(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    }
 }
 
 public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
     public var hotkeyEnabled: Bool
     public var hotkey: GlobalHotkey.Definition?
     public var maxHistory: Int
+    public var retentionDays: Int
+    public var maxStorageMB: Int
     public var pinnedItems: [ClipboardItem]
     public var excludedBundleIDs: [String]
     public var incognito: Bool
@@ -160,7 +220,9 @@ public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
     public init(
         hotkeyEnabled: Bool = true,
         hotkey: GlobalHotkey.Definition? = GlobalHotkey.defaultClipboardHistoryHotkey,
-        maxHistory: Int = 50,
+        maxHistory: Int = 200,
+        retentionDays: Int = 30,
+        maxStorageMB: Int = 250,
         pinnedItems: [ClipboardItem] = [],
         excludedBundleIDs: [String] = [
             "com.1password.7-desktop",
@@ -170,11 +232,13 @@ public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
             "com.apple.keychainaccess"
         ],
         incognito: Bool = false,
-        pasteOnEnter: Bool = true
+        pasteOnEnter: Bool = false
     ) {
         self.hotkeyEnabled = hotkeyEnabled
         self.hotkey = hotkey
         self.maxHistory = maxHistory
+        self.retentionDays = retentionDays
+        self.maxStorageMB = maxStorageMB
         self.pinnedItems = pinnedItems
         self.excludedBundleIDs = excludedBundleIDs
         self.incognito = incognito
@@ -182,7 +246,8 @@ public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case hotkeyEnabled, hotkey, maxHistory, pinnedItems, excludedBundleIDs, incognito, pasteOnEnter
+        case hotkeyEnabled, hotkey, maxHistory, retentionDays, maxStorageMB
+        case pinnedItems, excludedBundleIDs, incognito, pasteOnEnter
     }
 
     public init(from decoder: Decoder) throws {
@@ -190,7 +255,9 @@ public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
         self.hotkeyEnabled = try c.decodeIfPresent(Bool.self, forKey: .hotkeyEnabled) ?? true
         self.hotkey = try c.decodeIfPresent(GlobalHotkey.Definition.self, forKey: .hotkey)
             ?? GlobalHotkey.defaultClipboardHistoryHotkey
-        self.maxHistory = try c.decodeIfPresent(Int.self, forKey: .maxHistory) ?? 50
+        self.maxHistory = try c.decodeIfPresent(Int.self, forKey: .maxHistory) ?? 200
+        self.retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays) ?? 30
+        self.maxStorageMB = try c.decodeIfPresent(Int.self, forKey: .maxStorageMB) ?? 250
         self.pinnedItems = try c.decodeIfPresent([ClipboardItem].self, forKey: .pinnedItems) ?? []
         self.excludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs)
             ?? [
@@ -201,31 +268,43 @@ public struct ClipboardHistorySettings: Sendable, Equatable, Codable {
                 "com.apple.keychainaccess"
             ]
         self.incognito = try c.decodeIfPresent(Bool.self, forKey: .incognito) ?? false
-        self.pasteOnEnter = try c.decodeIfPresent(Bool.self, forKey: .pasteOnEnter) ?? true
+        self.pasteOnEnter = try c.decodeIfPresent(Bool.self, forKey: .pasteOnEnter) ?? false
     }
 
     public static let maxHistoryMin = 10
     public static let maxHistoryMax = 500
-    public static let maxHistoryDefault = 50
+    public static let maxHistoryDefault = 200
+    public static let retentionDaysMin = 1
+    public static let retentionDaysMax = 365
+    public static let retentionDaysDefault = 30
+    public static let maxStorageMBMin = 25
+    public static let maxStorageMBMax = 2_048
+    public static let maxStorageMBDefault = 250
     public static let contentLengthMax = 10_240
 
     public static func sanitized(
         hotkeyEnabled: Bool,
         hotkey: GlobalHotkey.Definition?,
         maxHistory: Int,
+        retentionDays: Int,
+        maxStorageMB: Int,
         pinnedItems: [ClipboardItem],
         excludedBundleIDs: [String],
         incognito: Bool,
         pasteOnEnter: Bool
     ) -> ClipboardHistorySettings {
         let clampedMax = min(max(maxHistory, maxHistoryMin), maxHistoryMax)
+        let clampedRetention = min(max(retentionDays, retentionDaysMin), retentionDaysMax)
+        let clampedStorage = min(max(maxStorageMB, maxStorageMBMin), maxStorageMBMax)
         // Only persist types that can survive a restart.
         let clampedPinned = Array(pinnedItems.suffix(clampedMax))
-            .filter { ClipboardItem.isPersistable(type: $0.type) }
+            .filter(ClipboardItem.isPersistable)
         return ClipboardHistorySettings(
             hotkeyEnabled: hotkeyEnabled,
             hotkey: hotkey,
             maxHistory: clampedMax,
+            retentionDays: clampedRetention,
+            maxStorageMB: clampedStorage,
             pinnedItems: clampedPinned,
             excludedBundleIDs: Array(Set(excludedBundleIDs)).sorted(),
             incognito: incognito,

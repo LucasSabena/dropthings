@@ -65,6 +65,19 @@ final class ShelfIngestCoordinatorTests: XCTestCase {
         }
     }
 
+    func testImageSaverDoesNotOverwriteSameSecondDrops() async throws {
+        let directory = makeTempDir()
+        let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let saver = ImageSaver(directory: directory, now: { fixedDate })
+
+        let first = try await saver.save(data: Data([1]), type: .png)
+        let second = try await saver.save(data: Data([2]), type: .png)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(try Data(contentsOf: first), Data([1]))
+        XCTAssertEqual(try Data(contentsOf: second), Data([2]))
+    }
+
     // MARK: - filename de-duplication (WebItemDownloader.resolveDestination)
 
     func testDownloaderNamesFromLastPathComponent() {

@@ -54,9 +54,6 @@ final class ScreenshotRegionModuleTests: XCTestCase {
         let module = makeModule()
 
         try await module.start()
-        XCTAssertEqual(module.state, .running)
-
-        module.captureRegion()
         XCTAssertEqual(module.state, .needsPermission(missing: [.screenRecording]))
 
         // User grants Screen Recording in System Settings and returns to the app.
@@ -72,7 +69,6 @@ final class ScreenshotRegionModuleTests: XCTestCase {
         let module = makeModule()
 
         try await module.start()
-        module.captureRegion()
         XCTAssertEqual(module.state, .needsPermission(missing: [.screenRecording]))
 
         module.checkPermissionRecovery()

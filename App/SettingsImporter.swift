@@ -1,10 +1,9 @@
 import Foundation
 import AppKit
 
-/// Export and import the entire `app.dropthings` UserDefaults suite via the
-/// system `defaults` command. The plist format is round-trippable and
-/// matches what the OS itself produces when you run
-/// `defaults read app.dropthings`.
+/// Export and import the entire app preferences domain as a round-trippable
+/// plist. Importing in-process avoids stale `UserDefaults` caches caused by
+/// invoking the `defaults` command behind the running app's back.
 @MainActor
 final class SettingsImporter {
     let suiteName: String
@@ -15,30 +14,26 @@ final class SettingsImporter {
     }
 
     func export(to url: URL) throws {
-        try runDefaults(arguments: ["export", suiteName, url.path])
+        let domain = UserDefaults.standard.persistentDomain(forName: suiteName) ?? [:]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: domain,
+            format: .xml,
+            options: 0
+        )
+        try data.write(to: url, options: .atomic)
     }
 
     func `import`(from url: URL) throws {
-        try runDefaults(arguments: ["import", suiteName, url.path])
-        onImport?()
-    }
-
-    private func runDefaults(arguments: [String]) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-        process.arguments = arguments
-        let stderr = Pipe()
-        process.standardError = stderr
-        try process.run()
-        process.waitUntilExit()
-        if process.terminationStatus != 0 {
-            let data = stderr.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8) ?? "exit \(process.terminationStatus)"
+        let data = try Data(contentsOf: url)
+        let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        guard let domain = plist as? [String: Any] else {
             throw NSError(
                 domain: "SettingsImporter",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: message]
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "The selected plist is not a preferences dictionary."]
             )
         }
+        UserDefaults.standard.setPersistentDomain(domain, forName: suiteName)
+        onImport?()
     }
 }

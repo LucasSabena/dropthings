@@ -31,7 +31,7 @@ struct ShelfGridView: View {
     @ObservedObject var module: FileShelfModule
     let items: [FileShelfItem]
 
-    private let columns = [GridItem(.adaptive(minimum: 96), spacing: DTSpace.md)]
+    private let columns = [GridItem(.adaptive(minimum: 140), spacing: DTSpace.md)]
 
     var body: some View {
         ScrollView {
@@ -55,7 +55,7 @@ private struct ShelfListRow: View {
 
     var body: some View {
         HStack(spacing: DTSpace.sm) {
-            ShelfThumbnail(item: item, edge: 32)
+            ShelfThumbnail(item: item, edge: DTSize.previewMedium)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: DTSpace.xs) {
                     Text(item.displayName)
@@ -70,7 +70,7 @@ private struct ShelfListRow: View {
                     }
                 }
                 if let path = item.displayPath {
-                    Text(path)
+                    Text(item.metadataSummary + " · " + path)
                         .font(DTTypography.caption)
                         .foregroundStyle(DTColor.textSecondary)
                         .lineLimit(1)
@@ -89,7 +89,9 @@ private struct ShelfListRow: View {
             let mods = NSEvent.modifierFlags
             module.handleSelect(id: item.id, command: mods.contains(.command), shift: mods.contains(.shift))
         }
-        .onDrag { module.dragItemProviderForDrag(from: item) }
+        .nativeMultiItemDragSource {
+            module.nativeDragItems(startingAt: item)
+        }
         .contextMenu { contextMenu }
     }
 
@@ -123,7 +125,13 @@ private struct ShelfListRow: View {
         }
         Button(item.isPinned ? "Unpin" : "Pin") { module.setPinned(item.id, pinned: !item.isPinned) }
         Divider()
-        Button("Remove from Shelf", role: .destructive) { module.removeItem(id: item.id) }
+        if isSelected && module.selectedItemIDs.count > 1 {
+            Button("Remove \(module.selectedItemIDs.count) Selected", role: .destructive) {
+                module.removeSelected()
+            }
+        } else {
+            Button("Remove from Shelf", role: .destructive) { module.removeItem(id: item.id) }
+        }
     }
 }
 
@@ -137,16 +145,22 @@ private struct ShelfGridCard: View {
 
     var body: some View {
         VStack(spacing: DTSpace.xs) {
-            ShelfThumbnail(item: item, edge: 64)
+            ShelfThumbnail(item: item, edge: DTSize.previewLarge)
             HStack(spacing: DTSpace.xxs) {
                 Text(item.displayName)
                     .font(DTTypography.caption)
                     .lineLimit(1)
             }
-            ShelfFileTypeBadge(label: item.fileTypeLabel)
+            HStack(spacing: DTSpace.xs) {
+                ShelfFileTypeBadge(label: item.fileTypeLabel)
+                Text(item.metadataSummary)
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                    .lineLimit(1)
+            }
         }
-        .frame(width: 96)
-        .padding(DTSpace.xs)
+        .frame(maxWidth: .infinity)
+        .padding(DTSpace.sm)
         .background(isSelected ? DTColor.accent.opacity(0.15) : DTColor.surfaceRaised)
         .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
         .overlay(
@@ -158,7 +172,9 @@ private struct ShelfGridCard: View {
             let mods = NSEvent.modifierFlags
             module.handleSelect(id: item.id, command: mods.contains(.command), shift: mods.contains(.shift))
         }
-        .onDrag { module.dragItemProviderForDrag(from: item) }
+        .nativeMultiItemDragSource {
+            module.nativeDragItems(startingAt: item)
+        }
         .contextMenu {
             if item.fileURL != nil {
                 Button("Reveal in Finder") { module.revealInFinder(item) }
@@ -167,7 +183,13 @@ private struct ShelfGridCard: View {
             }
             Button(item.isPinned ? "Unpin" : "Pin") { module.setPinned(item.id, pinned: !item.isPinned) }
             Divider()
-            Button("Remove from Shelf", role: .destructive) { module.removeItem(id: item.id) }
+            if isSelected && module.selectedItemIDs.count > 1 {
+                Button("Remove \(module.selectedItemIDs.count) Selected", role: .destructive) {
+                    module.removeSelected()
+                }
+            } else {
+                Button("Remove from Shelf", role: .destructive) { module.removeItem(id: item.id) }
+            }
         }
     }
 }

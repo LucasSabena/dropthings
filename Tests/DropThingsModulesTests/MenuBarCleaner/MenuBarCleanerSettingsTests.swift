@@ -8,7 +8,6 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         XCTAssertFalse(settings.collapseOnLaunch)
         XCTAssertEqual(settings.hoverRevealDelay, 0)
         XCTAssertEqual(settings.profiles.count, 3)
-        XCTAssertTrue(settings.alwaysVisibleBundleIDs.isEmpty)
         XCTAssertFalse(settings.drawerMode)
         XCTAssertEqual(settings.dividers.count, 1)
         XCTAssertEqual(settings.dividers.first?.id, MenuBarCleanerDivider.mainID)
@@ -29,7 +28,6 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         let original = MenuBarCleanerSettings(
             collapseOnLaunch: true,
             hoverRevealDelay: 0.5,
-            alwaysVisibleBundleIDs: ["com.apple.Safari"],
             drawerMode: true,
             dividers: [
                 .defaultMain,
@@ -62,8 +60,16 @@ final class MenuBarCleanerSettingsTests: XCTestCase {
         XCTAssertTrue(decoded.collapseOnLaunch)
         XCTAssertEqual(decoded.hoverRevealDelay, 0)
         XCTAssertEqual(decoded.profiles.count, 3)
-        XCTAssertTrue(decoded.alwaysVisibleBundleIDs.isEmpty)
         XCTAssertFalse(decoded.drawerMode)
         XCTAssertEqual(decoded.dividers.count, 1)
+    }
+
+    func testSanitizedKeepsOnlyMainOverflowDivider() {
+        let extraOverflow = MenuBarCleanerDivider(name: "Unsafe", isOverflow: true)
+        let settings = MenuBarCleanerSettings(dividers: [extraOverflow]).sanitized()
+
+        XCTAssertEqual(settings.dividers.first?.id, MenuBarCleanerDivider.mainID)
+        XCTAssertTrue(settings.dividers.first?.isOverflow == true)
+        XCTAssertTrue(settings.dividers.dropFirst().allSatisfy { !$0.isOverflow })
     }
 }

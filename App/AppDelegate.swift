@@ -7,7 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         Task { @MainActor in
             AppServices.shared.registry.bootEnabledModules()
-            AppServices.shared.presentOnboardingIfNeeded()
+            if ProcessInfo.processInfo.arguments.contains("--show-settings") {
+                AppServices.shared.settingsWindow.show()
+            } else {
+                AppServices.shared.presentControlCenterOnFirstLaunch()
+            }
             AppServices.shared.updates.checkAutomaticallyIfNeeded()
         }
     }
@@ -25,7 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // process is killed (Cmd+Q should normally flush, but `pkill` and
         // forced reloads do not).
         UserDefaults.standard.synchronize()
-        UserDefaults(suiteName: "app.dropthings")?.synchronize()
 
         // Fire-and-forget shutdown. We cannot synchronously wait on a MainActor
         // task from the main thread without deadlocking the runloop.

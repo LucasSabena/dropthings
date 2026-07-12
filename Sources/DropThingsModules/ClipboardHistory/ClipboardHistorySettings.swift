@@ -9,7 +9,7 @@ struct ClipboardHistorySettingsView: View {
     var body: some View {
         SettingsSection(
             title: "Clipboard History",
-            caption: "A searchable history of copied text, files, images, and colors. Pinned items survive restarts."
+            caption: "A private, searchable history stored only on this Mac. It survives restarts and normal app updates."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
                 HStack {
@@ -29,14 +29,18 @@ struct ClipboardHistorySettingsView: View {
                     .controlSize(.regular)
                 }
 
-                Toggle("Paste at cursor with Enter", isOn: Binding(
+                Toggle("Auto-paste with Enter when Accessibility is already granted", isOn: Binding(
                     get: { module.settings.pasteOnEnter },
                     set: { module.setPasteOnEnter($0) }
                 ))
-                .disabled(false)
 
                 if module.settings.pasteOnEnter {
-                    accessibilityStatus
+                    InlineAlert(
+                        style: KeystrokeSynthesizer.isAccessibilityGranted() ? .info : .warning,
+                        message: KeystrokeSynthesizer.isAccessibilityGranted()
+                            ? "Enter pastes at the cursor. Clipboard History did not request this permission."
+                            : "Enter will copy only. DropThings will not request Accessibility for Clipboard History; enable Scroll Control first if you also want auto-paste."
+                    )
                 }
 
                 Toggle("Enable hotkey", isOn: Binding(
@@ -67,34 +71,66 @@ struct ClipboardHistorySettingsView: View {
                     .labelsHidden()
                 }
 
+                HStack {
+                    Text("Keep unpinned history")
+                        .font(DTTypography.body)
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { module.settings.retentionDays },
+                        set: { module.setRetentionDays($0) }
+                    )) {
+                        Text("1 day").tag(1)
+                        Text("7 days").tag(7)
+                        Text("30 days").tag(30)
+                        Text("90 days").tag(90)
+                        Text("1 year").tag(365)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+
+                HStack {
+                    Text("Image storage limit")
+                        .font(DTTypography.body)
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { module.settings.maxStorageMB },
+                        set: { module.setMaxStorageMB($0) }
+                    )) {
+                        Text("50 MB").tag(50)
+                        Text("250 MB").tag(250)
+                        Text("500 MB").tag(500)
+                        Text("1 GB").tag(1_024)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+
+                Text(storageSummary)
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+
+                if let error = module.persistenceError {
+                    InlineAlert(style: .error, message: error)
+                } else if module.omittedImageCount > 0 {
+                    InlineAlert(
+                        style: .warning,
+                        message: "\(module.omittedImageCount) older image(s) remain available this session but exceed the disk limit."
+                    )
+                }
+
                 excludedAppsSection
 
-                if module.state.isStarted {
+                if case .running = module.state {
                     InlineAlert(style: .success, message: "Recording clipboard changes. Open the history panel with the hotkey.")
                 }
             }
         }
     }
 
-    /// Mirrors the Accessibility state live. Shows a grant button when missing
-    /// because auto-paste cannot work without it; re-checked on each appearance.
-    @ViewBuilder
-    private var accessibilityStatus: some View {
-        let granted = KeystrokeSynthesizer.isAccessibilityGranted()
-        if granted {
-            InlineAlert(style: .info, message: "Accessibility is granted. Enter pastes at the cursor.")
-        } else {
-            VStack(alignment: .leading, spacing: DTSpace.xs) {
-                InlineAlert(
-                    style: .warning,
-                    message: "Grant Accessibility so Enter can paste into other apps. Without it, Enter copies to the clipboard instead."
-                )
-                Button("Open System Settings") {
-                    PermissionCenter().openSystemSettings(for: .accessibility)
-                }
-                .controlSize(.small)
-            }
-        }
+    private var storageSummary: String {
+        let used = ByteCountFormatter.string(fromByteCount: module.storageBytes, countStyle: .file)
+        return "Using \(used) for \(module.items.count) item(s). Pinned items do not expire."
     }
 
     private var excludedAppsSection: some View {

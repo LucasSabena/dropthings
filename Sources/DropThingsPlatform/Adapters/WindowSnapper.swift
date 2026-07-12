@@ -236,13 +236,17 @@ public final class WindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
             return .failure(.cannotReadWindowFrame)
         }
 
-        guard let screen = screenContaining(currentFrame) else {
+        guard let screen = screenContainingAXFrame(currentFrame) else {
             return .failure(.noScreens)
         }
 
-        let targetFrame = action.targetFrame(
+        let appKitTarget = action.targetFrame(
             windowFrame: currentFrame,
-            screenFrame: screen.visibleFrame
+            screenFrame: screen.screen.visibleFrame
+        )
+        let targetFrame = ScreenCoordinateMapper.cgRect(
+            forAppKitRect: appKitTarget,
+            on: screen.coordinates
         )
         return setFrame(targetFrame, for: window)
     }
@@ -269,11 +273,25 @@ public final class WindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
         return CGRect(origin: position, size: size)
     }
 
-    private func screenContaining(_ frame: CGRect) -> NSScreen? {
+    private func screenContainingAXFrame(_ frame: CGRect) -> ScreenGeometry? {
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        return NSScreen.screens.first { $0.frame.contains(center) }
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
+        let screens = screenGeometries()
+        return screens.first { $0.coordinates.cgBounds.contains(center) }
+            ?? screens.first(where: { $0.screen == NSScreen.main })
+            ?? screens.first
+    }
+
+    private func screenGeometries() -> [ScreenGeometry] {
+        NSScreen.screens.compactMap { screen in
+            guard let idNumber = screen.deviceDescription[
+                NSDeviceDescriptionKey(rawValue: "NSScreenNumber")
+            ] as? NSNumber else { return nil }
+            let coordinates = ScreenCoordinateMapper.Screen(
+                appKitFrame: screen.frame,
+                cgBounds: CGDisplayBounds(idNumber.uint32Value)
+            )
+            return ScreenGeometry(screen: screen, coordinates: coordinates)
+        }
     }
 
     private func setFrame(_ frame: CGRect, for window: AXUIElement) -> Result<Void, WindowSnapError> {
@@ -299,5 +317,10 @@ public final class WindowSnapper: WindowSnapperProtocol, @unchecked Sendable {
             return .failure(.cannotSetWindowFrame)
         }
         return .success(())
+    }
+
+    private struct ScreenGeometry {
+        let screen: NSScreen
+        let coordinates: ScreenCoordinateMapper.Screen
     }
 }

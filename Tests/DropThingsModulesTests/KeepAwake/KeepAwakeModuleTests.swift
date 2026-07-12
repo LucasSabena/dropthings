@@ -14,14 +14,16 @@ final class FakeKeepAwakeAssertion: KeepAwakeAssertionProtocol, @unchecked Senda
     private(set) var releaseCallCount = 0
     private(set) var isActive = false
     private(set) var currentAssertionIDs: [UInt32] = []
+    private(set) var lastKeepDisplayAwake = false
 
-    func acquireKeepAwakeAssertions() throws {
+    func acquireKeepAwakeAssertions(keepDisplayAwake: Bool) throws {
         acquireCallCount += 1
         if shouldFailNextAcquisition {
             throw failureReason
         }
         isActive = true
-        currentAssertionIDs = [1, 2]
+        lastKeepDisplayAwake = keepDisplayAwake
+        currentAssertionIDs = keepDisplayAwake ? [1, 2] : [1]
     }
 
     func release() {
@@ -57,6 +59,34 @@ final class KeepAwakeModuleTests: XCTestCase {
         XCTAssertTrue(assertion.isActive)
         XCTAssertEqual(assertion.acquireCallCount, 1)
         XCTAssertNil(module.lastError)
+        XCTAssertFalse(assertion.lastKeepDisplayAwake)
+    }
+
+    func testDisplayAssertionIsOptIn() async throws {
+        let module = makeModule(enabled: true)
+        module.setKeepDisplayAwake(true)
+
+        try await module.start()
+
+        XCTAssertTrue(assertion.lastKeepDisplayAwake)
+        XCTAssertEqual(assertion.currentAssertionIDs, [1, 2])
+    }
+
+    func testExpiredTimedSessionDoesNotReactivateOnLaunch() async throws {
+        store.saveKeepAwakeSettings(
+            KeepAwakeSettings(
+                enabled: true,
+                durationMinutes: 30,
+                activeUntil: Date().addingTimeInterval(-1)
+            )
+        )
+        let module = KeepAwakeModule(settings: store, assertion: assertion)
+
+        try await module.start()
+
+        XCTAssertFalse(module.keepAwakeSettings.enabled)
+        XCTAssertFalse(assertion.isActive)
+        XCTAssertEqual(module.state, .running)
     }
 
     func testFailedAcquisitionSetsDegraded() async throws {

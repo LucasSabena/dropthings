@@ -8,7 +8,7 @@ final class StubModule: DropThingsModule, @unchecked Sendable {
     let name: String
     let summary: String
     let requiredPermissions: [SystemPermission]
-    private(set) var state: ModuleState = .off
+    @Published private(set) var state: ModuleState = .off
     private(set) var startCount = 0
     private(set) var stopCount = 0
     var startError: Error?
@@ -36,6 +36,10 @@ final class StubModule: DropThingsModule, @unchecked Sendable {
         state = .off
     }
 
+    func report(_ newState: ModuleState) {
+        state = newState
+    }
+
     @MainActor
     func makeSettingsView() -> AnyView {
         AnyView(EmptyView())
@@ -61,6 +65,17 @@ final class ModuleRegistryTests: XCTestCase {
         let stub = StubModule(id: .fake)
         registry.register(stub)
         XCTAssertEqual(registry.states[stub.id], .off)
+    }
+
+    func testRegistryMirrorsModuleStateChangesAfterStart() async {
+        let stub = StubModule(id: .fake)
+        registry.register(stub)
+
+        stub.report(.degraded(reason: "Shortcut conflict"))
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 10_000_000)
+
+        XCTAssertEqual(registry.states[stub.id], .degraded(reason: "Shortcut conflict"))
     }
 
     func testEnableStartsModuleWhenPermissionsGranted() async {
@@ -93,6 +108,61 @@ final class ModuleRegistryTests: XCTestCase {
         } else {
             XCTFail("Expected needsPermission, got \(String(describing: registry.states[stub.id]))")
         }
+    }
+
+    func testEnablingDoesNotForgetARejectedPermission() async throws {
+        let settingsBackend = InMemorySettingsBackend()
+        let persistedStore = SettingsStore(backend: settingsBackend)
+        let permissionBackend = FakePermissionBackend(states: [.accessibility: .notDetermined])
+        let firstCenter = PermissionCenter(backend: permissionBackend, settings: persistedStore)
+        _ = firstCenter.requestPermission(.accessibility)
+        firstCenter.refresh()
+        XCTAssertEqual(firstCenter.state(for: .accessibility), .denied)
+
+        let permissionRegistry = ModuleRegistry(settings: persistedStore, permissions: firstCenter)
+        let stub = StubModule(id: .fake, requiredPermissions: [.accessibility])
+        permissionRegistry.register(stub)
+        permissionRegistry.setEnabled(true, for: stub.id)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(firstCenter.state(for: .accessibility), .denied)
+        XCTAssertEqual(permissionRegistry.missingPermissions(for: stub.id), [.accessibility])
+    }
+
+    func testPruneUnregisteredEnablementKeepsOnlyRegisteredModules() throws {
+        let initial = [
+            ModuleID.fake.rawValue: true,
+            ModuleID.commandPalette.rawValue: true
+        ]
+        store.setData(try JSONEncoder().encode(initial), ModuleRegistry.enabledKey)
+        registry.register(StubModule(id: .fake))
+
+        registry.pruneUnregisteredEnablement()
+
+        XCTAssertTrue(registry.isEnabled(.fake))
+        XCTAssertFalse(registry.isEnabled(.commandPalette))
+        let data = try XCTUnwrap(store.data(ModuleRegistry.enabledKey))
+        XCTAssertEqual(
+            try JSONDecoder().decode([String: Bool].self, from: data),
+            [ModuleID.fake.rawValue: true]
+        )
+    }
+
+    func testPermissionRevocationStopsRunningModule() async {
+        let permissionBackend = FakePermissionBackend(states: [.accessibility: .granted])
+        permissions = PermissionCenter(backend: permissionBackend)
+        registry = ModuleRegistry(settings: store, permissions: permissions)
+        let stub = StubModule(id: .fake, requiredPermissions: [.accessibility])
+        registry.register(stub)
+        registry.setEnabled(true, for: stub.id)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        permissionBackend.states[.accessibility] = .notDetermined
+        await registry.refreshPermissionsAndRetry()
+
+        XCTAssertEqual(stub.stopCount, 1)
+        XCTAssertEqual(registry.states[stub.id], .needsPermission(missing: [.accessibility]))
+        XCTAssertTrue(registry.isEnabled(stub.id), "Revocation should not disable the user's choice")
     }
 
     func testDisableStopsAndResetsToOff() async {

@@ -1,10 +1,38 @@
 import XCTest
 @testable import DropThingsModules
+import DropThingsCore
 
+@MainActor
 final class MenuBarCleanerModuleTests: XCTestCase {
+    func testOffModuleConfigurationDoesNotStartIt() {
+        let store = SettingsStore(backend: InMemorySettingsBackend())
+        let permissions = PermissionCenter(backend: MenuBarPermissionBackend())
+        let module = MenuBarCleanerModule(settings: store, permissions: permissions)
+
+        module.addDivider(name: "Visual")
+        module.addProfile(name: "Collapsed", collapsed: true)
+        module.setActiveProfile(module.settings.profiles.last?.id)
+
+        XCTAssertEqual(module.state, .off)
+        XCTAssertFalse(module.isCollapsed)
+        XCTAssertEqual(module.settings.dividers.count, 2)
+    }
+
+    func testSafeResetWhileOffKeepsModuleOff() {
+        let store = SettingsStore(backend: InMemorySettingsBackend())
+        let permissions = PermissionCenter(backend: MenuBarPermissionBackend())
+        let module = MenuBarCleanerModule(settings: store, permissions: permissions)
+        module.addDivider(name: "Visual")
+
+        module.safeReset()
+
+        XCTAssertEqual(module.state, .off)
+        XCTAssertEqual(module.settings.dividers, [.defaultMain])
+    }
+
     // MARK: - Divider length math
 
-    func testCollapsedDividerLengthUsesScreenWidthPlusExpandedLengthAndMargin() {
+    func testCollapsedDividerLengthUsesTwiceWidestScreenWidth() {
         let divider = MenuBarCleanerDivider(
             name: "Test",
             expandedLength: 18,
@@ -13,9 +41,9 @@ final class MenuBarCleanerModuleTests: XCTestCase {
         )
         let length = MenuBarCleanerModule.collapsedDividerLength(
             for: divider,
-            screenVisibleWidth: 1728
+            widestScreenWidth: 1728
         )
-        XCTAssertEqual(length, 1728 + 18 + 40)
+        XCTAssertEqual(length, 1728 * 2)
     }
 
     func testCollapsedDividerLengthFallsBackToCollapsedLengthWhenComputedValueIsSmaller() {
@@ -27,7 +55,7 @@ final class MenuBarCleanerModuleTests: XCTestCase {
         )
         let length = MenuBarCleanerModule.collapsedDividerLength(
             for: divider,
-            screenVisibleWidth: 800
+            widestScreenWidth: 800
         )
         XCTAssertEqual(length, 2500)
     }
@@ -41,9 +69,9 @@ final class MenuBarCleanerModuleTests: XCTestCase {
         )
         let length = MenuBarCleanerModule.collapsedDividerLength(
             for: divider,
-            screenVisibleWidth: 300
+            widestScreenWidth: 300
         )
-        XCTAssertEqual(length, 500)
+        XCTAssertEqual(length, 600)
     }
 
     func testCollapsedDividerLengthHandlesWideScreen() {
@@ -55,9 +83,9 @@ final class MenuBarCleanerModuleTests: XCTestCase {
         )
         let length = MenuBarCleanerModule.collapsedDividerLength(
             for: divider,
-            screenVisibleWidth: 5120
+            widestScreenWidth: 5120
         )
-        XCTAssertEqual(length, 5120 + 18 + 40)
+        XCTAssertEqual(length, 10_000)
     }
 
     // MARK: - Status message logic
@@ -127,4 +155,10 @@ final class MenuBarCleanerModuleTests: XCTestCase {
         )
         XCTAssertEqual(message, "Revealed. Icons placed left of the divider will collapse behind it.")
     }
+}
+
+@MainActor
+private final class MenuBarPermissionBackend: PermissionBackend, @unchecked Sendable {
+    func currentState(for permission: SystemPermission) -> SystemPermissionState { .granted }
+    func openSystemSettings(for permission: SystemPermission) -> Bool { true }
 }

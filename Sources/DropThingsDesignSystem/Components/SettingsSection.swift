@@ -23,6 +23,7 @@ public struct SettingsSection<Content: View>: View {
                     Text(caption)
                         .font(DTTypography.caption)
                         .foregroundStyle(DTColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             content()

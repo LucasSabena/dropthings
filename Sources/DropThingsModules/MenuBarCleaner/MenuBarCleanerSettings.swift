@@ -14,9 +14,6 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
     /// the user's explicit choice; switching profiles updates collapse.
     public var profiles: [MenuBarCleanerProfile]
     public var activeProfileID: UUID?
-    /// Bundle identifiers of status items that should stay visible even when
-    /// the overflow area is collapsed.
-    public var alwaysVisibleBundleIDs: [String]
     /// When `true`, clicking the DropThings chevron opens an overflow drawer
     /// instead of immediately collapsing the menu bar.
     public var drawerMode: Bool
@@ -29,7 +26,6 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
         hoverRevealDelay: TimeInterval = 0,
         profiles: [MenuBarCleanerProfile] = [MenuBarCleanerProfile(id: .work), MenuBarCleanerProfile(id: .focus), MenuBarCleanerProfile(id: .presentation)],
         activeProfileID: UUID? = nil,
-        alwaysVisibleBundleIDs: [String] = [],
         drawerMode: Bool = false,
         dividers: [MenuBarCleanerDivider] = [.defaultMain]
     ) {
@@ -37,13 +33,12 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
         self.hoverRevealDelay = hoverRevealDelay
         self.profiles = profiles
         self.activeProfileID = activeProfileID
-        self.alwaysVisibleBundleIDs = alwaysVisibleBundleIDs
         self.drawerMode = drawerMode
         self.dividers = dividers
     }
 
     enum CodingKeys: String, CodingKey {
-        case collapseOnLaunch, hoverRevealDelay, profiles, activeProfileID, alwaysVisibleBundleIDs, drawerMode, dividers
+        case collapseOnLaunch, hoverRevealDelay, profiles, activeProfileID, drawerMode, dividers
     }
 
     public init(from decoder: Decoder) throws {
@@ -53,9 +48,9 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
         self.profiles = try c.decodeIfPresent([MenuBarCleanerProfile].self, forKey: .profiles)
             ?? [MenuBarCleanerProfile(id: .work), MenuBarCleanerProfile(id: .focus), MenuBarCleanerProfile(id: .presentation)]
         self.activeProfileID = try c.decodeIfPresent(UUID.self, forKey: .activeProfileID)
-        self.alwaysVisibleBundleIDs = try c.decodeIfPresent([String].self, forKey: .alwaysVisibleBundleIDs) ?? []
         self.drawerMode = try c.decodeIfPresent(Bool.self, forKey: .drawerMode) ?? false
         self.dividers = try c.decodeIfPresent([MenuBarCleanerDivider].self, forKey: .dividers) ?? [.defaultMain]
+        self = sanitized()
     }
 
     public var activeProfile: MenuBarCleanerProfile? {
@@ -64,6 +59,32 @@ public struct MenuBarCleanerSettings: Sendable, Equatable, Codable {
 
     public var mainDivider: MenuBarCleanerDivider {
         dividers.first { $0.id == MenuBarCleanerDivider.mainID } ?? .defaultMain
+    }
+
+    /// Keeps the persisted model within the behavior the module can actually
+    /// guarantee: one overflow edge plus optional visual separators.
+    public func sanitized() -> MenuBarCleanerSettings {
+        var result = self
+        let supportedDelays: [TimeInterval] = [0, 0.5, 1]
+        result.hoverRevealDelay = supportedDelays.min {
+            abs($0 - hoverRevealDelay) < abs($1 - hoverRevealDelay)
+        } ?? 0
+
+        var normalizedDividers = dividers
+            .filter { $0.id != MenuBarCleanerDivider.mainID }
+            .map { divider in
+                var visual = divider
+                visual.isOverflow = false
+                visual.expandedLength = min(max(visual.expandedLength, 1), 80)
+                return visual
+            }
+        normalizedDividers.insert(.defaultMain, at: 0)
+        result.dividers = normalizedDividers
+
+        if !result.profiles.contains(where: { $0.id == result.activeProfileID }) {
+            result.activeProfileID = nil
+        }
+        return result
     }
 }
 
@@ -124,12 +145,12 @@ public extension SettingsStore {
         guard let data = self.data(MenuBarCleanerSettingsKey.settings) else {
             return MenuBarCleanerSettings()
         }
-        return (try? JSONDecoder().decode(MenuBarCleanerSettings.self, from: data))
-            ?? MenuBarCleanerSettings()
+        return ((try? JSONDecoder().decode(MenuBarCleanerSettings.self, from: data))
+            ?? MenuBarCleanerSettings()).sanitized()
     }
 
     func saveMenuBarCleanerSettings(_ settings: MenuBarCleanerSettings) {
-        guard let data = try? JSONEncoder().encode(settings) else { return }
+        guard let data = try? JSONEncoder().encode(settings.sanitized()) else { return }
         self.setData(data, MenuBarCleanerSettingsKey.settings)
     }
 }

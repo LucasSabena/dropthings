@@ -9,17 +9,20 @@ public struct ModuleRow: View {
     public let state: ModuleState
     public let isEnabled: Bool
     public let onToggle: (Bool) -> Void
+    public let onOpen: (() -> Void)?
 
     public init(
         module: any DropThingsModule,
         state: ModuleState,
         isEnabled: Bool,
-        onToggle: @escaping (Bool) -> Void
+        onToggle: @escaping (Bool) -> Void,
+        onOpen: (() -> Void)? = nil
     ) {
         self.module = module
         self.state = state
         self.isEnabled = isEnabled
         self.onToggle = onToggle
+        self.onOpen = onOpen
     }
 
     public var body: some View {
@@ -45,11 +48,22 @@ public struct ModuleRow: View {
 
             VStack(alignment: .trailing, spacing: DTSpace.xs) {
                 ModuleStatusPill(state: state)
-                Toggle("", isOn: Binding(get: { isEnabled }, set: onToggle))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .disabled(!canEnable)
+                HStack(spacing: DTSpace.sm) {
+                    Toggle("", isOn: Binding(get: { isEnabled }, set: onToggle))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .disabled(!canEnable)
+                    if let onOpen {
+                        Button(action: onOpen) {
+                            Image(systemName: "chevron.right")
+                                .font(DTTypography.badgeButton)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Open \(module.name) settings")
+                        .accessibilityLabel("Open \(module.name) settings")
+                    }
+                }
             }
         }
         .padding(.horizontal, DTSpace.md)

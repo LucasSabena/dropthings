@@ -24,7 +24,14 @@ public struct PermissionRow: View {
     }
 
     public var body: some View {
-        HStack(alignment: .top, spacing: DTSpace.md) {
+        HStack(alignment: .center, spacing: DTSpace.md) {
+            Image(systemName: permission.iconName)
+                .font(DTTypography.moduleIcon)
+                .foregroundStyle(state == .granted ? DTColor.success : DTColor.accent)
+                .frame(width: DTSize.permissionIcon, height: DTSize.permissionIcon)
+                .background(DTColor.surfaceRaised)
+                .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
+
             VStack(alignment: .leading, spacing: DTSpace.xxs) {
                 Text(permission.displayName)
                     .font(DTTypography.body.weight(.semibold))
@@ -33,51 +40,37 @@ public struct PermissionRow: View {
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if showsManualInstructions {
-                    Text(manualInstructions)
-                        .font(DTTypography.caption)
-                        .foregroundStyle(DTColor.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
 
             Spacer(minLength: DTSpace.md)
 
             VStack(alignment: .trailing, spacing: DTSpace.xs) {
                 stateLabel
-                HStack(spacing: DTSpace.xs) {
-                    if permission.supportsSystemPrompt {
-                        Button("Request Access") { onRequest() }
-                            .controlSize(.small)
-                            .disabled(state == .granted)
+                if state != .granted {
+                    HStack(spacing: DTSpace.xs) {
+                        if permission.supportsSystemPrompt && state == .notDetermined {
+                            Button("Continue", action: onRequest)
+                                .controlSize(.small)
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Open System Settings", action: onOpenSettings)
+                                .controlSize(.small)
+                        }
                     }
-                    Button(permission.supportsSystemPrompt ? "Open Settings…" : "Open Settings…",
-                           action: onOpenSettings)
-                        .controlSize(.small)
-                        .disabled(state == .unknown)
                 }
             }
         }
-        .padding(.vertical, DTSpace.xs)
+        .padding(.vertical, DTSpace.sm)
     }
 
     private var stateLabel: some View {
-        Text(label)
+        Label(state.displayName, systemImage: state == .granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
             .font(DTTypography.caption.weight(.semibold))
             .foregroundStyle(color)
             .padding(.horizontal, DTSpace.sm)
             .padding(.vertical, DTSpace.xxs)
             .background(color.opacity(0.15))
             .clipShape(Capsule())
-    }
-
-    private var label: String {
-        switch state {
-        case .granted: return "Granted"
-        case .denied: return "Denied"
-        case .notDetermined: return "Not granted"
-        case .unknown: return "Unknown"
-        }
     }
 
     private var color: Color {
@@ -89,24 +82,4 @@ public struct PermissionRow: View {
         }
     }
 
-    private var showsManualInstructions: Bool {
-        permission == .accessibility && state == .notDetermined
-    }
-
-    private var manualInstructions: String {
-        "If the prompt does not appear: System Settings → Privacy & Security → Accessibility → + → choose DropThings.app."
-    }
-}
-
-private extension SystemPermission {
-    /// `true` when macOS exposes a system-level prompt API we can trigger
-    /// programmatically. Accessibility uses `AXIsProcessTrustedWithOptions`
-    /// and Screen Recording uses `CGRequestScreenCaptureAccess`; the others
-    /// only expose a System Settings pane.
-    var supportsSystemPrompt: Bool {
-        switch self {
-        case .accessibility, .screenRecording: return true
-        case .fullDiskAccess, .automation: return false
-        }
-    }
 }

@@ -7,7 +7,7 @@ import IOKit.pwr_mgt
 public protocol KeepAwakeAssertionProtocol: AnyObject {
     var isActive: Bool { get }
     var currentAssertionIDs: [UInt32] { get }
-    func acquireKeepAwakeAssertions() throws
+    func acquireKeepAwakeAssertions(keepDisplayAwake: Bool) throws
     func release()
 }
 
@@ -77,16 +77,27 @@ public final class KeepAwakeAssertion: KeepAwakeAssertionProtocol {
         return true
     }
 
-    /// Acquire every assertion DropThings needs to keep the open Mac visibly
-    /// awake: the system stays awake and the display does not idle off.
-    public func acquireKeepAwakeAssertions() throws {
+    /// Keep the system awake and optionally keep the display lit. Display sleep
+    /// remains under the user's normal Energy settings unless explicitly asked
+    /// for, which is the battery-friendly default.
+    public func acquireKeepAwakeAssertions(keepDisplayAwake: Bool) throws {
+        let desired: Set<Reason> = keepDisplayAwake ? [.systemSleep, .displaySleep] : [.systemSleep]
         do {
-            try acquire(reason: .systemSleep)
-            try acquire(reason: .displaySleep)
+            for reason in idsByReason.keys where !desired.contains(reason) {
+                release(reason: reason)
+            }
+            for reason in desired {
+                try acquire(reason: reason)
+            }
         } catch {
             release()
             throw error
         }
+    }
+
+    private func release(reason: Reason) {
+        guard let id = idsByReason.removeValue(forKey: reason) else { return }
+        IOPMAssertionRelease(id)
     }
 
     public func release() {

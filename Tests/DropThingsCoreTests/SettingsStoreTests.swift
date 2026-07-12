@@ -49,15 +49,19 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testMigrationRunsOnce() {
-        var runs = 0
+        let runs = SendableCounter()
         let migration = SettingsMigration(fromVersion: 0) { backend in
-            runs += 1
+            runs.value += 1
             backend.setBool(true, forKey: "migrated")
         }
         let storeWithMigration = SettingsStore(backend: backend, migrations: [migration])
         storeWithMigration.migrateIfNeeded()
         storeWithMigration.migrateIfNeeded()
-        XCTAssertEqual(runs, 1, "Migration must not run twice for the same stored version")
+        XCTAssertEqual(runs.value, 1, "Migration must not run twice for the same stored version")
         XCTAssertEqual(backend.bool(forKey: "migrated"), true)
     }
+}
+
+private final class SendableCounter: @unchecked Sendable {
+    var value = 0
 }

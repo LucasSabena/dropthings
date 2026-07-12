@@ -65,6 +65,37 @@ public struct ScreenCoordinateMapper: Sendable {
         return CGPoint(x: cgX, y: cgY)
     }
 
+    /// Convert an AppKit rectangle (bottom-left origin) into the matching
+    /// CoreGraphics / Accessibility rectangle (top-left origin) for a known
+    /// screen. Window AX positions use this coordinate space.
+    public static func cgRect(forAppKitRect rect: CGRect, on screen: Screen) -> CGRect {
+        let localX = rect.minX - screen.appKitFrame.minX
+        let localTop = rect.maxY - screen.appKitFrame.minY
+        let origin = CGPoint(
+            x: screen.cgBounds.minX + localX,
+            y: screen.cgBounds.minY + (screen.appKitFrame.height - localTop)
+        )
+        return CGRect(origin: origin, size: rect.size)
+    }
+
+    /// Convert using the screen that contains the largest part of the rect.
+    /// This is stable for ordinary single-display selections and for windows
+    /// that slightly overlap a neighboring display.
+    public func cgRect(forAppKitRect rect: CGRect) -> CGRect? {
+        guard let screen = screens.max(by: {
+            Self.intersectionArea($0.appKitFrame, rect)
+                < Self.intersectionArea($1.appKitFrame, rect)
+        }), Self.intersectionArea(screen.appKitFrame, rect) > 0 else {
+            return nil
+        }
+        return Self.cgRect(forAppKitRect: rect, on: screen)
+    }
+
+    private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        return intersection.isNull ? 0 : intersection.width * intersection.height
+    }
+
     /// Union of rectangles. Empty input returns a zero rect.
     public static func union(of rects: [CGRect]) -> CGRect {
         guard let first = rects.first else { return .zero }

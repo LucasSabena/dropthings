@@ -6,11 +6,11 @@ import DropThingsDesignSystem
 import DropThingsPlatform
 import os
 
-/// Picks any pixel color from the screen and copies its hex code to the
-/// clipboard. The module uses AppKit's native `NSColorSampler`, which gives
-/// the user the standard macOS eyedropper instead of a custom screenshot
-/// overlay.
-public final class ColorPickerModule: DropThingsModule, ObservableObject {
+/// Picks any pixel color with macOS' native, GPU-backed sampler and writes
+/// both a formatted string and a real `NSColor` representation to the
+/// pasteboard. The native sampler owns the live magnifier; rebuilding a custom
+/// SwiftUI loupe on every mouse tick made the old experience visibly stall.
+public final class ColorPickerModule: DropThingsModule {
     public let id = ModuleID.colorPicker
     public let name = "Color Picker"
     public let summary = "Pick a color from anywhere on screen."
@@ -18,13 +18,16 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: ColorPickerSettings
+    @Published public private(set) var isPicking = false
+    @Published public private(set) var lastCopiedValue: String?
 
     private let settingsStore: SettingsStore
     private let permissions: PermissionCenter
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
+    private var conversionHealth = RecoverableFailureHealth()
     private var activeSampler: NSColorSampler?
-    private var loupe: ColorSamplerLoupe?
-    private var loupeWindow: ColorPickerLoupeWindowController?
+    private let feedbackWindow = ColorCopyFeedbackWindowController()
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "color-picker")
 
     public typealias ColorConverter = (NSColor) -> NSColor?
@@ -47,14 +50,15 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     public func start() async throws {
         registerHotkey()
-        state = .running
+        if case .degraded = state {} else { state = .running }
         logger.info("Color Picker started")
     }
 
     public func stop() async {
         unregisterHotkey()
         activeSampler = nil
-        stopLoupe()
+        isPicking = false
+        feedbackWindow.hide()
         state = .off
         logger.info("Color Picker stopped")
     }
@@ -72,21 +76,35 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         )
     }
 
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "color-picker.pick",
+                title: "Pick Color",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.startPicking() }
+                }
+            )
+        ]
+    }
+
     // MARK: - Public actions
 
-    /// Trigger the system color sampler programmatically (settings button or
-    /// hotkey). Safe to call repeatedly; the second call is ignored while the
-    /// native sampler is already active.
+    /// Trigger one native sampling session. `NSColorSampler` provides the
+    /// smooth system magnifier and correct click/Escape behavior without a
+    /// screen-recording permission or a polling loop on the main actor.
     public func startPicking() {
-        guard activeSampler == nil else { return }
+        guard activeSampler == nil, !isPicking else { return }
         let sampler = NSColorSampler()
         activeSampler = sampler
-        startLoupe()
+        isPicking = true
         sampler.show { [weak self] color in
             Task { @MainActor in
                 guard let self else { return }
                 self.activeSampler = nil
-                self.stopLoupe()
+                self.isPicking = false
                 guard let color else {
                     self.logger.notice("Picking cancelled")
                     return
@@ -95,30 +113,6 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
             }
         }
         logger.info("Native color sampler opened")
-    }
-
-    private func startLoupe() {
-        let window = ColorPickerLoupeWindowController()
-        loupeWindow = window
-        let loupe = ColorSamplerLoupe(regionSize: 96) { [weak self] sample in
-            guard let self else { return }
-            let bridge = LoupeViewSample(
-                image: sample.image,
-                zoom: 8,
-                rgb: sample.centerRGB.map { PixelSample(r: $0.r, g: $0.g, b: $0.b) },
-                location: sample.location
-            )
-            self.loupeWindow?.show(sample: bridge)
-        }
-        loupe.start()
-        self.loupe = loupe
-    }
-
-    private func stopLoupe() {
-        loupe?.stop()
-        loupe = nil
-        loupeWindow?.hide()
-        loupeWindow = nil
     }
 
     public func clearHistory() {
@@ -137,11 +131,6 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         var new = settings
         new.hotkeyEnabled = enabled
         applySettings(new)
-        if enabled && state == .running {
-            registerHotkey()
-        } else {
-            unregisterHotkey()
-        }
     }
 
     public func setHistoryLimit(_ limit: Int) {
@@ -199,7 +188,17 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     public func copyToPasteboard(_ picked: PickedColor) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(settings.copyFormat.string(r: picked.r, g: picked.g, b: picked.b), forType: .string)
+        let color = picked.rgb.nsColor
+        let value = settings.copyFormat.string(r: picked.r, g: picked.g, b: picked.b)
+        // `writeObjects` publishes the native color pasteboard type. Adding a
+        // string representation to the same pasteboard makes the result paste
+        // naturally into code editors while Clipboard History can still render
+        // it as an actual color swatch.
+        _ = pb.writeObjects([color])
+        _ = pb.setString(value, forType: .string)
+        lastCopiedValue = value
+        feedbackWindow.show(color: color, value: value, near: NSEvent.mouseLocation)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
     // MARK: - SwiftUI surface
@@ -211,24 +210,31 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
     // MARK: - Hotkey
 
     private func registerHotkey() {
-        guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
+        guard hotkey == nil else { return }
+        guard settings.hotkeyEnabled, let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use the Pick color now button.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use the Pick color now button."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the button.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the button."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }
@@ -246,7 +252,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
 
     internal func handlePickedColor(_ color: NSColor) {
         guard let rgbColor = colorConverter(color) else {
-            state = .degraded(reason: "Picked color could not be converted to RGB.")
+            state = conversionHealth.failed(reason: "Picked color could not be converted to RGB.")
             logger.warning("Picked color could not be converted to RGB")
             return
         }
@@ -257,9 +263,7 @@ public final class ColorPickerModule: DropThingsModule, ObservableObject {
         )
         recordPick(picked)
         copyToPasteboard(picked)
-        if case .degraded = state {
-            state = .running
-        }
+        state = conversionHealth.recovered(current: state)
         logger.notice("Picked \(picked.hex)")
     }
 

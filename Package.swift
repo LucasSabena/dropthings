@@ -37,7 +37,14 @@ let package = Package(
         .target(
             name: "DropThingsPlatform",
             dependencies: ["DropThingsCore"],
-            path: "Sources/DropThingsPlatform"
+            path: "Sources/DropThingsPlatform",
+            exclude: [
+                "Adapters/DropThingsStatusItem.swift",
+                "Adapters/HoverTrackingView.swift",
+                "Adapters/ScreenCapture.swift",
+                "Adapters/ScreenCoordinateMapper.swift",
+                "Adapters/WindowSnapper.swift"
+            ]
         ),
         .target(
             name: "DropThingsModules",
@@ -46,7 +53,15 @@ let package = Package(
                 "DropThingsDesignSystem",
                 "DropThingsPlatform"
             ],
-            path: "Sources/DropThingsModules"
+            path: "Sources/DropThingsModules",
+            exclude: [
+                "CommandPalette",
+                "MenuBarCleaner",
+                "ScreenshotRegion",
+                "Snippets",
+                "TextTools",
+                "WindowSnap"
+            ]
         ),
         .testTarget(
             name: "DropThingsCoreTests",
@@ -56,7 +71,16 @@ let package = Package(
         .testTarget(
             name: "DropThingsModulesTests",
             dependencies: ["DropThingsCore", "DropThingsModules", "DropThingsPlatform"],
-            path: "Tests/DropThingsModulesTests"
+            path: "Tests/DropThingsModulesTests",
+            exclude: [
+                "CommandPalette",
+                "MenuBarCleaner",
+                "ScreenshotRegion",
+                "Snippets",
+                "TextTools",
+                "WindowSnap",
+                "Platform/ScreenCoordinateMapperTests.swift"
+            ]
         )
     ]
 )

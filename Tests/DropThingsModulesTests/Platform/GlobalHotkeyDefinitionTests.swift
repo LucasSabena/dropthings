@@ -1,8 +1,42 @@
 import XCTest
 import Carbon.HIToolbox
 @testable import DropThingsPlatform
+@testable import DropThingsModules
 
 final class GlobalHotkeyDefinitionTests: XCTestCase {
+
+    func testHotkeyRouterDoesNotConsumeAnotherRegistration() {
+        let event = EventHotKeyID(signature: OSType(0x44525448), id: 22)
+
+        XCTAssertEqual(
+            GlobalHotkey.routingStatus(for: event, expectedID: 21),
+            OSStatus(eventNotHandledErr)
+        )
+        XCTAssertEqual(
+            GlobalHotkey.routingStatus(for: event, expectedID: 22),
+            noErr
+        )
+    }
+
+    func testHotkeyRouterRejectsForeignSignature() {
+        let event = EventHotKeyID(signature: OSType(0x4f544852), id: 22)
+
+        XCTAssertEqual(
+            GlobalHotkey.routingStatus(for: event, expectedID: 22),
+            OSStatus(eventNotHandledErr)
+        )
+    }
+
+    func testShippedDefaultChordsAreUniqueAcrossModules() {
+        let definitions = [
+            GlobalHotkey.defaultShelfHotkey,
+            GlobalHotkey.defaultColorPickerHotkey,
+            GlobalHotkey.defaultClipboardHistoryHotkey
+        ].compactMap { $0 }
+
+        let chords = definitions.map { "\($0.keyCode):\($0.modifiers)" }
+        XCTAssertEqual(Set(chords).count, chords.count, "Every shipped default chord must be unique")
+    }
 
     // MARK: - displayString
 

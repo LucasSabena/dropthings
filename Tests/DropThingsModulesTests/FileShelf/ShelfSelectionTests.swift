@@ -84,6 +84,40 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertEqual(module.selectedItemIDs, ["text\u{1F}:c"])
     }
 
+    func testDragFromSelectedItemCarriesCompleteSelectionInDisplayOrder() {
+        let module = makeModule(with: makeItems())
+        module.handleSelect(id: "text\u{1F}:a", command: false, shift: false)
+        module.handleSelect(id: "text\u{1F}:c", command: true, shift: false)
+
+        let dragged = module.itemsForDrag(startingAt: makeItems()[2])
+
+        XCTAssertEqual(dragged.map(\.id), ["text\u{1F}:a", "text\u{1F}:c"])
+        XCTAssertEqual(module.nativeDragItems(startingAt: makeItems()[2]).count, 2)
+        XCTAssertEqual(module.selectedItemIDs, ["text\u{1F}:a", "text\u{1F}:c"])
+    }
+
+    func testDragFromUnselectedItemNarrowsSelection() {
+        let items = makeItems()
+        let module = makeModule(with: items)
+        module.handleSelect(id: "text\u{1F}:a", command: false, shift: false)
+        module.handleSelect(id: "text\u{1F}:c", command: true, shift: false)
+
+        let dragged = module.itemsForDrag(startingAt: items[4])
+
+        XCTAssertEqual(dragged.map(\.id), ["text\u{1F}:e"])
+        XCTAssertEqual(module.selectedItemIDs, ["text\u{1F}:e"])
+    }
+
+    func testClearingItemsAlsoClearsSelection() {
+        let module = makeModule(with: makeItems())
+        module.handleSelect(id: "text\u{1F}:a", command: false, shift: false)
+
+        module.clearItems()
+
+        XCTAssertTrue(module.items.isEmpty)
+        XCTAssertTrue(module.selectedItemIDs.isEmpty)
+    }
+
     // MARK: - helpers
 
     /// Builds a module with `items` seeded through the internal test hook.

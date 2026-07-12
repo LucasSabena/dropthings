@@ -20,7 +20,6 @@ final class AppServices: ObservableObject {
     let diagnostics: DiagnosticsStore
     let registry: ModuleRegistry
     let settingsWindow: SettingsWindowController
-    let onboardingWindow: OnboardingWindowController
     let launchAtLogin = LaunchAtLoginController()
     let updates: SparkleUpdaterController
     let importer = SettingsImporter(suiteName: "app.dropthings")
@@ -30,6 +29,8 @@ final class AppServices: ObservableObject {
     /// observing `AppServices` re-render when `registry` or `permissions`
     /// mutate.
     private var cancellables: Set<AnyCancellable> = []
+    private var recordedModuleStates: [ModuleID: ModuleState] = [:]
+    private static let didPresentControlCenterKey = SettingsKey("app.control-center.presented")
 
     private init() {
         self.settings = .userDefaults(suiteName: "app.dropthings")
@@ -40,30 +41,21 @@ final class AppServices: ObservableObject {
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
         )
-        self.onboardingWindow = OnboardingWindowController(settings: settings)
 
+        // The product intentionally ships only the modules that have a
+        // reliable end-to-end interaction. Keeping this composition explicit
+        // prevents half-finished modules from leaking back into the UI.
         registry.register(FileShelfModule(settings: settings))
         registry.register(ScrollControlModule(settings: settings, permissions: permissions))
-        registry.register(MenuBarCleanerModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
         registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
-        registry.register(CommandPaletteModule(
-            settings: settings,
-            permissions: permissions,
-            commandSource: { [weak registry] in
-                registry?.modules.values.flatMap { $0.commands } ?? []
-            }
-        ))
-        registry.register(ScreenshotRegionModule(settings: settings, permissions: permissions))
-        registry.register(WindowSnapModule(settings: settings, permissions: permissions))
-        registry.register(SnippetsModule(settings: settings))
-        registry.register(TextToolsModule(settings: settings))
+        registry.pruneUnregisteredEnablement()
+        recordedModuleStates = registry.states
 
         settingsWindow.setContent(
             SettingsRootView().environmentObject(self)
         )
-        configureOnboarding()
         importer.onImport = { [weak self] in
             self?.reloadAfterImport()
         }
@@ -76,6 +68,12 @@ final class AppServices: ObservableObject {
             .store(in: &cancellables)
         diagnostics.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        registry.$states
+            .dropFirst()
+            .sink { [weak self] states in
+                self?.recordModuleStateChanges(states)
+            }
             .store(in: &cancellables)
         launchAtLogin.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
@@ -104,26 +102,13 @@ final class AppServices: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    private func configureOnboarding() {
-        onboardingWindow.setContent(
-            OnboardingView(
-                onEnableFileShelf: { [weak self] in
-                    guard let self else { return }
-                    self.registry.setEnabled(true, for: .fileShelf)
-                    self.settingsWindow.show()
-                },
-                onSkip: { [weak self] in
-                    self?.onboardingWindow.dismiss()
-                }
-            )
-        )
-    }
-
-    /// Show the welcome window on first launch. Idempotent after the user
-    /// dismisses it.
-    func presentOnboardingIfNeeded() {
-        guard !onboardingWindow.hasCompleted else { return }
-        onboardingWindow.show()
+    /// The first-run experience is the actual control center, not a marketing
+    /// window. Permissions remain untouched until the user enables the one
+    /// module that needs them.
+    func presentControlCenterOnFirstLaunch() {
+        guard !settings.bool(Self.didPresentControlCenterKey, default: false) else { return }
+        settings.setBool(true, Self.didPresentControlCenterKey)
+        settingsWindow.show()
     }
 
     func exportSettings() {
@@ -153,47 +138,47 @@ final class AppServices: ObservableObject {
     }
 
     private func reloadAfterImport() {
-        permissions.refresh()
-        // Each module reads its own settings via SettingsStore so a fresh
-        // load is enough; the user can re-enable modules from the registry.
-        diagnostics.record(level: .notice, category: "settings", message: "Settings imported from plist")
+        diagnostics.recordAndLog(
+            level: .notice,
+            category: "settings",
+            message: "Settings imported; relaunching to apply every module atomically"
+        )
+        relaunch()
     }
 
-    func repairAccessibilityTrust() {
-        do {
-            try runTCCResetAccessibility()
-            diagnostics.record(level: .notice, category: "permissions", message: "Accessibility TCC entry reset")
-        } catch {
-            diagnostics.record(level: .warning, category: "permissions", message: "Accessibility reset failed: \(error.localizedDescription)")
-        }
-        permissions.resetPromptState(for: .accessibility)
-        permissions.refresh()
-        _ = permissions.requestPermission(.accessibility)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self else { return }
-            self.permissions.refresh()
-            Task {
-                await self.registry.refreshPermissionsAndRetry()
+    private func recordModuleStateChanges(_ states: [ModuleID: ModuleState]) {
+        for (id, state) in states where recordedModuleStates[id] != state {
+            let moduleName = registry.modules[id]?.name ?? id.rawValue
+            let level: LogLevel
+            switch state {
+            case .degraded, .needsPermission, .unavailable: level = .warning
+            case .failed: level = .error
+            case .running: level = .notice
+            case .off, .starting: level = .info
             }
+            diagnostics.record(
+                level: level,
+                category: id.rawValue,
+                message: "\(moduleName): \(state.diagnosticDescription)"
+            )
         }
+        recordedModuleStates = states
     }
 
-    private func runTCCResetAccessibility() throws {
+    private func relaunch() {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        process.arguments = ["reset", "Accessibility", bundleInfo.bundleIdentifier]
-        let stderr = Pipe()
-        process.standardError = stderr
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let data = stderr.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8) ?? "exit \(process.terminationStatus)"
-            throw NSError(
-                domain: "DropThingsTCCReset",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: message]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-n", Bundle.main.bundleURL.path]
+        do {
+            try process.run()
+            NSApp.terminate(nil)
+        } catch {
+            diagnostics.recordAndLog(
+                level: .error,
+                category: "settings",
+                message: "Could not relaunch after import: \(error.localizedDescription)"
             )
+            NSAlert(error: error).runModal()
         }
     }
 

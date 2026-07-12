@@ -6,6 +6,7 @@ import AppKit
 /// protocol so tests can substitute a deterministic fake. The real backend
 /// hits AppKit / CoreGraphics each call.
 public protocol PermissionBackend: Sendable {
+    @MainActor
     func currentState(for permission: SystemPermission) -> SystemPermissionState
 
     /// Open System Settings on the right pane. Returns `true` if macOS accepted
@@ -23,8 +24,22 @@ public enum SystemPermissionState: Hashable, Sendable {
     case unknown
 }
 
+extension SystemPermissionState {
+    public var displayName: String {
+        switch self {
+        case .granted: return "Allowed"
+        case .denied: return "Needs attention"
+        case .notDetermined: return "Not requested"
+        case .unknown: return "Check in Settings"
+        }
+    }
+
+    public var isGranted: Bool { self == .granted }
+}
+
 extension PermissionBackend {
     /// `true` when the user can use features behind this permission.
+    @MainActor
     public func isUsable(_ permission: SystemPermission) -> Bool {
         currentState(for: permission) == .granted
     }
@@ -156,14 +171,17 @@ public final class PermissionCenter: ObservableObject {
         return result
     }
 
-    /// Clear the "prompt was shown" inference for a permission. Call when the
-    /// user explicitly repairs permissions (Diagnostics) or re-enables a module
-    /// so a fresh system prompt can be shown instead of staying stuck on
-    /// `.denied`.
+    /// Clear the "prompt was shown" inference for explicit maintenance or
+    /// tests. Normal enable/disable flows must preserve it so a rejection never
+    /// masquerades as a first request.
     public func resetPromptState(for permission: SystemPermission) {
         var prompted = promptedPermissions()
         guard prompted.remove(permission.rawValue) != nil else { return }
         persistPrompted(prompted)
+    }
+
+    public func hasRequested(_ permission: SystemPermission) -> Bool {
+        promptedPermissions().contains(permission.rawValue)
     }
 
     /// Convenience for the module detail pane: which of `required` are still
@@ -194,14 +212,5 @@ public final class PermissionCenter: ObservableObject {
         guard let settings else { return }
         guard let data = try? JSONEncoder().encode(prompted) else { return }
         settings.setData(data, Self.promptedKey)
-    }
-}
-
-private extension SystemPermission {
-    var supportsSystemPrompt: Bool {
-        switch self {
-        case .accessibility, .screenRecording: return true
-        case .fullDiskAccess, .automation: return false
-        }
     }
 }

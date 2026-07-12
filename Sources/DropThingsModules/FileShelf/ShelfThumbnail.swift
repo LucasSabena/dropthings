@@ -35,7 +35,7 @@ struct ShelfThumbnail: View {
         ZStack {
             DTColor.surfaceRaised
             Image(systemName: item.iconName)
-                .font(.system(size: edge * 0.42))
+                .font(DTTypography.emptyStateGlyph)
                 .foregroundStyle(DTColor.textSecondary)
         }
     }
@@ -46,12 +46,6 @@ struct ShelfThumbnail: View {
             image = nil
             return
         }
-        // ThumbnailGenerator is cheap and cached; hop off the main thread
-        // for the decode, then hop back to assign.
-        let edge = self.edge
-        let result = await Task.detached(priority: .userInitiated) {
-            ThumbnailGenerator.shared.thumbnail(for: url, edge: edge)
-        }.value
-        self.image = result
+        self.image = await ThumbnailGenerator.shared.thumbnailAsync(for: url, edge: edge)
     }
 }

@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 public final class ShelfPanel: NSPanel {
     public init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 440),
             styleMask: [.titled, .resizable, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -20,7 +20,7 @@ public final class ShelfPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         animationBehavior = .utilityWindow
         isReleasedWhenClosed = false
-        minSize = NSSize(width: 280, height: 180)
+        minSize = NSSize(width: 520, height: 320)
     }
 }
 

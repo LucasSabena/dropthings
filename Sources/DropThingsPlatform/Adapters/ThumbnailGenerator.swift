@@ -1,5 +1,6 @@
 import AppKit
 import PDFKit
+import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 /// Generates small thumbnails for shelf items, hiding the brittle
@@ -30,12 +31,44 @@ public final class ThumbnailGenerator {
     /// be made (text files, missing files, unsupported formats) so the
     /// caller can render a type-symbol fallback.
     public func thumbnail(for url: URL, edge: CGFloat = ThumbnailGenerator.defaultEdge) -> NSImage? {
-        let key = cacheKey(for: url)
+        let key = cacheKey(for: url, edge: edge)
         if let cached = cache.object(forKey: key) {
             return cached
         }
         guard let image = makeThumbnail(for: url, edge: edge) else { return nil }
         cache.setObject(image, forKey: key)
+        return image
+    }
+
+    /// Native Quick Look thumbnail generation for formats NSImage cannot
+    /// decode directly (notably movies, Office files, and many documents).
+    /// Callers can await this without blocking the main actor. When Quick Look
+    /// has no representation we retain the existing image/PDF fallback.
+    public func thumbnailAsync(
+        for url: URL,
+        edge: CGFloat = ThumbnailGenerator.defaultEdge,
+        scale: CGFloat = 2
+    ) async -> NSImage? {
+        let key = cacheKey(for: url, edge: edge)
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: edge, height: edge),
+            scale: scale,
+            representationTypes: .all
+        )
+        let generated: NSImage? = await withCheckedContinuation { continuation in
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                continuation.resume(returning: representation?.nsImage)
+            }
+        }
+        let image = generated ?? thumbnail(for: url, edge: edge)
+        if let image {
+            cache.setObject(image, forKey: key)
+        }
         return image
     }
 
@@ -90,10 +123,10 @@ public final class ThumbnailGenerator {
     }
 
     /// Cache key encodes path + mtime so an edited file busts the cache.
-    private func cacheKey(for url: URL) -> NSString {
+    private func cacheKey(for url: URL, edge: CGFloat) -> NSString {
         let mtime = (try? fileManager.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
             .map { "\($0.timeIntervalSince1970)" } ?? "0"
-        return "\(url.standardizedFileURL.path)@\(mtime)" as NSString
+        return "\(url.standardizedFileURL.path)@\(mtime)#\(Int(edge.rounded()))" as NSString
     }
 
     private enum PDFPreview {

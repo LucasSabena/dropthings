@@ -10,7 +10,7 @@ import os
 /// all modules. Each module exposes `commands: [CommandDescriptor]` via the
 /// `CommandSource` protocol; this module receives an aggregation closure
 /// injected from the app composition root so it never imports other modules.
-public final class CommandPaletteModule: DropThingsModule, ObservableObject {
+public final class CommandPaletteModule: DropThingsModule {
     public let id = ModuleID.commandPalette
     public let name = "Command Palette"
     public let summary = "Global hotkey-invokable floating search for module commands."
@@ -22,6 +22,7 @@ public final class CommandPaletteModule: DropThingsModule, ObservableObject {
     private let settingsStore: SettingsStore
     private let commandSource: @MainActor () -> [CommandDescriptor]
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
     private var panel: CommandPalettePanelController?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "command-palette")
 
@@ -38,7 +39,7 @@ public final class CommandPaletteModule: DropThingsModule, ObservableObject {
 
     public func start() async throws {
         registerHotkey()
-        state = .running
+        if case .degraded = state {} else { state = .running }
         logger.info("Command Palette started")
     }
 
@@ -117,24 +118,30 @@ public final class CommandPaletteModule: DropThingsModule, ObservableObject {
 
     private func registerHotkey() {
         guard hotkey == nil else { return }
-        guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
+        guard settings.hotkeyEnabled, let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.toggle()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use settings to change it.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use settings to change it."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }

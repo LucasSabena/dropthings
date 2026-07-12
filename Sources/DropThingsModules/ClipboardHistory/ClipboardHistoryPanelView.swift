@@ -27,6 +27,48 @@ enum ClipboardTab: Hashable, CaseIterable {
     }
 }
 
+enum ClipboardContentFilter: String, Hashable, CaseIterable {
+    case all
+    case text
+    case images
+    case colors
+    case files
+    case links
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .text: return "Text"
+        case .images: return "Images"
+        case .colors: return "Colors"
+        case .files: return "Files"
+        case .links: return "Links"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all: return "square.grid.2x2"
+        case .text: return "text.quote"
+        case .images: return "photo"
+        case .colors: return "paintpalette"
+        case .files: return "folder"
+        case .links: return "link"
+        }
+    }
+
+    func includes(_ item: ClipboardItem) -> Bool {
+        switch self {
+        case .all: return true
+        case .text: return item.type == .plainText
+        case .images: return item.type == .image || item.type == .video
+        case .colors: return item.type == .color
+        case .files: return [.filePath, .folder, .video, .audio].contains(item.type)
+        case .links: return item.type == .url
+        }
+    }
+}
+
 /// Root panel: a tab bar on top, then a search field, then the 2-column body.
 /// Keyboard navigation is installed globally so arrows/Enter/⌘1-3/Esc work even
 /// while the search field has focus (mirrors the CommandPalette monitor pattern).
@@ -38,6 +80,7 @@ struct ClipboardHistoryPanelView: View {
     @State private var searchText: String = ""
     @State private var selectedID: UUID?
     @State private var selectedEmoji: EmojiEntry?
+    @State private var contentFilter: ClipboardContentFilter = .all
     @State private var pasteHint: PasteHint?
     @State private var eventMonitor: Any?
     @FocusState private var searchFocused: Bool
@@ -52,6 +95,9 @@ struct ClipboardHistoryPanelView: View {
             tabBar
             Divider()
             searchBar
+            if selectedTab != .emoji {
+                contentFilterBar
+            }
             Divider()
             content
                 .background(DTColor.background)
@@ -109,7 +155,7 @@ struct ClipboardHistoryPanelView: View {
             TextField(searchPlaceholder, text: $searchText)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
-                .onChange(of: searchText) { _ in resetSelection() }
+                .onChange(of: searchText) { _, _ in resetSelection() }
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -136,6 +182,32 @@ struct ClipboardHistoryPanelView: View {
         switch selectedTab {
         case .history, .pinned: return "Search history"
         case .emoji: return "Search emojis"
+        }
+    }
+
+    private var contentFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DTSpace.xs) {
+                ForEach(ClipboardContentFilter.allCases, id: \.self) { filter in
+                    Button {
+                        contentFilter = filter
+                        resetSelection()
+                    } label: {
+                        Label(filter.title, systemImage: filter.systemImage)
+                            .font(DTTypography.caption)
+                            .foregroundStyle(contentFilter == filter ? DTColor.textPrimary : DTColor.textSecondary)
+                            .padding(.horizontal, DTSpace.sm)
+                            .padding(.vertical, DTSpace.xs)
+                            .background(
+                                RoundedRectangle(cornerRadius: DTRadius.sm, style: .continuous)
+                                    .fill(contentFilter == filter ? DTColor.surfaceRaised : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, DTSpace.md)
+            .padding(.bottom, DTSpace.sm)
         }
     }
 
@@ -167,9 +239,15 @@ struct ClipboardHistoryPanelView: View {
                 onToggleFavorite: { module.toggleFavorite($0.id) },
                 onRemove: { module.remove($0.id) }
             )
-            .frame(width: 260)
+            .frame(width: 310)
             Divider()
-            ClipboardItemPreviewView(item: items.first(where: { $0.id == selectedID }) ?? items.first)
+            ClipboardItemPreviewView(
+                item: items.first(where: { $0.id == selectedID }) ?? items.first,
+                onCopy: { handleCopy($0) },
+                onPaste: { handlePaste($0) },
+                onTogglePin: { module.togglePin($0.id) },
+                onRemove: { module.remove($0.id) }
+            )
         }
     }
 
@@ -213,8 +291,9 @@ struct ClipboardHistoryPanelView: View {
         case .pinned: base = module.items.filter { $0.isPinned }
         case .emoji: base = []
         }
-        guard !searchText.isEmpty else { return base }
-        return base.filter {
+        let typed = base.filter(contentFilter.includes)
+        guard !searchText.isEmpty else { return typed }
+        return typed.filter {
             $0.displayTitle.localizedCaseInsensitiveContains(searchText)
                 || $0.displaySubtitle.localizedCaseInsensitiveContains(searchText)
         }

@@ -17,6 +17,12 @@ final class FileShelfIngestTests: XCTestCase {
         XCTAssertEqual(result.count, 1)
     }
 
+    func testDuplicatesWithinOneNewDropBatchAreDeduped() {
+        let kinds: [FileShelfItemKind] = [.text("a"), .text("a")]
+        let result = FileShelfModule.merged([], with: kinds, maxItems: 10)
+        XCTAssertEqual(result.map(\.id), ["text\u{1F}:a"])
+    }
+
     func testNewItemsAppendToEnd() {
         let items = [FileShelfItem(kind: .text("a"), addedAt: fixedDate)]
         let kinds: [FileShelfItemKind] = [.text("b"), .text("c")]

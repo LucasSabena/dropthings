@@ -74,9 +74,16 @@ public protocol ImageSaverProtocol: AnyObject, Sendable {
 public final class ImageSaver: ImageSaverProtocol, @unchecked Sendable {
     private let directory: URL
     private let fileManager: FileManager
+    private let now: @Sendable () -> Date
+    private let lock = NSLock()
 
-    public init(directory: URL? = nil, fileManager: FileManager = .default) {
+    public init(
+        directory: URL? = nil,
+        fileManager: FileManager = .default,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.fileManager = fileManager
+        self.now = now
         if let directory {
             self.directory = directory
         } else {
@@ -92,11 +99,33 @@ public final class ImageSaver: ImageSaverProtocol, @unchecked Sendable {
     }
 
     public func save(data: Data, type: UTType) async throws -> URL {
+        try saveSynchronously(data: data, type: type)
+    }
+
+    private func saveSynchronously(data: Data, type: UTType) throws -> URL {
+        lock.lock()
+        defer { lock.unlock() }
         let ext = preferredExtension(for: type)
-        let name = "Image \(timestamp())\(ext)"
-        let url = directory.appendingPathComponent(name)
+        let name = "Image \(timestamp(now()))\(ext)"
+        let url = uniqueURL(for: name)
         try data.write(to: url, options: .atomic)
         return url
+    }
+
+    private func uniqueURL(for name: String) -> URL {
+        let first = directory.appendingPathComponent(name)
+        guard fileManager.fileExists(atPath: first.path) else { return first }
+        let stem = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+        var suffix = 2
+        while true {
+            let candidateName = ext.isEmpty
+                ? "\(stem) \(suffix)"
+                : "\(stem) \(suffix).\(ext)"
+            let candidate = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidate.path) { return candidate }
+            suffix += 1
+        }
     }
 
     private func preferredExtension(for type: UTType) -> String {
@@ -108,10 +137,10 @@ public final class ImageSaver: ImageSaverProtocol, @unchecked Sendable {
         return (type.preferredFilenameExtension.map { "." + $0 }) ?? ""
     }
 
-    private func timestamp() -> String {
+    private func timestamp(_ date: Date) -> String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return f.string(from: Date())
+        return f.string(from: date)
     }
 }
 

@@ -101,6 +101,57 @@ final class ScreenCoordinateMapperTests: XCTestCase {
         )
     }
 
+    func testAppKitRectConvertsToAccessibilityTopLeftCoordinates() {
+        let screen = ScreenCoordinateMapper.Screen(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            cgBounds: CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        )
+        let appKitTopHalf = CGRect(x: 0, y: 540, width: 1920, height: 540)
+
+        let converted = ScreenCoordinateMapper.cgRect(
+            forAppKitRect: appKitTopHalf,
+            on: screen
+        )
+
+        XCTAssertEqual(converted, CGRect(x: 0, y: 0, width: 1920, height: 540))
+    }
+
+    func testAppKitVisibleFrameAccountsForMenuBarInAXCoordinates() {
+        let screen = ScreenCoordinateMapper.Screen(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            cgBounds: CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        )
+        let visibleFrame = CGRect(x: 0, y: 0, width: 1920, height: 1055)
+
+        let converted = ScreenCoordinateMapper.cgRect(
+            forAppKitRect: visibleFrame,
+            on: screen
+        )
+
+        XCTAssertEqual(converted, CGRect(x: 0, y: 25, width: 1920, height: 1055))
+    }
+
+    func testRectUsesSecondaryDisplayCoordinateSpace() {
+        let secondary = ScreenCoordinateMapper.Screen(
+            appKitFrame: CGRect(x: -1440, y: 0, width: 1440, height: 900),
+            cgBounds: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+        let primary = ScreenCoordinateMapper.Screen(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            cgBounds: CGRect(x: 1440, y: 0, width: 1920, height: 1080)
+        )
+        let mapper = ScreenCoordinateMapper(
+            screens: [secondary, primary],
+            imageSize: CGSize(width: 3360, height: 1080)
+        )
+
+        let converted = mapper.cgRect(
+            forAppKitRect: CGRect(x: -1400, y: 700, width: 200, height: 100)
+        )
+
+        XCTAssertEqual(converted, CGRect(x: 40, y: 100, width: 200, height: 100))
+    }
+
     func testUnionOfEmptyArrayIsZero() {
         XCTAssertEqual(
             ScreenCoordinateMapper.union(of: []),

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Install DropThings as a real .app for manual testing.
 #
-# This is the dev install path. It produces an unsigned (or ad-hoc signed)
-# binary; macOS will prompt the first time the user opens it. For
-# notarized distribution see docs/RELEASE.md.
+# This is the dev install path. When a Developer ID Application or Apple
+# Development identity exists in Keychain, the script reuses it so macOS sees
+# a stable code identity across local updates. Without one, the build remains
+# ad-hoc and Accessibility must be granted again after each changed build.
 #
 # Usage:
 #   scripts/install-dev.sh                # install to /Applications
@@ -21,6 +22,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$PROJECT_ROOT/.build/release-install"
 APP_PATH="$BUILD_DIR/Build/Products/Release/DropThings.app"
 INSTALL_PATH="${1:-/Applications/DropThings.app}"
+SIGNING_IDENTITY="${DROPTHINGS_SIGNING_IDENTITY:-}"
 
 cd "$PROJECT_ROOT"
 
@@ -44,6 +46,31 @@ if [[ ! -d "$APP_PATH" ]]; then
     exit 1
 fi
 
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+    AVAILABLE_IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+    SIGNING_IDENTITY="$(printf '%s\n' "$AVAILABLE_IDENTITIES" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)"
+    if [[ -z "$SIGNING_IDENTITY" ]]; then
+        SIGNING_IDENTITY="$(printf '%s\n' "$AVAILABLE_IDENTITIES" | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
+    fi
+fi
+
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+    echo "==> Re-signing with stable identity: $SIGNING_IDENTITY"
+    FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+    if [[ -d "$FRAMEWORK" ]]; then
+        codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$FRAMEWORK"
+    fi
+    codesign --force --options runtime \
+        --entitlements "$PROJECT_ROOT/App/DropThings.entitlements" \
+        --sign "$SIGNING_IDENTITY" "$APP_PATH"
+    codesign --verify --strict --verbose "$APP_PATH"
+else
+    echo "==> WARNING: no code-signing identity is installed"
+    echo "    This build is ad-hoc. macOS ties Accessibility to this exact build,"
+    echo "    so changing and reinstalling it will require granting access again."
+    echo "    A reboot alone will not. See docs/signing.md for the permanent fix."
+fi
+
 echo "==> Removing previous install (if any)"
 if [[ -d "$INSTALL_PATH" ]]; then
     rm -rf "$INSTALL_PATH"
@@ -61,7 +88,7 @@ echo
 echo "Open DropThings from:"
 echo "  $INSTALL_PATH"
 echo
-echo "If macOS refuses to open it (unidentified developer):"
+echo "If macOS refuses to open an ad-hoc build (unidentified developer):"
 echo "  Right-click DropThings.app in Finder -> Open -> Open."
 echo "  You only need to do this once per build."
 echo

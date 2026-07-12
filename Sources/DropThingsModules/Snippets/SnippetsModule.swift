@@ -10,7 +10,7 @@ import os
 /// global hotkey, selects a snippet, and its content is copied to the
 /// pasteboard. Snippets are also exposed to the Command Palette through
 /// `CommandSource`.
-public final class SnippetsModule: DropThingsModule, ObservableObject {
+public final class SnippetsModule: DropThingsModule {
     public let id = ModuleID.snippets
     public let name = "Snippets"
     public let summary = "Persistent named text snippets, copied to the clipboard on demand."
@@ -21,6 +21,7 @@ public final class SnippetsModule: DropThingsModule, ObservableObject {
 
     private let settingsStore: SettingsStore
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
     private var panel: SnippetsPanelController?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "snippets")
 
@@ -33,7 +34,7 @@ public final class SnippetsModule: DropThingsModule, ObservableObject {
 
     public func start() async throws {
         registerHotkey()
-        state = .running
+        if case .degraded = state {} else { state = .running }
         logger.info("Snippets started")
     }
 
@@ -151,24 +152,30 @@ public final class SnippetsModule: DropThingsModule, ObservableObject {
 
     private func registerHotkey() {
         guard hotkey == nil else { return }
-        guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
+        guard settings.hotkeyEnabled, let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use the Open snippets button.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use the Open snippets button."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }

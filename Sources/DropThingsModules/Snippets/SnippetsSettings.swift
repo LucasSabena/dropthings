@@ -21,6 +21,11 @@ public struct SnippetsSettings: Sendable, Equatable, Codable {
     }
 
     public static let snippetsMaxCount = 10_000
+    static let legacyDefaultHotkey = GlobalHotkey.Definition(
+        keyCode: UInt32(kVK_ANSI_S),
+        modifiers: UInt32(controlKey | optionKey),
+        id: 401
+    )
 
     enum CodingKeys: String, CodingKey {
         case hotkeyEnabled, hotkey, snippets
@@ -65,7 +70,14 @@ public extension SettingsStore {
         guard let data = self.data(SnippetsSettingsKey.settings) else {
             return SnippetsSettings()
         }
-        return (try? JSONDecoder().decode(SnippetsSettings.self, from: data)) ?? SnippetsSettings()
+        var decoded = (try? JSONDecoder().decode(SnippetsSettings.self, from: data)) ?? SnippetsSettings()
+        // The original default collided with Window Snap's bottom-right
+        // shortcut. Migrate only that exact shipped definition; user-created
+        // shortcuts keep their chosen chord and stable Carbon id.
+        if decoded.hotkey == SnippetsSettings.legacyDefaultHotkey {
+            decoded.hotkey = GlobalHotkey.defaultSnippetsHotkey
+        }
+        return decoded
     }
 
     func saveSnippetsSettings(_ settings: SnippetsSettings) {
@@ -76,6 +88,6 @@ public extension SettingsStore {
 
 public extension GlobalHotkey {
     static var defaultSnippetsHotkey: Definition? {
-        Definition(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey), id: 401)
+        Definition(keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey), id: 401)
     }
 }

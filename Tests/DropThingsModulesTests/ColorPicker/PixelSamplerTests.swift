@@ -72,6 +72,29 @@ final class PixelSamplerTests: XCTestCase {
         XCTAssertNil(PixelSampler.sample(at: CGPoint(x: 0, y: 5), in: image))
     }
 
+    func testSampleDecodesLittleEndianPremultipliedFirstBGRA() throws {
+        let pixels: [UInt8] = [0x33, 0x22, 0x11, 0xFF]
+        let provider = CGDataProvider(data: Data(pixels) as CFData)!
+        let image = CGImage(
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)],
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+
+        XCTAssertEqual(
+            PixelSampler.sample(at: .zero, in: image),
+            PixelSampler.RGB(r: 0x11, g: 0x22, b: 0x33)
+        )
+    }
+
     func testRGBHexFormat() {
         XCTAssertEqual(PixelSampler.RGB(r: 0, g: 0, b: 0).hex, "#000000")
         XCTAssertEqual(PixelSampler.RGB(r: 255, g: 255, b: 255).hex, "#FFFFFF")

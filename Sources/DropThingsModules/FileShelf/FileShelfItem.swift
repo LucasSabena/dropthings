@@ -1,4 +1,5 @@
 import Foundation
+import DropThingsPlatform
 
 /// What a dropped item actually is on the shelf. The shelf accepts file paths,
 /// folder paths, and free-form text (URLs, code snippets, prose — anything the
@@ -100,6 +101,26 @@ public struct FileShelfItem: Identifiable, Hashable, Sendable, Codable {
     public var iconName: String { kind.iconName }
     public var fileTypeLabel: String { kind.fileTypeLabel }
     public var fileExtension: String? { kind.fileExtension }
+
+    public var contentInfo: FileContentInfo? {
+        fileURL.map { FileContentInfo.inspect($0) }
+    }
+
+    public var metadataSummary: String {
+        switch kind {
+        case .text(let text):
+            let count = text.count
+            return "\(count) character\(count == 1 ? "" : "s")"
+        case .folder:
+            return "Folder"
+        case .file:
+            guard let info = contentInfo else { return fileTypeLabel }
+            if let bytes = info.byteCount {
+                return "\(info.kind.displayName) · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
+            }
+            return info.kind.displayName
+        }
+    }
 
     /// File/folder URL for actions that need one. `nil` for text items.
     public var fileURL: URL? {

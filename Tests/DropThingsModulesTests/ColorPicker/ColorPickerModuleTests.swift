@@ -129,4 +129,20 @@ final class ColorPickerModuleTests: XCTestCase {
         XCTAssertEqual(module.colorPickerSettings.history.count, 1)
         XCTAssertEqual(module.colorPickerSettings.history.first?.hex, "#FF0000")
     }
+
+    func testCopyPublishesTextAndNativeColorRepresentations() {
+        let module = makeModule()
+        let picked = PickedColor(r: 12, g: 34, b: 56)
+
+        module.copyToPasteboard(picked)
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#0C2238")
+        let copiedColor = NSPasteboard.general
+            .readObjects(forClasses: [NSColor.self], options: nil)?
+            .first as? NSColor
+        let rgb = copiedColor?.usingColorSpace(.sRGB)
+        XCTAssertEqual(Int(((rgb?.redComponent ?? 0) * 255).rounded()), 12)
+        XCTAssertEqual(Int(((rgb?.greenComponent ?? 0) * 255).rounded()), 34)
+        XCTAssertEqual(Int(((rgb?.blueComponent ?? 0) * 255).rounded()), 56)
+    }
 }

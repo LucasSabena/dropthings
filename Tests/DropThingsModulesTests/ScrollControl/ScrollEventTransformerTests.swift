@@ -96,6 +96,24 @@ final class ScrollEventTransformerTests: XCTestCase {
         XCTAssertEqual(decision.pointDeltaY, -15.0, accuracy: 0.0001)
     }
 
+    func testMultiplierMarksNaturalDirectionForWriteBack() {
+        let input = ScrollEventInput(
+            pointDeltaY: 10, pointDeltaX: 2,
+            fixedDeltaY: 0, fixedDeltaX: 0,
+            phase: 1, momentumPhase: 0
+        )
+        let settings = ScrollSettings(
+            trackpadDirection: .natural,
+            scrollMultiplier: 1.5
+        )
+
+        let decision = ScrollEventTransformer(settings: settings).transform(input)
+
+        XCTAssertEqual(decision.pointDeltaY, 15, accuracy: 0.0001)
+        XCTAssertEqual(decision.pointDeltaX, 3, accuracy: 0.0001)
+        XCTAssertTrue(decision.didMutate, "Scaled natural events must be written back to CGEvent")
+    }
+
     func testMultiplierIsClampedToBounds() {
         let settings = ScrollSettings.sanitized(
             trackpadDirection: .natural,

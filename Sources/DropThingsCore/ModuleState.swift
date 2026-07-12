@@ -39,8 +39,10 @@ extension ModuleState {
 
     /// `true` if the module is currently doing real work the user can rely on.
     public var isActive: Bool {
-        if case .running = self { return true }
-        return false
+        switch self {
+        case .running, .degraded: return true
+        default: return false
+        }
     }
 
     /// `true` if the module is intentionally disabled by the user.
@@ -59,6 +61,21 @@ extension ModuleState {
         switch self {
         case .off, .needsPermission: return false
         case .starting, .running, .unavailable, .degraded, .failed: return true
+        }
+    }
+
+    /// Concise detail for the bounded diagnostics buffer.
+    public var diagnosticDescription: String {
+        switch self {
+        case .off, .starting, .running:
+            return shortLabel
+        case .needsPermission(let missing):
+            let names = missing.map(\.displayName).sorted().joined(separator: ", ")
+            return "Needs permission: \(names)"
+        case .unavailable(let reason), .degraded(let reason):
+            return "\(shortLabel): \(reason)"
+        case .failed(let reason, let recovery):
+            return recovery.map { "Failed: \(reason) — \($0)" } ?? "Failed: \(reason)"
         }
     }
 }

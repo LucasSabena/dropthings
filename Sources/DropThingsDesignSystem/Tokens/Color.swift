@@ -16,11 +16,11 @@ public enum DTColor {
     }
 
     public static var surface: Color {
-        Color(nsColor: .controlBackgroundColor)
+        Color(nsColor: .textBackgroundColor)
     }
 
     public static var surfaceRaised: Color {
-        Color(nsColor: .textBackgroundColor)
+        Color(nsColor: .controlBackgroundColor)
     }
 
     public static var border: Color {
@@ -33,6 +33,10 @@ public enum DTColor {
 
     public static var textSecondary: Color {
         Color(nsColor: .secondaryLabelColor)
+    }
+
+    public static var textTertiary: Color {
+        Color(nsColor: .tertiaryLabelColor)
     }
 
     public static var success: Color {

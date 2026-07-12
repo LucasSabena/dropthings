@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// A single runnable action surfaced by a module for the menu bar and similar
 /// one-tap entry points. Keep it stateless from the caller's point of view —
@@ -23,7 +24,8 @@ public struct ModulePrimaryAction: Sendable {
 /// AppKit or SwiftUI in practice, so the protocol makes that isolation
 /// explicit instead of letting each conformer invent its own concurrency story.
 @MainActor
-public protocol DropThingsModule: AnyObject, CommandSource {
+public protocol DropThingsModule: AnyObject, ObservableObject, CommandSource
+where ObjectWillChangePublisher == ObservableObjectPublisher {
     var id: ModuleID { get }
     var name: String { get }
     var summary: String { get }
@@ -59,7 +61,10 @@ extension DropThingsModule {
         case .menuBarCleaner: return "menubar.rectangle"
         case .keepAwake: return "moon.zzz"
         case .colorPicker: return "eyedropper"
+        case .clipboardHistory: return "clipboard"
         case .commandPalette: return "command"
+        case .screenshotRegion: return "camera.viewfinder"
+        case .windowSnap: return "rectangle.split.2x2"
         case .snippets: return "doc.text"
         case .textTools: return "textformat"
         case .screenshotRegion: return "camera.viewfinder"

@@ -9,7 +9,7 @@ import os
 /// toggle is on. The system behaves as if you were actively using it.
 /// When off, macOS uses the user's normal power settings. The module
 /// holds a `PreventUserIdleSystemSleep` assertion via `IOPMAssertion`.
-public final class KeepAwakeModule: DropThingsModule, ObservableObject {
+public final class KeepAwakeModule: DropThingsModule {
     public let id = ModuleID.keepAwake
     public let name = "Keep Awake"
     public let summary = "Prevent your Mac from sleeping while this is on."
@@ -20,9 +20,12 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     @Published public private(set) var isAssertionActive: Bool = false
     @Published public private(set) var activeAssertionIDs: [UInt32] = []
     @Published public private(set) var lastError: String?
+    @Published public private(set) var remainingSeconds: TimeInterval?
 
     private let settingsStore: SettingsStore
     private let assertion: KeepAwakeAssertionProtocol
+    private var assertionHealth = RecoverableFailureHealth()
+    private var expirationTask: Task<Void, Never>?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "keep-awake")
 
     public init(settings: SettingsStore) {
@@ -38,7 +41,15 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     }
 
     public func start() async throws {
+        if let activeUntil = settings.activeUntil, activeUntil <= Date() {
+            var expired = settings
+            expired.enabled = false
+            expired.activeUntil = nil
+            settings = expired
+            persistSettings()
+        }
         applyState(settings.enabled)
+        scheduleExpirationIfNeeded()
         if case .degraded = state {
             logger.warning("Keep Awake started degraded")
         } else {
@@ -48,13 +59,12 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     }
 
     public func stop() async {
-        // Release the assertion but keep the persisted `enabled` setting
-        // untouched. `stop()` runs on app quit and on module disable; in
-        // the quit case the user expects KeepAwake to come back on next
-        // launch exactly as they left it. The module-disable case is
-        // handled by `setKeepingAwake(false)` flipping the setting, so by
-        // the time `stop()` runs there the setting is already `false`.
+        // Release the assertion but keep the user's preferred on/off value.
+        // Re-enabling the module or relaunching restores that preference.
         assertion.release()
+        expirationTask?.cancel()
+        expirationTask = nil
+        remainingSeconds = nil
         syncAssertionState()
         state = .off
         logger.info("Keep Awake stopped")
@@ -73,12 +83,42 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
         )
     }
 
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "keep-awake.toggle",
+                title: isAssertionActive ? "Disable Keep Awake" : "Enable Keep Awake",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.toggleKeepingAwake() }
+                }
+            )
+        ]
+    }
+
     /// Toggle the awake state. When `true`, holds a system sleep
     /// assertion until `false` (or the module is stopped). The setting
     /// persists across launches.
     public func setKeepingAwake(_ enabled: Bool) {
         var new = settings
         new.enabled = enabled
+        new.activeUntil = enabled ? expirationDate(for: new.durationMinutes) : nil
+        applySettings(new)
+    }
+
+    public func setKeepDisplayAwake(_ enabled: Bool) {
+        var new = settings
+        new.keepDisplayAwake = enabled
+        applySettings(new)
+    }
+
+    public func setDurationMinutes(_ minutes: Int?) {
+        var new = settings
+        new.durationMinutes = minutes
+        if new.enabled {
+            new.activeUntil = expirationDate(for: minutes)
+        }
         applySettings(new)
     }
 
@@ -95,6 +135,7 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
         if state.isStarted {
             applyState(new.enabled)
         }
+        scheduleExpirationIfNeeded()
     }
 
     private func persistSettings() {
@@ -104,40 +145,62 @@ public final class KeepAwakeModule: DropThingsModule, ObservableObject {
     private func applyState(_ enabled: Bool) {
         do {
             if enabled {
-                try assertion.acquireKeepAwakeAssertions()
+                try assertion.acquireKeepAwakeAssertions(keepDisplayAwake: settings.keepDisplayAwake)
                 syncAssertionState()
                 lastError = nil
-                recoverFromDegradedIfNeeded()
+                state = assertionHealth.recovered(current: state)
                 logger.info("Assertions acquired (ids=\(self.assertion.currentAssertionIDs.map(String.init).joined(separator: ",")))")
             } else {
                 assertion.release()
                 syncAssertionState()
                 lastError = nil
-                recoverFromDegradedIfNeeded()
+                state = assertionHealth.recovered(current: state)
                 logger.info("Assertion released")
             }
         } catch let error as KeepAwakeAssertion.FailureReason {
             logger.warning("Could not change assertion state: \(error)")
             syncAssertionState()
             lastError = "Could not keep Mac awake: \(error)"
-            state = .degraded(reason: "Could not keep Mac awake: \(error). macOS may have refused the power assertion.")
+            state = assertionHealth.failed(
+                reason: "Could not keep Mac awake: \(error). macOS may have refused the power assertion."
+            )
         } catch {
             logger.warning("Could not change assertion state: \(error)")
             syncAssertionState()
             lastError = "Could not keep Mac awake: \(error)"
-            state = .degraded(reason: "Could not keep Mac awake: \(error)")
-        }
-    }
-
-    private func recoverFromDegradedIfNeeded() {
-        if case .degraded = state {
-            state = .running
+            state = assertionHealth.failed(reason: "Could not keep Mac awake: \(error)")
         }
     }
 
     private func syncAssertionState() {
         isAssertionActive = assertion.isActive
         activeAssertionIDs = assertion.currentAssertionIDs
+    }
+
+    private func expirationDate(for minutes: Int?) -> Date? {
+        minutes.map { Date().addingTimeInterval(Double($0) * 60) }
+    }
+
+    private func scheduleExpirationIfNeeded() {
+        expirationTask?.cancel()
+        expirationTask = nil
+        guard settings.enabled, let activeUntil = settings.activeUntil else {
+            remainingSeconds = nil
+            return
+        }
+        remainingSeconds = max(0, activeUntil.timeIntervalSinceNow)
+        expirationTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self, let end = self.settings.activeUntil else { return }
+                let remaining = end.timeIntervalSinceNow
+                self.remainingSeconds = max(0, remaining)
+                if remaining <= 0 {
+                    self.setKeepingAwake(false)
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     public func makeSettingsView() -> AnyView {

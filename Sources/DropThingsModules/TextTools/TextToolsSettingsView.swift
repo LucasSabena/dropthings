@@ -51,7 +51,7 @@ struct TextToolsSettingsView: View {
                     }
                 }
 
-                if module.state.isStarted {
+                if case .running = module.state {
                     InlineAlert(style: .success, message: "Text Tools is running. Press the hotkey or use the button to open the floating window.")
                 }
             }

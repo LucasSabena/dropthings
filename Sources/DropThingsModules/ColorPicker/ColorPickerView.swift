@@ -16,9 +16,27 @@ struct ColorPickerSettingsView: View {
                 Button {
                     module.startPicking()
                 } label: {
-                    Label("Pick color now", systemImage: "eyedropper")
+                    Label(
+                        module.isPicking ? "Click a color or press Escape" : "Pick color now",
+                        systemImage: module.isPicking ? "scope" : "eyedropper"
+                    )
                 }
                 .controlSize(.regular)
+                .disabled(module.isPicking)
+
+                if let value = module.lastCopiedValue {
+                    HStack(spacing: DTSpace.xs) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(DTColor.success)
+                        Text("Last copied")
+                            .font(DTTypography.caption)
+                            .foregroundStyle(DTColor.textSecondary)
+                        Text(value)
+                            .font(DTTypography.caption.monospaced())
+                            .foregroundStyle(DTColor.textPrimary)
+                            .textSelection(.enabled)
+                    }
+                }
 
                 Toggle("Enable hotkey", isOn: Binding(
                     get: { module.colorPickerSettings.hotkeyEnabled },

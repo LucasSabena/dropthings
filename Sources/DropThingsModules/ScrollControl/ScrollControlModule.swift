@@ -9,7 +9,7 @@ import os
 /// Splits natural scrolling on the trackpad from inverted scrolling on a
 /// mouse wheel so a MacBook user can plug in a mouse without losing the
 /// Windows-style wheel feel. Backed by a `CGEventTap` on scroll events.
-public final class ScrollControlModule: DropThingsModule, ObservableObject {
+public final class ScrollControlModule: DropThingsModule {
     public let id = ModuleID.scrollControl
     public let name = "Scroll Control"
     public let summary = "Different scroll direction per input device."
@@ -23,19 +23,28 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
     /// transformer reads this on every scroll event so per-app overrides
     /// take effect immediately when the user switches apps.
     @Published public private(set) var activeBundleID: String?
+    @Published public private(set) var lastExternalBundleID: String?
 
     private let settingsStore: SettingsStore
     private let permissions: PermissionCenter
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "scroll-control")
     private var tap: EventTapClient?
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
     private var workspaceObserver: NSObjectProtocol?
+    private var tapFailureReason: String?
+    private var transformer: ScrollEventTransformer
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
         self.permissions = permissions
-        self.settings = settings.loadScrollSettings()
+        let loadedSettings = settings.loadScrollSettings()
+        self.settings = loadedSettings
         self.activeBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        self.transformer = ScrollEventTransformer(settings: loadedSettings)
+        if activeBundleID != Bundle.main.bundleIdentifier {
+            self.lastExternalBundleID = activeBundleID
+        }
     }
 
     public func start() async throws {
@@ -49,9 +58,9 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         installTap()
         registerHotkey()
         if case .failed = state { return }
+        applyPauseOnLaunchIfNeeded()
         if case .degraded = state { return }
         state = .running
-        applyPauseOnLaunchIfNeeded()
         logger.info("Scroll Control started")
     }
 
@@ -75,7 +84,11 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             Task { @MainActor [weak self] in
-                self?.activeBundleID = app.bundleIdentifier
+                guard let self else { return }
+                self.activeBundleID = app.bundleIdentifier
+                if app.bundleIdentifier != Bundle.main.bundleIdentifier {
+                    self.lastExternalBundleID = app.bundleIdentifier
+                }
             }
         }
     }
@@ -100,12 +113,26 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
         )
     }
 
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "scroll-control.toggle-pause",
+                title: isPaused ? "Resume Scroll Control" : "Pause Scroll Control",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.togglePause() }
+                }
+            )
+        ]
+    }
+
     // MARK: - Public actions
 
     /// Pause the event tap so scroll events pass through unmodified, or
     /// resume if already paused. No-op when the module is not running.
     public func togglePause() {
-        guard state == .running else { return }
+        guard state.isStarted, permissions.state(for: .accessibility) == .granted else { return }
         if isPaused {
             installTap()
             isPaused = false
@@ -115,12 +142,11 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             tap?.stop()
             tap = nil
             isPaused = true
-            setPauseOnLaunch(true)
             logger.info("Scroll Control paused — events pass through unchanged")
         }
     }
 
-    private func setPauseOnLaunch(_ value: Bool) {
+    public func setPauseOnLaunch(_ value: Bool) {
         guard settings.pauseOnLaunch != value else { return }
         var new = settings
         new.pauseOnLaunch = value
@@ -149,15 +175,10 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
             pauseOnLaunch: newSettings.pauseOnLaunch,
             appOverrides: newSettings.appOverrides
         )
-        let tapNeedsReinstall = sanitized.appOverrides != settings.appOverrides
         let hotkeyChanged = sanitized.hotkey != settings.hotkey
         settings = sanitized
+        transformer = ScrollEventTransformer(settings: sanitized)
         settingsStore.saveScrollSettings(sanitized)
-        if (tapNeedsReinstall || !isPaused) && state == .running {
-            tap?.stop()
-            tap = nil
-            installTap()
-        }
         if hotkeyChanged && state.isStarted {
             unregisterHotkey()
             registerHotkey()
@@ -226,42 +247,59 @@ public final class ScrollControlModule: DropThingsModule, ObservableObject {
 
     private func installTap() {
         let client = EventTapClient()
-        let transformer = ScrollEventTransformer(settings: settings)
         do {
             try client.start { [weak self] input in
-                transformer.transform(input, activeBundleID: self?.activeBundleID)
+                guard let self else { return nil }
+                return self.transformer.transform(input, activeBundleID: self.activeBundleID)
             }
             tap = client
             lastError = nil
+            recoverFromTapFailureIfNeeded()
         } catch {
             let message = String(describing: error)
-            state = .degraded(reason: "Could not install event tap: \(message). Scroll events are not being modified.")
+            let reason = "Could not install event tap: \(message). Scroll events are not being modified."
+            tapFailureReason = reason
+            state = .degraded(reason: reason)
             lastError = message
             logger.error("Event tap install failed: \(message)")
+        }
+    }
+
+    private func recoverFromTapFailureIfNeeded() {
+        guard let tapFailureReason else { return }
+        self.tapFailureReason = nil
+        if case .degraded(let reason) = state, reason == tapFailureReason {
+            state = .running
         }
     }
 
     // MARK: - Hotkey
 
     private func registerHotkey() {
-        guard let definition = settings.hotkey else { return }
+        guard let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.togglePause()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Pause and resume from the menu bar instead.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Pause and resume from the menu bar instead."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the menu bar.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the menu bar."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }

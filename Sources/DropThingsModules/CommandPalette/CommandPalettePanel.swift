@@ -23,7 +23,7 @@ final class CommandPalettePanelController {
         if panel == nil {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
-                styleMask: [.titled, .closable, .nonactivatingPanel, .resizable],
+                styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false
             )
@@ -37,8 +37,8 @@ final class CommandPalettePanelController {
         }
         refreshContent()
         panel?.center()
-        panel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
@@ -65,6 +65,7 @@ struct CommandPalettePanelView: View {
     @State private var searchText = ""
     @State private var selection: String?
     @State private var eventMonitor: Any?
+    @FocusState private var searchFocused: Bool
 
     private var filteredCommands: [CommandDescriptor] {
         CommandPaletteFilter.filter(commands, query: searchText)
@@ -104,8 +105,14 @@ struct CommandPalettePanelView: View {
             .padding(.bottom, DTSpace.sm)
         }
         .background(DTColor.background)
-        .onAppear { installEventMonitor() }
+        .onAppear {
+            installEventMonitor()
+            Task { @MainActor in searchFocused = true }
+        }
         .onDisappear { removeEventMonitor() }
+        .onChange(of: searchText) { _, _ in
+            selection = filteredCommands.first?.id
+        }
     }
 
     private var searchField: some View {
@@ -114,6 +121,7 @@ struct CommandPalettePanelView: View {
                 .foregroundStyle(DTColor.textSecondary)
             TextField("Search commands", text: $searchText)
                 .textFieldStyle(.plain)
+                .focused($searchFocused)
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -165,7 +173,7 @@ struct CommandPalettePanelView: View {
         case 53:
             onClose()
         case 36, 76:
-            if let id = selection, let command = commands.first(where: { $0.id == id }) {
+            if let id = selection, let command = filteredCommands.first(where: { $0.id == id }) {
                 execute(command)
             }
         case 125:

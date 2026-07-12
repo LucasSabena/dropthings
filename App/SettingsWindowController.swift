@@ -14,11 +14,16 @@ final class SettingsWindowController {
     init(initialSize: NSSize) {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: initialSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "DropThings Settings"
+        window.title = "DropThings"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.tabbingMode = .disallowed
+        window.minSize = initialSize
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
         window.center()

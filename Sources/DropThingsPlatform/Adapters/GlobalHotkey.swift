@@ -10,6 +10,8 @@ import Carbon.HIToolbox
 /// owning object goes away. The deinit calls `unregister()` defensively so a
 /// dangling listener never outlives the module.
 public final class GlobalHotkey: @unchecked Sendable {
+    private static let signature = OSType(0x44525448) // 'DRTH'
+
     public enum RegistrationError: Error, Equatable {
         case installHandlerFailed(Int32)
         case registerFailed(Int32)
@@ -71,7 +73,7 @@ public final class GlobalHotkey: @unchecked Sendable {
         let installStatus = InstallEventHandler(
             GetEventDispatcherTarget(),
             { (_, eventRef, userData) -> OSStatus in
-                guard let userData else { return noErr }
+                guard let userData else { return OSStatus(eventNotHandledErr) }
                 let hotkey = Unmanaged<GlobalHotkey>.fromOpaque(userData).takeUnretainedValue()
                 var hotKeyID = EventHotKeyID()
                 let size = MemoryLayout<EventHotKeyID>.size
@@ -84,17 +86,24 @@ public final class GlobalHotkey: @unchecked Sendable {
                     nil,
                     &hotKeyID
                 )
-                if paramStatus == noErr && hotKeyID.id == hotkey.definition.id {
-                    // Carbon delivers hotkey events on its own thread. Bounce
-                    // to the main actor, but if we are already there call the
-                    // action directly to avoid the latency/loss surface of an
-                    // async hop.
-                    if Thread.isMainThread {
+
+                guard paramStatus == noErr else { return OSStatus(eventNotHandledErr) }
+                let routingStatus = GlobalHotkey.routingStatus(
+                    for: hotKeyID,
+                    expectedID: hotkey.definition.id
+                )
+                guard routingStatus == noErr else { return routingStatus }
+
+                // Carbon delivers hotkey events on its own thread. Bounce
+                // to the main actor, but if we are already there call the
+                // action directly to avoid unnecessary latency.
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
                         hotkey.onFire()
-                    } else {
-                        DispatchQueue.main.async {
-                            hotkey.onFire()
-                        }
+                    }
+                } else {
+                    Task { @MainActor in
+                        hotkey.onFire()
                     }
                 }
                 return noErr
@@ -110,7 +119,7 @@ public final class GlobalHotkey: @unchecked Sendable {
         }
 
         let hotKeyID = EventHotKeyID(
-            signature: OSType(0x44525448), // 'DRTH' — arbitrary unique fourcc
+            signature: Self.signature,
             id: definition.id
         )
         let registerStatus = RegisterEventHotKey(
@@ -146,6 +155,18 @@ public final class GlobalHotkey: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return hotKeyRef != nil
+    }
+
+    /// Carbon chains every handler installed on the dispatcher target. A
+    /// handler that returns `noErr` claims the event and prevents older
+    /// handlers from seeing it. Mismatched IDs therefore must return
+    /// `eventNotHandledErr`; otherwise the most recently registered module
+    /// silently swallows every other module's shortcut.
+    static func routingStatus(for hotKeyID: EventHotKeyID, expectedID: UInt32) -> OSStatus {
+        guard hotKeyID.signature == signature, hotKeyID.id == expectedID else {
+            return OSStatus(eventNotHandledErr)
+        }
+        return noErr
     }
 }
 

@@ -8,19 +8,17 @@ small module you can enable or disable independently. No telemetry, no
 accounts. Update checks contact GitHub Releases only when automatic checks
 are enabled or when you click **Check for Updates**.
 
-![hero](docs/hero.png)
-
 ---
 
 ## Features
 
 | Module | What it does | Permission |
 |---|---|---|
-| **File Shelf** | Drop files here. Pick them up in any app. Pin items to keep them across restarts. | — |
+| **File Shelf** | Visual drag shelf with collections, large thumbnails, Quick Look inspector, and batch actions. | — |
 | **Scroll Control** | Natural scroll on the trackpad, Windows-style wheel on the mouse. Independent direction per device. Per-app overrides. | Accessibility |
-| **Menu Bar Cleaner** | Collapse low-priority menu bar icons behind one control. Hover-to-reveal, profiles, safe reset. | — |
-| **Keep Awake** | One toggle. Mac stays awake as if you were using it. | — |
-| **Color Picker** | Native macOS sampler with live 8x loupe. Copy as HEX/RGB/HSL/SwiftUI/CSS. Favorites + derived palette. | — |
+| **Keep Awake** | Timed or indefinite awake sessions, with an optional display assertion. | — |
+| **Color Picker** | Fluid native sampler with visual copy feedback. Publishes real colors plus HEX/RGB/HSL/SwiftUI/CSS text. | — |
+| **Clipboard History** | Persistent local history for text, colors, images, videos, documents, and folders with native previews. | — |
 
 Every module:
 
@@ -74,7 +72,7 @@ git clone https://github.com/LucasSabena/dropthings.git
 cd dropthings
 xcodebuild -project App.xcodeproj -scheme DropThings \
            -configuration Release -derivedDataPath .build/release build
-./.build/release/build/Products/Release/DropThings.app
+open .build/release/Build/Products/Release/DropThings.app
 ```
 
 ---
@@ -87,8 +85,10 @@ the permission it needs only when you enable that module.
 | Module | Permission | Why it needs it |
 |---|---|---|
 | Scroll Control | Accessibility | Read and rewrite scroll events |
-| Menu Bar Cleaner | — | Uses DropThings-owned menu bar controls |
 | Color Picker | — | Uses the native macOS color sampler |
+| Clipboard History | — | Reads the system pasteboard while enabled |
+| File Shelf | — | Uses drag and drop plus user-selected files |
+| Keep Awake | — | Uses macOS power assertions |
 
 If a module says it needs a permission but the system does not seem to know
 about DropThings:
@@ -97,9 +97,9 @@ about DropThings:
 tccutil reset Accessibility app.dropthings
 ```
 
-Then quit DropThings and reopen it. The Settings → **Diagnostics** panel
-shows the bundle path DropThings is running from, so you can compare it
-against the path System Settings has on file.
+Then quit DropThings and reopen it. DropThings normally handles this flow
+inside **Permissions** with an explanation, a direct System Settings action,
+and automatic rechecking when you return.
 
 ---
 
@@ -109,7 +109,7 @@ Once installed, DropThings lives in the menu bar. Click the icon to open
 the menu:
 
 - **Open Settings…** — the main configuration window
-- **Show File Shelf** (when the File Shelf module is enabled) — opens the shelf
+- An action for each active module that exposes one
 - **Quit DropThings**
 
 Inside **Settings**, the sidebar lists each module. Click one to see its
@@ -125,12 +125,8 @@ disabled from the same About screen. Homebrew users can update with:
 brew upgrade --cask LucasSabena/dropthings/dropthings
 ```
 
-Quick walkthroughs per module:
-
-- [File Shelf](docs/file-shelf-manual-checks.md)
-- [Scroll Control](docs/scroll-control-manual-checks.md)
-- [Menu Bar Cleaner](docs/menu-bar-cleaner-manual-checks.md)
-- [Color Picker](docs/color-picker-manual-checks.md)
+Use the [complete manual verification guide](docs/manual-checks.md) for
+module-by-module checks.
 
 ---
 
@@ -163,7 +159,7 @@ detailed contract.
 ## Development
 
 ```bash
-swift test                                            # 65+ unit tests
+swift test
 xcodebuild -project App.xcodeproj -scheme DropThings \
            -configuration Debug -derivedDataPath .build/xcode build
 open .build/xcode/Build/Products/Debug/DropThings.app
@@ -175,25 +171,18 @@ passes. New modules need to:
 - Live under `Sources/DropThingsModules/<Name>/`
 - Implement `DropThingsModule` (see `Sources/DropThingsCore/DropThingsModule.swift`)
 - Have at least one unit test under `Tests/DropThingsModulesTests/<Name>/`
-- Document manual checks in `docs/<name>-manual-checks.md`
-- Mark each completion in [`docs/implementation-checklist.md`](docs/implementation-checklist.md)
+- Document manual checks in `docs/manual-checks.md`
+- Record durable tradeoffs in [`docs/decisions.md`](docs/decisions.md)
 
-See [`docs/modulos/`](docs/modulos/) for the per-module audits and the
-forward-looking backlog.
+See [`docs/audits/`](docs/audits/) for feature audits and
+[`docs/roadmap.md`](docs/roadmap.md) for the forward-looking backlog.
 
 ---
 
 ## Roadmap
 
-Next on the queue (in priority order):
-
-1. **Clipboard History** — global hotkey, persistent history, exclusion list for sensitive apps.
-2. **Command Palette** — single hotkey to invoke any module's actions.
-3. **Window Snapper** — Rectangle-style halves, quarters, maximize.
-4. **Focus / Presentation Mode** — workflow that orchestrates existing modules.
-5. **Screenshot Studio** — region capture and annotation.
-
-Full backlog with rationale: [`docs/modulos/backlog-modulos-futuros.md`](docs/modulos/backlog-modulos-futuros.md).
+The shipping product intentionally stays at five maintained utilities. The
+backlog and its rationale live in [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 

@@ -9,7 +9,7 @@ import os
 /// Captures a user-selected region of the screen to a file and to the
 /// pasteboard. Shows a full-screen drag-select overlay when triggered from the
 /// settings button or the global hotkey.
-public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
+public final class ScreenshotRegionModule: DropThingsModule {
     public let id = ModuleID.screenshotRegion
     public let name = "Screenshot Region"
     public let summary = "Drag to capture any region of your screen."
@@ -25,6 +25,8 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     private let pasteboard: NSPasteboard
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "screenshot-region")
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
+    private var captureHealth = RecoverableFailureHealth()
     private var overlay: RegionSelectionOverlay?
     private var isCapturing = false
     private var activationObserver: NSObjectProtocol?
@@ -43,8 +45,13 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     }
 
     public func start() async throws {
+        guard permissions.state(for: .screenRecording) == .granted else {
+            state = .needsPermission(missing: [.screenRecording])
+            logger.notice("Start blocked: Screen Recording not granted")
+            return
+        }
         registerHotkey()
-        state = .running
+        if case .degraded = state {} else { state = .running }
         subscribeToActivation()
         logger.info("Screenshot Region started")
     }
@@ -125,7 +132,7 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
     public var commands: [CommandDescriptor] {
         [
             CommandDescriptor(
-                id: "capture-region",
+                id: "screenshot-region.capture",
                 title: "Capture Screenshot Region",
                 subtitle: "Screenshot Region",
                 iconName: "camera.viewfinder",
@@ -167,24 +174,30 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
 
     private func registerHotkey() {
         guard hotkey == nil else { return }
-        guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
+        guard settings.hotkeyEnabled, let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use the Capture region now button.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use the Capture region now button."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the button.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the button."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }
@@ -227,6 +240,8 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         guard case .needsPermission = state else { return }
         let missing = permissions.missing(from: requiredPermissions)
         guard missing.isEmpty else { return }
+        registerHotkey()
+        subscribeToActivation()
         state = .running
         logger.info("Screen Recording granted; recovered from needsPermission")
     }
@@ -239,33 +254,37 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         switch result {
         case .cancelled:
             logger.notice("Region selection cancelled")
-            restoreRunningState()
         case .region(let rect):
             captureAndSave(rect: rect)
         }
     }
 
     private func captureAndSave(rect: CGRect) {
-        guard let image = ScreenCapture.rect(rect) else {
+        let captureRect = ScreenCoordinateMapper.current().cgRect(forAppKitRect: rect) ?? rect
+        guard let image = ScreenCapture.rect(captureRect) else {
             logger.warning("Screen capture returned no image for \(rect)")
-            state = .degraded(reason: "Could not capture the selected region. Make sure Screen Recording is granted in System Settings.")
+            state = captureHealth.failed(
+                reason: "Could not capture the selected region. Make sure Screen Recording is granted in System Settings."
+            )
             return
         }
 
         let saveURL = resolveSaveURL()
         do {
             let directoryURL = try createDirectoryIfNeeded(for: saveURL)
-            let fileURL = directoryURL.appendingPathComponent(filename())
+            let fileURL = nextSaveURL(in: directoryURL)
             try save(image: image, to: fileURL)
             lastSavedURL = fileURL
             if settings.copyPreviewToPasteboard {
                 copyPreviewToPasteboard(image: image)
             }
-            restoreRunningState()
+            state = captureHealth.recovered(current: state)
             logger.notice("Saved screenshot to \(fileURL.path)")
         } catch {
             logger.error("Could not save screenshot: \(error)")
-            state = .degraded(reason: "Could not save screenshot: \(error.localizedDescription). Check the save location in settings.")
+            state = captureHealth.failed(
+                reason: "Could not save screenshot: \(error.localizedDescription). Check the save location in settings."
+            )
         }
     }
 
@@ -297,11 +316,25 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         return url
     }
 
-    private func filename() -> String {
+    internal func nextSaveURL(in directory: URL, now: Date = Date()) -> URL {
+        let name = filename(now: now)
+        let first = directory.appendingPathComponent(name)
+        guard fileManager.fileExists(atPath: first.path) else { return first }
+        let stem = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+        var suffix = 2
+        while true {
+            let candidate = directory.appendingPathComponent("\(stem) \(suffix).\(ext)")
+            if !fileManager.fileExists(atPath: candidate.path) { return candidate }
+            suffix += 1
+        }
+    }
+
+    private func filename(now: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        return "Screenshot \(formatter.string(from: Date())).png"
+        return "Screenshot \(formatter.string(from: now)).png"
     }
 
     private func save(image: CGImage, to url: URL) throws {
@@ -317,12 +350,6 @@ public final class ScreenshotRegionModule: DropThingsModule, ObservableObject {
         pasteboard.clearContents()
         pasteboard.writeObjects([nsImage])
         logger.notice("Copied screenshot preview to pasteboard")
-    }
-
-    private func restoreRunningState() {
-        if case .degraded = state {
-            state = .running
-        }
     }
 
     private enum ScreenshotError: Error, CustomStringConvertible {

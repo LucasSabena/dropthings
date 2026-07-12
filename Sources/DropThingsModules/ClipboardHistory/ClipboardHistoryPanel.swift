@@ -25,8 +25,8 @@ final class ClipboardHistoryPanelController {
     func show() {
         if panel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 660, height: 460),
-                styleMask: [.titled, .closable, .nonactivatingPanel, .resizable],
+                contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
+                styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false
             )
@@ -34,7 +34,7 @@ final class ClipboardHistoryPanelController {
             panel.level = .floating
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             panel.isReleasedWhenClosed = false
-            panel.minSize = NSSize(width: 540, height: 320)
+            panel.minSize = NSSize(width: 720, height: 460)
             panel.contentView = NSHostingView(rootView: AnyView(EmptyView()))
             self.panel = panel
         }
@@ -44,8 +44,8 @@ final class ClipboardHistoryPanelController {
         }
         refreshContent()
         panel?.center()
-        panel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
@@ -63,7 +63,7 @@ final class ClipboardHistoryPanelController {
         guard let module, let panel else { return }
         let root = AnyView(
             ClipboardHistoryPanelView(module: module, onClose: { [weak self] in self?.hide() })
-                .frame(minWidth: 540, minHeight: 320)
+                .frame(minWidth: 720, minHeight: 460)
         )
         (panel.contentView as? NSHostingView<AnyView>)?.rootView = root
     }

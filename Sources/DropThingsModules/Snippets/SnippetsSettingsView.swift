@@ -77,7 +77,7 @@ struct SnippetsSettingsView: View {
                     }
                 }
 
-                if module.state.isStarted {
+                if case .running = module.state {
                     InlineAlert(style: .success, message: "Snippets hotkey is active. Press it to open the picker.")
                 }
             }

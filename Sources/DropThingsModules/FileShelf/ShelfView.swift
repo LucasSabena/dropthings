@@ -11,16 +11,13 @@ struct ShelfView: View {
             header
             Divider()
             tabBar
+            if !module.selectedItemIDs.isEmpty {
+                selectionToolbar
+                Divider()
+            }
             content
         }
         .background(DTColor.background)
-        // Clicking empty space clears the selection, like Finder.
-        .onTapGesture(count: 1) {
-            let mods = NSEvent.modifierFlags
-            if !mods.contains(.command) && !mods.contains(.shift) {
-                module.clearSelection()
-            }
-        }
     }
 
     private var header: some View {
@@ -142,6 +139,36 @@ struct ShelfView: View {
         }
     }
 
+    private var selectionToolbar: some View {
+        HStack(spacing: DTSpace.sm) {
+            Text("\(module.selectedItemIDs.count) selected")
+                .font(DTTypography.caption.weight(.semibold))
+                .foregroundStyle(DTColor.accent)
+            Button { module.revealSelected() } label: {
+                Label("Reveal", systemImage: "folder")
+            }
+            .disabled(module.selectedItems.allSatisfy { $0.fileURL == nil })
+            Button { module.copyPathsSelected() } label: {
+                Label("Copy paths", systemImage: "doc.on.doc")
+            }
+            .disabled(module.selectedItems.allSatisfy { $0.fileURL == nil })
+            Spacer(minLength: 0)
+            Button(role: .destructive) { module.removeSelected() } label: {
+                Label("Remove", systemImage: "trash")
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+            Button { module.clearSelection() } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .help("Clear selection")
+        }
+        .font(DTTypography.caption)
+        .controlSize(.small)
+        .padding(.horizontal, DTSpace.md)
+        .padding(.vertical, DTSpace.xs)
+        .background(DTColor.surface)
+    }
+
     @ViewBuilder
     private var layoutToggle: some View {
         // A small segmented control to switch between list and grid. Bound
@@ -164,11 +191,22 @@ struct ShelfView: View {
         if module.items.isEmpty {
             emptyState
         } else {
-            switch module.layout {
-            case .list:
-                ShelfListView(module: module, items: sortedItems)
-            case .grid:
-                ShelfGridView(module: module, items: sortedItems)
+            HStack(spacing: 0) {
+                Group {
+                    switch module.layout {
+                    case .list:
+                        ShelfListView(module: module, items: sortedItems)
+                    case .grid:
+                        ShelfGridView(module: module, items: sortedItems)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let selectedItem {
+                    Divider()
+                    ShelfDetailView(item: selectedItem, module: module)
+                        .frame(width: DTSize.shelfInspectorWidth)
+                }
             }
         }
     }
@@ -187,6 +225,10 @@ struct ShelfView: View {
 
     private var sortedItems: [FileShelfItem] {
         ShelfDisplayOrder.sort(module.items)
+    }
+
+    private var selectedItem: FileShelfItem? {
+        module.selectedItems.count == 1 ? module.selectedItems.first : nil
     }
 }
 

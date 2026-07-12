@@ -126,10 +126,8 @@ private final class RegionSelectionView: NSView {
     }
 
     private func globalRect(from viewRect: CGRect) -> CGRect {
-        CGRect(
-            origin: CGPoint(x: viewRect.minX + frame.minX, y: viewRect.minY + frame.minY),
-            size: viewRect.size
-        )
+        guard let window else { return viewRect }
+        return window.convertToScreen(viewRect)
     }
 
     override func draw(_ dirtyRect: NSRect) {

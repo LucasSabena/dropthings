@@ -165,4 +165,18 @@ final class ScreenshotRegionSaveURLTests: XCTestCase {
         XCTAssertEqual(result.path, fileManager.desktopURL.path)
         XCTAssertEqual(fileManager.createdDirectories.map(\.path), [fileManager.desktopURL.path])
     }
+
+    func testNextSaveURLDoesNotOverwriteSameSecondCapture() {
+        let module = makeModule()
+        let directory = URL(fileURLWithPath: "/screenshots")
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = module.nextSaveURL(in: directory, now: date)
+        fileManager.entries[first.path] = false
+
+        let second = module.nextSaveURL(in: directory, now: date)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(second.deletingPathExtension().lastPathComponent,
+                       first.deletingPathExtension().lastPathComponent + " 2")
+    }
 }

@@ -4,6 +4,11 @@ import SwiftUI
 /// Use these instead of raw `Font.system(...)` so we can change the scale in
 /// one place.
 public enum DTTypography {
+    /// Primary title for a control-center page.
+    public static var pageTitle: Font {
+        .system(size: 24, weight: .semibold)
+    }
+
     /// Settings window title (≈ 20 pt semibold).
     public static var windowTitle: Font {
         .system(size: 20, weight: .semibold)

@@ -22,7 +22,7 @@ final class SnippetsPanelController {
         if panel == nil {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
-                styleMask: [.titled, .closable, .nonactivatingPanel, .resizable],
+                styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false
             )
@@ -36,8 +36,8 @@ final class SnippetsPanelController {
         }
         refreshContent()
         panel?.center()
-        panel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
@@ -57,6 +57,7 @@ final class SnippetsPanelController {
 struct SnippetsPanelView: View {
     @ObservedObject var module: SnippetsModule
     @State private var searchText: String = ""
+    @FocusState private var searchFocused: Bool
 
     private var filteredSnippets: [Snippet] {
         if searchText.isEmpty { return module.settings.snippets }
@@ -72,6 +73,7 @@ struct SnippetsPanelView: View {
         VStack(spacing: DTSpace.sm) {
             TextField("Search snippets", text: $searchText)
                 .textFieldStyle(.roundedBorder)
+                .focused($searchFocused)
                 .padding(.horizontal, DTSpace.md)
                 .padding(.top, DTSpace.sm)
 
@@ -101,6 +103,9 @@ struct SnippetsPanelView: View {
             .padding(.bottom, DTSpace.sm)
         }
         .background(DTColor.background)
+        .onAppear {
+            Task { @MainActor in searchFocused = true }
+        }
     }
 }
 

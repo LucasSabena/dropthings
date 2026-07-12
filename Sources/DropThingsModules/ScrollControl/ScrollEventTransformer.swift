@@ -57,7 +57,7 @@ public struct ScrollEventTransformer: Sendable {
             fixedDeltaX: fixedX,
             fixedPointDeltaY: input.fixedPointDeltaY * verticalFactor,
             fixedPointDeltaX: fixedPointX,
-            didMutate: invert || horizontalWasSuppressed
+            didMutate: invert || multiplier != 1 || horizontalWasSuppressed
         )
     }
 

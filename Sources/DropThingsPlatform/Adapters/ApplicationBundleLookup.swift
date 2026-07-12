@@ -9,6 +9,12 @@ import AppKit
 /// original bundle identifier is returned so callers always get a
 /// non-empty label.
 public func applicationName(forBundleID bundleID: String) -> String {
+    // Launch Services treats an empty identifier as a wildcard-like lookup on
+    // some macOS releases and may return an unrelated helper application.
+    // Preserve invalid input instead of leaking that implementation detail to
+    // exclusion lists and diagnostics.
+    guard !bundleID.isEmpty else { return bundleID }
+
     guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
         return bundleID
     }

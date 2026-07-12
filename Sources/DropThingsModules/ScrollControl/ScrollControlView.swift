@@ -5,6 +5,7 @@ import DropThingsPlatform
 
 struct ScrollControlSettingsView: View {
     @ObservedObject var module: ScrollControlModule
+    @State private var bundleIDDraft = ""
 
     var body: some View {
         SettingsSection(
@@ -19,6 +20,11 @@ struct ScrollControlSettingsView: View {
                         set: { module.setHotkey($0) }
                     )
                 )
+
+                Toggle("Start paused", isOn: Binding(
+                    get: { module.scrollSettings.pauseOnLaunch },
+                    set: { module.setPauseOnLaunch($0) }
+                ))
 
                 if module.isPaused {
                     InlineAlert(
@@ -103,7 +109,7 @@ struct ScrollControlSettingsView: View {
                     .font(DTTypography.body.weight(.semibold))
                 Spacer()
             }
-            Text("Override scroll direction and speed for specific apps. Add the frontmost app or type a bundle ID manually.")
+            Text("Override scroll direction and speed for specific apps. Changes apply immediately without restarting the scroll listener.")
                 .font(DTTypography.caption)
                 .foregroundStyle(DTColor.textSecondary)
 
@@ -116,23 +122,37 @@ struct ScrollControlSettingsView: View {
             }
 
             HStack {
-                TextField("Bundle ID", text: Binding(
-                    get: { "" },
-                    set: { newBundleID in
-                        guard !newBundleID.isEmpty else { return }
-                        module.updateAppOverride(bundleID: newBundleID, direction: .inverted, multiplier: module.scrollSettings.scrollMultiplier)
-                    }
-                ))
+                TextField("Bundle ID", text: $bundleIDDraft)
                 .textFieldStyle(.roundedBorder)
-                Button("Add frontmost") {
-                    if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
-                        module.updateAppOverride(bundleID: bundleID, direction: .inverted, multiplier: module.scrollSettings.scrollMultiplier)
-                    }
+                .onSubmit(addDraftOverride)
+                Button("Add") {
+                    addDraftOverride()
                 }
                 .controlSize(.small)
-                .disabled(NSWorkspace.shared.frontmostApplication?.bundleIdentifier == nil)
+                .disabled(bundleIDDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Add previous app") {
+                    guard let bundleID = module.lastExternalBundleID else { return }
+                    module.updateAppOverride(
+                        bundleID: bundleID,
+                        direction: .inverted,
+                        multiplier: module.scrollSettings.scrollMultiplier
+                    )
+                }
+                .controlSize(.small)
+                .disabled(module.lastExternalBundleID == nil)
             }
         }
+    }
+
+    private func addDraftOverride() {
+        let bundleID = bundleIDDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bundleID.isEmpty else { return }
+        module.updateAppOverride(
+            bundleID: bundleID,
+            direction: .inverted,
+            multiplier: module.scrollSettings.scrollMultiplier
+        )
+        bundleIDDraft = ""
     }
 
     private var multiplierSlider: some View {

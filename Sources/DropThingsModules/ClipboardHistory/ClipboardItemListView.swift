@@ -52,7 +52,10 @@ struct ClipboardItemListView: View {
     }
 }
 
-/// A single row. The type icon is replaced by a thumbnail for image items.
+/// A single row. Clicking selects and updates the detail preview; execution is
+/// explicit via Return, double-click/context actions, or the detail buttons.
+/// This avoids the old surprising behavior where merely inspecting a row
+/// immediately pasted it into another application.
 private struct ClipboardItemRow: View {
     let item: ClipboardItem
     let isSelected: Bool
@@ -68,7 +71,6 @@ private struct ClipboardItemRow: View {
     var body: some View {
         Button {
             onSelect()
-            onPaste()
         } label: {
             HStack(spacing: DTSpace.sm) {
                 leading
@@ -103,6 +105,7 @@ private struct ClipboardItemRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onDrag { itemProvider }
         .contextMenu {
             Button("Paste") { onPaste() }
             Button("Copy") { onCopy() }
@@ -118,13 +121,13 @@ private struct ClipboardItemRow: View {
     private var leading: some View {
         Group {
             switch item.type {
-            case .image:
+            case .image, .video:
                 if let thumbnail {
                     Image(nsImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Image(systemName: "photo")
+                    Image(systemName: item.systemImageName)
                         .foregroundStyle(DTColor.accent)
                 }
             case .color:
@@ -134,46 +137,42 @@ private struct ClipboardItemRow: View {
                     Color.clear
                 }
             default:
-                Image(systemName: iconName)
+                Image(systemName: item.systemImageName)
                     .foregroundStyle(DTColor.accent)
             }
         }
-        .frame(width: 22, height: 22)
+        .frame(width: DTSize.previewSmall, height: DTSize.previewSmall)
         .clipShape(RoundedRectangle(cornerRadius: DTRadius.xs, style: .continuous))
-    }
-
-    private var iconName: String {
-        switch item.type {
-        case .plainText: return "text.quote"
-        case .url: return "link"
-        case .filePath: return "doc"
-        case .image: return "photo"
-        case .color: return "paintpalette"
-        }
+        .overlay(
+            RoundedRectangle(cornerRadius: DTRadius.xs, style: .continuous)
+                .strokeBorder(DTColor.border, lineWidth: 0.5)
+        )
     }
 
     @MainActor
     private func loadThumbnail() async {
-        guard item.type == .image, let image = item.nsImage else {
+        if let url = item.fileURL,
+           item.type == .image || item.type == .video || item.type == .filePath {
+            thumbnail = await ThumbnailGenerator.shared.thumbnailAsync(
+                for: url,
+                edge: DTSize.previewSmall
+            )
+            return
+        }
+        guard item.type == .image else {
             thumbnail = nil
             return
         }
-        let edge: CGFloat = 44
-        let result = await Task.detached(priority: .userInitiated) {
-            resized(image, edge: edge)
-        }.value
-        thumbnail = result
+        thumbnail = item.nsImage
     }
 
-    private func resized(_ image: NSImage, edge: CGFloat) -> NSImage? {
-        let size = image.size
-        guard size.width > 0, size.height > 0 else { return nil }
-        let scale = edge / max(size.width, size.height)
-        let target = NSSize(width: size.width * scale, height: size.height * scale)
-        let out = NSImage(size: target)
-        out.lockFocus()
-        image.draw(in: NSRect(origin: .zero, size: target), from: .zero, operation: .copy, fraction: 1)
-        out.unlockFocus()
-        return out
+    private var itemProvider: NSItemProvider {
+        if let url = item.fileURL, let provider = NSItemProvider(contentsOf: url) {
+            return provider
+        }
+        if let image = item.nsImage {
+            return NSItemProvider(object: image)
+        }
+        return NSItemProvider(object: item.content as NSString)
     }
 }

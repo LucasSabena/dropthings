@@ -29,8 +29,8 @@ public struct ModuleStatusPill: View {
         case .running: return DTColor.success.opacity(0.15)
         case .off: return DTColor.surfaceRaised
         case .starting: return DTColor.accent.opacity(0.15)
-        case .needsPermission: return DTColor.warning.opacity(0.18)
-        case .unavailable, .degraded: return DTColor.textSecondary.opacity(0.18)
+        case .needsPermission, .degraded: return DTColor.warning.opacity(0.18)
+        case .unavailable: return DTColor.textSecondary.opacity(0.18)
         case .failed: return DTColor.danger.opacity(0.18)
         }
     }
@@ -40,8 +40,8 @@ public struct ModuleStatusPill: View {
         case .running: return DTColor.success
         case .off: return DTColor.textSecondary
         case .starting: return DTColor.accent
-        case .needsPermission: return DTColor.warning
-        case .unavailable, .degraded: return DTColor.textSecondary
+        case .needsPermission, .degraded: return DTColor.warning
+        case .unavailable: return DTColor.textSecondary
         case .failed: return DTColor.danger
         }
     }

@@ -75,8 +75,11 @@ public final class SettingsStore: @unchecked Sendable {
         self.migrations = migrations.sorted { $0.fromVersion < $1.fromVersion }
     }
 
-    /// `UserDefaults`-backed store. The suite name should match the app's
-    /// bundle identifier.
+    /// `UserDefaults`-backed store. When the requested domain is the app's own
+    /// bundle identifier, use `.standard`: recent macOS releases reject
+    /// creating a named suite for the process' own domain and settings silently
+    /// stop persisting. A distinct suite name still creates a real app-group or
+    /// shared suite as expected.
     public static func userDefaults(suiteName: String, migrations: [SettingsMigration] = []) -> SettingsStore {
         let backend = UserDefaultsBackend(suiteName: suiteName)
         return SettingsStore(backend: backend, migrations: migrations)
@@ -177,7 +180,9 @@ final class UserDefaultsBackend: SettingsStoreBackend, @unchecked Sendable {
     private let defaults: UserDefaults
 
     init(suiteName: String) {
-        if let suite = UserDefaults(suiteName: suiteName) {
+        if suiteName == Bundle.main.bundleIdentifier {
+            self.defaults = .standard
+        } else if let suite = UserDefaults(suiteName: suiteName) {
             self.defaults = suite
         } else {
             self.defaults = .standard

@@ -6,12 +6,11 @@ import DropThingsPlatform
 
 struct KeepAwakeSettingsView: View {
     @ObservedObject var module: KeepAwakeModule
-    @State private var didCopyCheckCommand = false
 
     var body: some View {
         SettingsSection(
             title: "Keep Awake",
-            caption: "While on, your Mac stays awake as if you were using it. macOS resumes its normal sleep schedule when you turn it off."
+            caption: "Prevent idle sleep indefinitely or for a fixed time. No system permission is required."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
                 Toggle(isOn: Binding(
@@ -31,6 +30,35 @@ struct KeepAwakeSettingsView: View {
                     }
                 }
 
+                HStack {
+                    Text("Duration")
+                        .font(DTTypography.body)
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { module.keepAwakeSettings.durationMinutes },
+                        set: { module.setDurationMinutes($0) }
+                    )) {
+                        Text("Until turned off").tag(Int?.none)
+                        Text("15 minutes").tag(Int?.some(15))
+                        Text("30 minutes").tag(Int?.some(30))
+                        Text("1 hour").tag(Int?.some(60))
+                        Text("2 hours").tag(Int?.some(120))
+                        Text("4 hours").tag(Int?.some(240))
+                        Text("8 hours").tag(Int?.some(480))
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+
+                Toggle("Also keep the display awake", isOn: Binding(
+                    get: { module.keepAwakeSettings.keepDisplayAwake },
+                    set: { module.setKeepDisplayAwake($0) }
+                ))
+
+                Text("Leaving this off saves power: the Mac stays awake while the display may dim normally.")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+
                 if module.keepAwakeSettings.enabled {
                     if module.isAssertionActive {
                         HStack(spacing: DTSpace.xs) {
@@ -39,8 +67,8 @@ struct KeepAwakeSettingsView: View {
                             Text("Power assertion active")
                                 .font(DTTypography.caption.weight(.semibold))
                                 .foregroundStyle(DTColor.success)
-                            if !module.activeAssertionIDs.isEmpty {
-                                Text("IDs \(module.activeAssertionIDs.map(String.init).joined(separator: ", "))")
+                            if let remaining = module.remainingSeconds {
+                                Text("· \(remainingText(remaining)) remaining")
                                     .font(DTTypography.caption.monospacedDigit())
                                     .foregroundStyle(DTColor.textSecondary)
                             }
@@ -51,37 +79,17 @@ struct KeepAwakeSettingsView: View {
                             message: module.lastError ?? "DropThings is enabled, but macOS has not confirmed an active power assertion."
                         )
                     }
-                    verifyRow
                 }
             }
         }
     }
 
-    private var verifyRow: some View {
-        VStack(alignment: .leading, spacing: DTSpace.xs) {
-            Text("Verify the system registered the assertion:")
-                .font(DTTypography.caption)
-                .foregroundStyle(DTColor.textSecondary)
-            HStack(spacing: DTSpace.sm) {
-                Button {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString("pmset -g assertions", forType: .string)
-                    didCopyCheckCommand = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        didCopyCheckCommand = false
-                    }
-                } label: {
-                    Label(
-                        didCopyCheckCommand ? "Copied" : "Copy pmset command",
-                        systemImage: didCopyCheckCommand ? "checkmark" : "doc.on.doc"
-                    )
-                }
-                .controlSize(.small)
-                Text("Paste into Terminal to see which assertions DropThings holds.")
-                    .font(DTTypography.caption)
-                    .foregroundStyle(DTColor.textSecondary)
-            }
-        }
+    private func remainingText(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded(.up)))
+        let hours = total / 3_600
+        let minutes = (total % 3_600) / 60
+        let secs = total % 60
+        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, secs) }
+        return String(format: "%d:%02d", minutes, secs)
     }
 }

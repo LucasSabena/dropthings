@@ -9,7 +9,7 @@ import os
 /// Snaps the frontmost window to halves, quarters, or fullscreen using a
 /// global hotkey. Uses Accessibility APIs to read and write the focused
 /// window's frame.
-public final class WindowSnapModule: DropThingsModule, ObservableObject {
+public final class WindowSnapModule: DropThingsModule {
     public let id = ModuleID.windowSnap
     public let name = "WindowSnap"
     public let summary = "Snap the frontmost window with keyboard shortcuts."
@@ -24,6 +24,7 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
     private let snapper: WindowSnapperProtocol
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "window-snap")
     private var hotkeys: [GlobalHotkey] = []
+    private var hotkeyHealth = HotkeyRegistrationHealth()
 
     public init(
         settings: SettingsStore,
@@ -59,7 +60,8 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
     // MARK: - Public actions
 
     public func snap(_ action: WindowSnapAction) {
-        guard state == .running else { return }
+        guard state.isStarted,
+              permissions.state(for: .accessibility) == .granted else { return }
         let result = snapper.snap(action)
         switch result {
         case .success:
@@ -72,6 +74,20 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
             if error == .accessibilityDenied {
                 state = .needsPermission(missing: [.accessibility])
             }
+        }
+    }
+
+    public var commands: [CommandDescriptor] {
+        WindowSnapAction.allCases.map { action in
+            CommandDescriptor(
+                id: "window-snap.\(action.rawValue)",
+                title: "Snap Window: \(action.displayName)",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.snap(action) }
+                }
+            )
         }
     }
 
@@ -103,6 +119,7 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
     private func registerHotkeys() {
         guard hotkeys.isEmpty else { return }
         var registered: [GlobalHotkey] = []
+        var failureReason: String?
         for action in WindowSnapAction.allCases {
             guard let definition = settings.hotkey(for: action) else { continue }
             let hotkey = GlobalHotkey(definition: definition) { [weak self] in
@@ -115,17 +132,22 @@ public final class WindowSnapModule: DropThingsModule, ObservableObject {
                 let display = definition.displayString
                 switch error {
                 case .installHandlerFailed(let status):
-                    state = .degraded(reason: "Could not install hotkey handler for \(display) (\(status)).")
+                    failureReason = "Could not install hotkey handler for \(display) (\(status))."
                 case .registerFailed(let status):
-                    state = .degraded(reason: "\(display) is already taken (Carbon error \(status)). Pick a different shortcut.")
+                    failureReason = "\(display) is already taken (Carbon error \(status)). Pick a different shortcut. Other Window Snap shortcuts remain available."
                 }
                 logger.warning("Could not register \(display): \(error)")
             } catch {
-                state = .degraded(reason: "Hotkey registration failed: \(error)")
+                failureReason = "Hotkey registration failed: \(error)"
                 logger.warning("Hotkey registration failed: \(error)")
             }
         }
         self.hotkeys = registered
+        if let failureReason {
+            state = hotkeyHealth.failed(reason: failureReason)
+        } else {
+            state = hotkeyHealth.recovered(current: state)
+        }
     }
 
     private func unregisterHotkeys() {

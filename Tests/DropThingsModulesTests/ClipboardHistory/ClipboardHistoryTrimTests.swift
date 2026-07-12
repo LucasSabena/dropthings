@@ -95,4 +95,41 @@ final class ClipboardHistoryTrimTests: XCTestCase {
         XCTAssertEqual(module.items.count, 2)
         XCTAssertEqual(module.items.map(\.content), ["a", "b"])
     }
+
+    func testRetentionExpiresOnlyUnpinnedItems() {
+        let now = Date()
+        module.setRetentionDays(7)
+        module.items = [
+            ClipboardItem(timestamp: now.addingTimeInterval(-8 * 86_400), type: .plainText, content: "expired"),
+            ClipboardItem(timestamp: now.addingTimeInterval(-8 * 86_400), type: .plainText, content: "pinned", isPinned: true),
+            ClipboardItem(timestamp: now.addingTimeInterval(-6 * 86_400), type: .plainText, content: "recent")
+        ]
+
+        module.trimToMax(now: now)
+
+        XCTAssertEqual(Set(module.items.map(\.content)), ["pinned", "recent"])
+    }
+
+    func testClipboardDoesNotRequireAccessibilityAndCopiesByDefault() {
+        XCTAssertTrue(module.requiredPermissions.isEmpty)
+        XCTAssertFalse(module.settings.pasteOnEnter)
+    }
+
+    func testPinnedItemsAreRestoredWhenModuleIsCreated() {
+        let pinned = ClipboardItem(
+            type: .plainText,
+            content: "persistent",
+            isPinned: true
+        )
+        store.saveClipboardHistorySettings(
+            ClipboardHistorySettings(pinnedItems: [pinned])
+        )
+
+        let restored = ClipboardHistoryModule(
+            settings: store,
+            permissions: PermissionCenter()
+        )
+
+        XCTAssertEqual(restored.items, [pinned])
+    }
 }

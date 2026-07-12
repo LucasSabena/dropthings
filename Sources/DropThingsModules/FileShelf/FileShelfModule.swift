@@ -9,7 +9,7 @@ import os
 /// is the first real module built on top of Phase 0 — it owns an `NSPanel`,
 /// receives drops from AppKit, parses them with `PasteboardItemReader`, and
 /// keeps an in-memory list with dedup and a hard cap.
-public final class FileShelfModule: DropThingsModule, ObservableObject {
+public final class FileShelfModule: DropThingsModule {
     public let id = ModuleID.fileShelf
     public let name = "File Shelf"
     public let summary = "Drop files here. Pick them up in any app."
@@ -49,6 +49,20 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         )
     }
 
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "file-shelf.toggle",
+                title: isPanelVisible ? "Hide File Shelf" : "Show File Shelf",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.togglePanel() }
+                }
+            )
+        ]
+    }
+
     /// The collection the user is currently looking at.
     public var activeCollection: ShelfCollection? {
         guard let id = activeCollectionID else {
@@ -64,6 +78,11 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         guard let id = activeCollectionID ?? collections.first?.id else { return }
         guard let index = collections.firstIndex(where: { $0.id == id }) else { return }
         transform(&collections[index].items)
+        let remainingIDs = Set(collections[index].items.map(\.id))
+        selectedItemIDs.formIntersection(remainingIDs)
+        if let selectionAnchor, !remainingIDs.contains(selectionAnchor) {
+            self.selectionAnchor = nil
+        }
     }
 
     private let settingsStore: SettingsStore
@@ -74,6 +93,8 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     private var panel: ShelfPanel?
     private var contentView: ShelfContentView?
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
+    private var persistenceHealth = RecoverableFailureHealth()
     private var mouseMonitor: MousePositionMonitor?
     private var shakeDetector = ShakeDetector()
     private var flickDetector = FlickDetector()
@@ -129,24 +150,30 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
 
     private func registerHotkey() {
         guard hotkey == nil else { return }
-        guard let definition = settings.hotkey else { return }
+        guard let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.handleHotkeyFire()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
             logger.warning("Could not register \(display): \(error)")
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use the menu bar instead.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use the menu bar instead."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the menu bar.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut or use the menu bar."
             }
+            state = hotkeyHealth.failed(reason: reason)
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }
@@ -242,7 +269,7 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
     /// stop it when neither is, so we never poll the mouse for nothing.
     private func reconcileGestureMonitor() {
         let anyOn = settings.shakeToShow || settings.flickToShow
-        if anyOn && mouseMonitor == nil && state == .running {
+        if anyOn && mouseMonitor == nil && state.isStarted {
             startGestureDetection()
         } else if !anyOn {
             stopGestureDetection()
@@ -644,12 +671,12 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         }
         do {
             try persistence.saveCollections(toSave)
-            if case .degraded = state {
-                state = .running
-            }
+            state = persistenceHealth.recovered(current: state)
         } catch {
             logger.error("Could not save pinned items: \(error)")
-            state = .degraded(reason: "Could not save pinned items to disk: \(error.localizedDescription). Pinned items will be lost when the app quits.")
+            state = persistenceHealth.failed(
+                reason: "Could not save pinned items to disk: \(error.localizedDescription). Pinned items will be lost when the app quits."
+            )
         }
     }
 
@@ -675,24 +702,10 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         logger.info("Copied path \(url.path) to pasteboard")
     }
 
-    /// Build an `NSItemProvider` for a shelf item so the row can act as a
-    /// drag source. Returns one provider; macOS advertises the right
-    /// pasteboard types based on the wrapped object.
-    public func dragItemProvider(for item: FileShelfItem) -> NSItemProvider {
-        switch item.kind {
-        case .file(let url), .folder(let url):
-            return NSItemProvider(object: url as NSURL)
-        case .text(let text):
-            return NSItemProvider(object: text as NSString)
-        }
-    }
-
-    /// Provider for a drag that starts on `item`. When `item` is part of
-    /// the current selection, the drag carries *all* selected items so the
-    /// user can drop a whole batch into another app at once. When it is
-    /// not selected, the drag carries just that single item (and the
-    /// selection is narrowed to it, matching Finder behavior).
-    public func dragItemProviderForDrag(from item: FileShelfItem) -> NSItemProvider {
+    /// Items for a drag that starts on `item`. When it is part of the current
+    /// selection the drag carries the complete selection. Starting from an
+    /// unselected item narrows the selection to that item, matching Finder.
+    public func itemsForDrag(startingAt item: FileShelfItem) -> [FileShelfItem] {
         let dragging: [FileShelfItem]
         if selectedItemIDs.contains(item.id) {
             dragging = selectedItems
@@ -702,37 +715,30 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
             selectionAnchor = item.id
             dragging = [item]
         }
-        return Self.itemProvider(for: dragging)
+        return dragging
     }
 
-    /// Builds a single `NSItemProvider` that advertises every item. For
-    /// a single item it wraps that item directly; for many it uses
-    /// `NSItemProvider(loadingItem:)`-style multi-attachment via a
-    /// `suggestedName` and registered objects. URLs and strings both
-    /// conform to `NSItemProviderWriting`, so we register one provider
-    /// per item and rely on the system pasteboard to multiplex them at
-    /// drag time through the row's `.onDrag`.
-    nonisolated static func itemProvider(for items: [FileShelfItem]) -> NSItemProvider {
-        guard let first = items.first else { return NSItemProvider() }
-        if items.count == 1 {
-            switch first.kind {
+    /// Converts the selected shelf values into one native pasteboard writer
+    /// per value. `NativeMultiItemDragSource` turns these into distinct
+    /// `NSDraggingItem`s so Finder and other destinations receive the batch.
+    public func nativeDragItems(startingAt item: FileShelfItem) -> [NativeDragItem] {
+        itemsForDrag(startingAt: item).map { draggedItem in
+            switch draggedItem.kind {
             case .file(let url), .folder(let url):
-                return NSItemProvider(object: url as NSURL)
+                return NativeDragItem(
+                    pasteboardWriter: url as NSURL,
+                    previewImage: NSWorkspace.shared.icon(forFile: url.path)
+                )
             case .text(let text):
-                return NSItemProvider(object: text as NSString)
+                return NativeDragItem(
+                    pasteboardWriter: text as NSString,
+                    previewImage: NSImage(
+                        systemSymbolName: "text.alignleft",
+                        accessibilityDescription: "Text"
+                    )
+                )
             }
         }
-        // Multi-item: attach every writable object to the same provider.
-        let provider = NSItemProvider()
-        for item in items {
-            switch item.kind {
-            case .file(let url), .folder(let url):
-                provider.registerObject(url as NSURL, visibility: .all)
-            case .text(let text):
-                provider.registerObject(text as NSString, visibility: .all)
-            }
-        }
-        return provider
     }
 
     /// Called from `ShelfContentView.performDragOperation`. Reads rich
@@ -809,10 +815,10 @@ public final class FileShelfModule: DropThingsModule, ObservableObject {
         maxItems: Int
     ) -> [FileShelfItem] {
         var result = items
-        let existing = Set(result.map(\.id))
+        var existing = Set(result.map(\.id))
         for kind in kinds {
             let candidate = FileShelfItem(kind: kind)
-            guard !existing.contains(candidate.id) else { continue }
+            guard existing.insert(candidate.id).inserted else { continue }
             result.append(candidate)
         }
         return Self.trimmed(result, maxItems: maxItems)

@@ -2,6 +2,7 @@ import XCTest
 @testable import DropThingsModules
 @testable import DropThingsCore
 import DropThingsPlatform
+import Carbon.HIToolbox
 
 final class SnippetsSettingsTests: XCTestCase {
     func testDefaults() {
@@ -52,6 +53,26 @@ final class SnippetsSettingsTests: XCTestCase {
         store.saveSnippetsSettings(original)
         let loaded = store.loadSnippetsSettings()
         XCTAssertEqual(loaded, original)
+    }
+
+    @MainActor
+    func testLegacyDefaultMigratesAwayFromWindowSnapConflict() {
+        let backend = InMemorySettingsBackend()
+        let store = SettingsStore(backend: backend)
+        let legacy = SnippetsSettings(
+            hotkeyEnabled: true,
+            hotkey: GlobalHotkey.Definition(
+                keyCode: UInt32(kVK_ANSI_S),
+                modifiers: UInt32(controlKey | optionKey),
+                id: 401
+            ),
+            snippets: []
+        )
+
+        store.saveSnippetsSettings(legacy)
+
+        XCTAssertEqual(store.loadSnippetsSettings().hotkey, GlobalHotkey.defaultSnippetsHotkey)
+        XCTAssertEqual(GlobalHotkey.defaultSnippetsHotkey?.displayString, "⌃⌥N")
     }
 
     func testSnippetNormalization() {

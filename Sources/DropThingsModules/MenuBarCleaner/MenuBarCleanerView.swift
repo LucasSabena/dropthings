@@ -4,7 +4,6 @@ import DropThingsDesignSystem
 
 struct MenuBarCleanerSettingsView: View {
     @ObservedObject var module: MenuBarCleanerModule
-    @State private var newBundleID: String = ""
     @State private var newDividerName: String = ""
 
     var body: some View {
@@ -14,7 +13,6 @@ struct MenuBarCleanerSettingsView: View {
             quickActionsSection
             profilesSection
             dividersSection
-            alwaysVisibleSection
         }
     }
 
@@ -92,6 +90,7 @@ struct MenuBarCleanerSettingsView: View {
                               systemImage: module.isCollapsed ? "chevron.right.circle" : "chevron.left.circle")
                     }
                     .controlSize(.regular)
+                    .disabled(!module.state.isStarted)
 
                     Button {
                         module.showOverflowPanel()
@@ -99,6 +98,7 @@ struct MenuBarCleanerSettingsView: View {
                         Label("Open drawer", systemImage: "rectangle.portrait.bottomhalf.inset.filled")
                     }
                     .controlSize(.regular)
+                    .disabled(!module.state.isStarted)
 
                     Button {
                         module.safeReset()
@@ -182,7 +182,7 @@ struct MenuBarCleanerSettingsView: View {
     private var dividersSection: some View {
         SettingsSection(
             title: "Dividers",
-            caption: "Add named separators to group icons. Overflow dividers hide everything to their left when collapsed; visual dividers only separate groups."
+            caption: "The main divider marks the overflow edge. Optional separators can label additional visual groups without changing hide behavior."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.sm) {
                 ForEach(module.settings.dividers) { divider in
@@ -214,66 +214,13 @@ struct MenuBarCleanerSettingsView: View {
                 HStack {
                     TextField("Divider name", text: $newDividerName)
                         .textFieldStyle(.roundedBorder)
-                    Button("Add visual") {
+                    Button("Add separator") {
                         guard !newDividerName.isEmpty else { return }
-                        module.addDivider(name: newDividerName, isOverflow: false)
+                        module.addDivider(name: newDividerName)
                         newDividerName = ""
                     }
                     .controlSize(.small)
                     .disabled(newDividerName.isEmpty)
-                    Button("Add overflow") {
-                        guard !newDividerName.isEmpty else { return }
-                        module.addDivider(name: newDividerName, isOverflow: true)
-                        newDividerName = ""
-                    }
-                    .controlSize(.small)
-                    .disabled(newDividerName.isEmpty)
-                }
-            }
-        }
-    }
-
-    // MARK: - Always visible
-
-    private var alwaysVisibleSection: some View {
-        SettingsSection(
-            title: "Always visible",
-            caption: "Bundle IDs of status items that should stay visible even when collapsed. This is a preference for future reordering; the divider model cannot force individual icons today."
-        ) {
-            VStack(alignment: .leading, spacing: DTSpace.xs) {
-                if module.settings.alwaysVisibleBundleIDs.isEmpty {
-                    Text("No bundle IDs pinned yet.")
-                        .font(DTTypography.caption)
-                        .foregroundStyle(DTColor.textSecondary)
-                } else {
-                    ForEach(module.settings.alwaysVisibleBundleIDs, id: \.self) { bundleID in
-                        HStack {
-                            Text(bundleID)
-                                .font(DTTypography.caption.monospaced())
-                                .lineLimit(1)
-                            Spacer()
-                            Button {
-                                module.toggleAlwaysVisible(bundleID)
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(DTTypography.badgeButton)
-                            }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
-                        }
-                    }
-                }
-
-                HStack {
-                    TextField("Bundle ID", text: $newBundleID)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Add") {
-                        guard !newBundleID.isEmpty else { return }
-                        module.toggleAlwaysVisible(newBundleID)
-                        newBundleID = ""
-                    }
-                    .controlSize(.small)
-                    .disabled(newBundleID.isEmpty)
                 }
             }
         }

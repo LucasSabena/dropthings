@@ -6,10 +6,10 @@ import DropThingsDesignSystem
 import DropThingsPlatform
 import os
 
-/// Keeps a rolling, searchable history of copied text and files. Pinned items
-/// survive restarts; unpinned items live only in memory. Ignores transient
-/// pasteboard data and content from excluded bundle IDs.
-public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
+/// Keeps a rolling, searchable, on-device history of copied content. The
+/// history survives app restarts and bundle replacement, while age, count and
+/// image-storage limits keep disk use bounded.
+public final class ClipboardHistoryModule: DropThingsModule {
     public let id = ModuleID.clipboardHistory
     public let name = "Clipboard History"
     public let summary = "Searchable history of copied text and files."
@@ -18,18 +18,35 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     @Published public private(set) var state: ModuleState = .off
     @Published public private(set) var settings: ClipboardHistorySettings
     @Published public internal(set) var items: [ClipboardItem] = []
+    @Published public private(set) var storageBytes: Int64 = 0
+    @Published public private(set) var omittedImageCount: Int = 0
+    @Published public private(set) var persistenceError: String?
 
     private let settingsStore: SettingsStore
-    internal let permissions: PermissionCenter
     private let monitor: ClipboardMonitor
+    private let persistence: any ClipboardHistoryPersisting
     private var hotkey: GlobalHotkey?
+    private var hotkeyHealth = HotkeyRegistrationHealth()
     private var panel: ClipboardHistoryPanelController?
+    private var persistenceTask: Task<Void, Never>?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "clipboard-history")
 
-    public init(settings: SettingsStore, permissions: PermissionCenter) {
+    public convenience init(settings: SettingsStore, permissions: PermissionCenter) {
+        self.init(
+            settings: settings,
+            persistence: ClipboardHistoryStore.live()
+        )
+    }
+
+    internal init(
+        settings: SettingsStore,
+        persistence: any ClipboardHistoryPersisting
+    ) {
         self.settingsStore = settings
-        self.permissions = permissions
-        self.settings = settings.loadClipboardHistorySettings()
+        self.persistence = persistence
+        let loadedSettings = settings.loadClipboardHistorySettings()
+        self.settings = loadedSettings
+        self.items = loadedSettings.pinnedItems
         let monitor = ClipboardMonitor()
         self.monitor = monitor
         let panel = ClipboardHistoryPanelController(module: self)
@@ -42,13 +59,17 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     }
 
     public func start() async throws {
+        await restorePersistentHistory()
         registerHotkey()
-        monitor.start()
-        state = .running
+        monitor.start(interval: 0.25)
+        if case .degraded = state {} else { state = .running }
         logger.info("Clipboard History started")
     }
 
     public func stop() async {
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        await persist(items)
         unregisterHotkey()
         monitor.stop()
         panel?.hide()
@@ -67,6 +88,29 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
                 }
             }
         )
+    }
+
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "clipboard-history.open",
+                title: "Open Clipboard History",
+                subtitle: name,
+                iconName: iconName,
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.showHistoryPanel() }
+                }
+            ),
+            CommandDescriptor(
+                id: "clipboard-history.incognito",
+                title: settings.incognito ? "Resume Clipboard Recording" : "Pause Clipboard Recording",
+                subtitle: name,
+                iconName: settings.incognito ? "eye" : "eye.slash",
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.toggleIncognito() }
+                }
+            )
+        ]
     }
 
     // MARK: - Public actions
@@ -118,6 +162,18 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         applySettings(new)
     }
 
+    public func setRetentionDays(_ days: Int) {
+        var new = settings
+        new.retentionDays = days
+        applySettings(new)
+    }
+
+    public func setMaxStorageMB(_ megabytes: Int) {
+        var new = settings
+        new.maxStorageMB = megabytes
+        applySettings(new)
+    }
+
     // MARK: - Paste / copy actions
 
     /// Copy an item to the pasteboard without closing the panel. Bound to `C`.
@@ -137,11 +193,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         guard settings.pasteOnEnter else {
             return .copiedOnly
         }
-        guard KeystrokeSynthesizer.isAccessibilityGranted() else {
-            // Prompt once; the panel/UI can re-check state afterwards.
-            permissions.requestPermission(.accessibility)
-            return .needsAccessibility
-        }
+        guard KeystrokeSynthesizer.isAccessibilityGranted() else { return .needsAccessibility }
         panel?.hide()
         panel?.reactivatePreviousApp()
         // Small delay so the target app is frontmost before we post the key.
@@ -184,10 +236,13 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
                 pb.setString(item.content, forType: .string)
             }
         case .filePath:
-            let url = URL(fileURLWithPath: item.content)
-            pb.writeObjects([url as NSPasteboardWriting])
+            if let url = item.fileURL { pb.writeObjects([url as NSPasteboardWriting]) }
+        case .folder, .video, .audio:
+            if let url = item.fileURL { pb.writeObjects([url as NSPasteboardWriting]) }
         case .image:
-            if let image = item.nsImage {
+            if let url = item.fileURL {
+                pb.writeObjects([url as NSPasteboardWriting])
+            } else if let image = item.nsImage {
                 pb.writeObjects([image as NSPasteboardWriting])
             }
         case .color:
@@ -225,6 +280,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
 
     public func clearUnpinned() {
         items.removeAll { !$0.isPinned }
+        schedulePersistence()
     }
 
     // MARK: - SwiftUI surface
@@ -236,7 +292,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
     // MARK: - Pasteboard handling
 
     private func handleClipboardItem(_ monitorItem: ClipboardMonitor.Item) {
-        guard state == .running else { return }
+        guard state.isStarted else { return }
         guard !settings.incognito else { return }
         guard !monitorItem.isTransient, !monitorItem.isConcealed else {
             logger.notice("Ignored transient/concealed pasteboard change")
@@ -252,13 +308,31 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         for candidate in candidates {
             add(candidate)
         }
+        schedulePersistence()
     }
 
     private func buildItems(from monitorItem: ClipboardMonitor.Item) -> [ClipboardItem] {
         var results: [ClipboardItem] = []
         let source = monitorItem.sourceBundleID
 
-        // Images take priority: a screenshot copy has no useful string form.
+        // Real URLs take priority over co-published TIFF icons. This preserves
+        // folders, videos, and image files as draggable/openable file entries.
+        if !monitorItem.fileURLs.isEmpty {
+            return monitorItem.fileURLs.map { url in
+                let info = FileContentInfo.inspect(url)
+                let type: ClipboardItemType
+                switch info.kind {
+                case .folder: type = .folder
+                case .image: type = .image
+                case .video: type = .video
+                case .audio: type = .audio
+                default: type = .filePath
+                }
+                return ClipboardItem(type: type, content: url.path, sourceBundleID: source)
+            }
+        }
+
+        // A raw screenshot/image has no useful string form.
         if let data = monitorItem.imageData {
             results.append(ClipboardItem(type: .image, content: "Image", imageData: data, sourceBundleID: source))
             return results
@@ -277,10 +351,6 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
             } else {
                 results.append(ClipboardItem(type: .plainText, content: trimmed, sourceBundleID: source))
             }
-        }
-
-        for url in monitorItem.fileURLs {
-            results.append(ClipboardItem(type: .filePath, content: url.path, sourceBundleID: source))
         }
 
         return results
@@ -331,14 +401,16 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         items.insert(item, at: firstUnpinned)
     }
 
-    func trimToMax() {
+    func trimToMax(now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-Double(settings.retentionDays) * 86_400)
+        items.removeAll { !$0.isPinned && !$0.isFavorite && $0.timestamp < cutoff }
         while items.count > settings.maxHistory {
-            guard let last = items.last, !last.isPinned, !last.isFavorite else {
+            guard let evictionIndex = items.lastIndex(where: { !$0.isPinned && !$0.isFavorite }) else {
                 // All remaining overflow items are pinned/favorite; stop evicting
                 // rather than silently deleting protected items or looping forever.
                 break
             }
-            items.removeLast()
+            items.remove(at: evictionIndex)
         }
     }
 
@@ -348,6 +420,7 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
         new.pinnedItems = pinned
         applySettings(new)
         trimToMax()
+        schedulePersistence()
     }
 
     // MARK: - Settings
@@ -357,6 +430,8 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
             hotkeyEnabled: new.hotkeyEnabled,
             hotkey: new.hotkey,
             maxHistory: new.maxHistory,
+            retentionDays: new.retentionDays,
+            maxStorageMB: new.maxStorageMB,
             pinnedItems: new.pinnedItems,
             excludedBundleIDs: new.excludedBundleIDs,
             incognito: new.incognito,
@@ -375,30 +450,87 @@ public final class ClipboardHistoryModule: DropThingsModule, ObservableObject {
             items.insert(pinned, at: 0)
         }
         trimToMax()
+        schedulePersistence()
+    }
+
+    // MARK: - Persistent history
+
+    private func restorePersistentHistory() async {
+        do {
+            let restored = try await persistence.load()
+            var byID = Dictionary(uniqueKeysWithValues: restored.map { ($0.id, $0) })
+            for legacyPinned in items where byID[legacyPinned.id] == nil {
+                byID[legacyPinned.id] = legacyPinned
+            }
+            items = byID.values.sorted(by: Self.displayPriority)
+            trimToMax()
+            storageBytes = await persistence.storageBytes()
+            persistenceError = nil
+            await persist(items)
+        } catch {
+            persistenceError = "Clipboard history could not be loaded: \(error.localizedDescription)"
+            state = .degraded(reason: persistenceError!)
+            logger.error("Persistent history load failed: \(error)")
+        }
+    }
+
+    private func schedulePersistence() {
+        persistenceTask?.cancel()
+        let snapshot = items
+        persistenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self else { return }
+            await self.persist(snapshot)
+        }
+    }
+
+    private func persist(_ snapshot: [ClipboardItem]) async {
+        let maxBytes = Int64(settings.maxStorageMB) * 1_024 * 1_024
+        do {
+            let result = try await persistence.save(snapshot, maxStorageBytes: maxBytes)
+            storageBytes = result.storageBytes
+            omittedImageCount = result.omittedImageCount
+            persistenceError = nil
+        } catch {
+            persistenceError = "Clipboard history could not be saved: \(error.localizedDescription)"
+            logger.error("Persistent history save failed: \(error)")
+        }
+    }
+
+    private static func displayPriority(_ lhs: ClipboardItem, _ rhs: ClipboardItem) -> Bool {
+        if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+        if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
+        return lhs.timestamp > rhs.timestamp
     }
 
     // MARK: - Hotkey
 
     private func registerHotkey() {
         guard hotkey == nil else { return }
-        guard settings.hotkeyEnabled, let definition = settings.hotkey else { return }
+        guard settings.hotkeyEnabled, let definition = settings.hotkey else {
+            state = hotkeyHealth.recovered(current: state)
+            return
+        }
         let hotkey = GlobalHotkey(definition: definition) { [weak self] in
             self?.showHistoryPanel()
         }
         do {
             try hotkey.register()
             self.hotkey = hotkey
+            state = hotkeyHealth.recovered(current: state)
         } catch let error as GlobalHotkey.RegistrationError {
             let display = definition.displayString
+            let reason: String
             switch error {
             case .installHandlerFailed(let status):
-                state = .degraded(reason: "Hotkey installer failed (\(status)) for \(display). Use the Open history button.")
+                reason = "Hotkey installer failed (\(status)) for \(display). Use the Open history button."
             case .registerFailed(let status):
-                state = .degraded(reason: "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut.")
+                reason = "\(display) is already taken by another app (Carbon error \(status)). Pick a different shortcut."
             }
+            state = hotkeyHealth.failed(reason: reason)
             logger.warning("Could not register \(display): \(error)")
         } catch {
-            state = .degraded(reason: "Hotkey registration failed: \(error)")
+            state = hotkeyHealth.failed(reason: "Hotkey registration failed: \(error)")
             logger.warning("Hotkey registration failed: \(error)")
         }
     }

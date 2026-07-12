@@ -81,8 +81,9 @@ public final class ClipboardMonitor {
         var imageData: Data?
         var colorHex: String?
 
-        // Image first: if the pasteboard carries image data (TIFF/PNG), capture
-        // it and prefer it over any co-text. A copied screenshot has no string.
+        // Capture image data, but prefer real file URLs below. Finder often
+        // publishes both a file URL and an icon/preview TIFF; retaining the URL
+        // preserves video playback, folders, Quick Look, and drag-out.
         if let tiff = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
             imageData = tiff
         }
@@ -95,11 +96,9 @@ public final class ClipboardMonitor {
         }
 
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
-            // A copied image file shows up as a file URL; treat it as image
-            // data only when there is no separate image payload and no text,
-            // so a screenshot copied as a file still becomes a filePath item.
-            if imageData == nil {
-                fileURLs = urls
+            fileURLs = urls.filter(\.isFileURL)
+            if !fileURLs.isEmpty {
+                imageData = nil
             }
         }
 

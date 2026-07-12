@@ -8,7 +8,7 @@ import os
 /// Hidden-Bar-style overflow for menu bar items. DropThings owns a divider
 /// and a toggle item; the user Command-drags icons to the left of the divider
 /// once, then Collapse expands the divider so that zone moves off-screen.
-public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
+public final class MenuBarCleanerModule: DropThingsModule {
     public let id = ModuleID.menuBarCleaner
     public let name = "Menu Bar Cleaner"
     public let summary = "Collapse low-priority menu bar icons behind one control."
@@ -38,6 +38,20 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         )
     }
 
+    public var commands: [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                id: "menu-bar-cleaner.toggle",
+                title: isCollapsed ? "Reveal Menu Bar Icons" : "Collapse Menu Bar Icons",
+                subtitle: name,
+                iconName: isCollapsed ? "eye" : "eye.slash",
+                action: { [weak self] in
+                    Task { @MainActor [weak self] in self?.toggleCollapsed() }
+                }
+            )
+        ]
+    }
+
     private let settingsStore: SettingsStore
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "menu-bar-cleaner")
 
@@ -49,8 +63,11 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     private var hoverView: HoverTrackingView?
     private var screenObserver: NSObjectProtocol?
     private var hoverTimer: Timer?
+    private var hoverExitMonitor: Timer?
     private var wasHoverRevealed: Bool = false
     private var overflowPanel: MenuBarCleanerOverflowPanelController?
+    private var startupTask: Task<Void, Never>?
+    private var layoutFailureReason: String?
 
     public init(settings: SettingsStore, permissions: PermissionCenter) {
         self.settingsStore = settings
@@ -60,8 +77,8 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     public func start() async throws {
         installStatusItems()
         subscribeToScreenChanges()
-        applyProfileOnLaunch()
         state = .running
+        scheduleInitialState()
         logger.info("Menu Bar Cleaner started")
     }
 
@@ -71,6 +88,10 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         unsubscribeFromScreenChanges()
         hoverTimer?.invalidate()
         hoverTimer = nil
+        hoverExitMonitor?.invalidate()
+        hoverExitMonitor = nil
+        startupTask?.cancel()
+        startupTask = nil
         state = .off
         logger.info("Menu Bar Cleaner stopped")
     }
@@ -78,29 +99,27 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     // MARK: - Actions
 
     public func toggleCollapsed() {
+        guard state.isStarted else { return }
         isCollapsed ? reveal() : collapse()
     }
 
     public func collapse() {
+        guard state.isStarted else { return }
         guard !isCollapsed else { return }
-        isCollapsed = true
-        persistCollapsedToActiveProfile()
-        applyMenuBarState()
+        guard validateControlOrder() else { return }
+        setCollapsed(true, persist: true)
         logger.info("Menu bar overflow collapsed")
     }
 
     public func reveal() {
         guard isCollapsed else { return }
-        isCollapsed = false
-        persistCollapsedToActiveProfile()
-        applyMenuBarState()
+        setCollapsed(false, persist: true)
         logger.info("Menu bar overflow revealed")
     }
 
     private func revealForShutdown() {
         guard isCollapsed else { return }
-        isCollapsed = false
-        applyMenuBarState()
+        setCollapsed(false, persist: false)
     }
 
     public func setCollapseOnLaunch(_ enabled: Bool) {
@@ -117,6 +136,12 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         var new = settings
         new.hoverRevealDelay = delay
         saveSettings(new)
+        if settings.hoverRevealDelay == 0 {
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+            hoverExitMonitor?.invalidate()
+            hoverExitMonitor = nil
+        }
         installHoverTracking()
     }
 
@@ -135,7 +160,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         var new = settings
         new.activeProfileID = profileID
         saveSettings(new)
-        if let profile = new.activeProfile {
+        if state.isStarted, let profile = new.activeProfile {
             if profile.collapsed {
                 collapse()
             } else {
@@ -170,12 +195,14 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
 
     // MARK: - Dividers
 
-    public func addDivider(name: String, symbolName: String = "line.vertical", isOverflow: Bool = false) {
+    public func addDivider(name: String, symbolName: String = "line.vertical") {
         var new = settings
-        let divider = MenuBarCleanerDivider(name: name, symbolName: symbolName, isOverflow: isOverflow)
+        let divider = MenuBarCleanerDivider(name: name, symbolName: symbolName, isOverflow: false)
         new.dividers.append(divider)
         saveSettings(new)
-        installDividerStatusItem(divider)
+        if toggleItem != nil {
+            installDividerStatusItem(divider)
+        }
     }
 
     public func removeDivider(_ dividerID: UUID) {
@@ -194,27 +221,24 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
         applyMenuBarState()
     }
 
-    public func toggleAlwaysVisible(_ bundleID: String) {
-        var new = settings
-        if new.alwaysVisibleBundleIDs.contains(bundleID) {
-            new.alwaysVisibleBundleIDs.removeAll { $0 == bundleID }
-        } else {
-            new.alwaysVisibleBundleIDs.append(bundleID)
-        }
-        saveSettings(new)
-    }
-
     public func safeReset() {
-        reveal()
+        let wasStarted = state.isStarted
+        setCollapsed(false, persist: false)
+        layoutFailureReason = nil
         var new = settings
-        new.alwaysVisibleBundleIDs = []
         new.activeProfileID = nil
         new.dividers = [.defaultMain]
         new.drawerMode = false
         saveSettings(new)
         uninstallStatusItems()
-        installStatusItems()
-        logger.notice("Menu Bar Cleaner reset: all icons visible, always-visible list cleared, no active profile, dividers reset")
+        if wasStarted {
+            installStatusItems()
+            state = .running
+        } else {
+            state = .off
+        }
+        statusMessage = "Reset complete. Command-drag low-priority icons to the left of the divider."
+        logger.notice("Menu Bar Cleaner reset: all icons visible, no active profile, dividers reset")
     }
 
     // MARK: - SwiftUI surface
@@ -226,8 +250,9 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     // MARK: - Settings persistence
 
     private func saveSettings(_ new: MenuBarCleanerSettings) {
-        settings = new
-        settingsStore.saveMenuBarCleanerSettings(new)
+        let sanitized = new.sanitized()
+        settings = sanitized
+        settingsStore.saveMenuBarCleanerSettings(sanitized)
     }
 
     private func persistCollapsedToActiveProfile() {
@@ -239,10 +264,32 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     }
 
     private func applyProfileOnLaunch() {
-        if let profile = settings.activeProfile {
-            isCollapsed = profile.collapsed
+        let shouldCollapse = settings.activeProfile?.collapsed ?? settings.collapseOnLaunch
+        if shouldCollapse {
+            collapseWithoutPersisting()
         } else {
-            isCollapsed = settings.collapseOnLaunch
+            setCollapsed(false, persist: false)
+        }
+    }
+
+    private func scheduleInitialState() {
+        startupTask?.cancel()
+        startupTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled, let self, self.state.isStarted else { return }
+            self.applyProfileOnLaunch()
+        }
+    }
+
+    private func collapseWithoutPersisting() {
+        guard !isCollapsed, validateControlOrder() else { return }
+        setCollapsed(true, persist: false)
+    }
+
+    private func setCollapsed(_ collapsed: Bool, persist: Bool) {
+        isCollapsed = collapsed
+        if persist {
+            persistCollapsedToActiveProfile()
         }
         applyMenuBarState()
     }
@@ -325,12 +372,13 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
             item.setLength(length)
         }
         updateToggleItem()
-        validateControlOrder()
+        _ = validateControlOrder(reportFailure: false)
     }
 
     // MARK: - Overflow drawer
 
     public func showOverflowPanel() {
+        guard state.isStarted else { return }
         if overflowPanel == nil {
             overflowPanel = MenuBarCleanerOverflowPanelController(module: self)
         }
@@ -351,18 +399,46 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     }
 
     private func collapsedDividerLength(for divider: MenuBarCleanerDivider) -> CGFloat {
-        let item = dividerItems[divider.id]
-        let screen = item?.button?.window?.screen
-            ?? toggleItem?.button?.window?.screen
-            ?? NSScreen.main
-        let visibleWidth = screen?.visibleFrame.width ?? 1728
-        return Self.collapsedDividerLength(for: divider, screenVisibleWidth: visibleWidth)
+        let widestScreenWidth = NSScreen.screens.map(\.frame.width).max() ?? 1728
+        return Self.collapsedDividerLength(for: divider, widestScreenWidth: widestScreenWidth)
     }
 
-    private func validateControlOrder() {
+    @discardableResult
+    private func validateControlOrder(reportFailure: Bool = true) -> Bool {
         let dividerX = dividerItems[MenuBarCleanerDivider.mainID]?.buttonOriginX
         let toggleX = toggleItem?.buttonOriginX
         statusMessage = Self.statusMessage(dividerX: dividerX, toggleX: toggleX, isCollapsed: isCollapsed)
+        guard let dividerX, let toggleX else {
+            if reportFailure { reportLayoutFailure(statusMessage) }
+            return false
+        }
+        let isValid: Bool
+        if NSApp.userInterfaceLayoutDirection == .rightToLeft {
+            isValid = toggleX <= dividerX
+        } else {
+            isValid = toggleX >= dividerX
+        }
+        if isValid {
+            recoverFromLayoutFailureIfNeeded()
+        } else if reportFailure {
+            reportLayoutFailure(statusMessage)
+        }
+        return isValid
+    }
+
+    private func reportLayoutFailure(_ reason: String?) {
+        let reason = reason ?? "Place the DropThings chevron on the visible side of its divider before collapsing."
+        layoutFailureReason = reason
+        state = .degraded(reason: reason)
+        logger.warning("Menu bar controls are not in a safe collapse order")
+    }
+
+    private func recoverFromLayoutFailureIfNeeded() {
+        guard let layoutFailureReason else { return }
+        self.layoutFailureReason = nil
+        if case .degraded(let reason) = state, reason == layoutFailureReason {
+            state = .running
+        }
     }
 
     // MARK: - Testable helpers
@@ -370,13 +446,13 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     /// Computes the divider length that pushes items off the visible menu bar.
     /// - Parameters:
     ///   - divider: The divider whose length is being computed.
-    ///   - screenVisibleWidth: The width of the visible frame of the screen where
-    ///     the divider resides.
+    ///   - widestScreenWidth: The widest connected display in points.
     nonisolated static func collapsedDividerLength(
         for divider: MenuBarCleanerDivider,
-        screenVisibleWidth: CGFloat
+        widestScreenWidth: CGFloat
     ) -> CGFloat {
-        max(divider.collapsedLength, screenVisibleWidth + divider.expandedLength + 40)
+        let requested = max(divider.collapsedLength, widestScreenWidth * 2)
+        return min(requested, 10_000)
     }
 
     /// Returns the user-facing status message for the current control order.
@@ -411,7 +487,8 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self, self.isCollapsed else { return }
                 self.wasHoverRevealed = true
-                self.reveal()
+                self.setCollapsed(false, persist: false)
+                self.startHoverExitMonitor()
             }
         }
     }
@@ -419,16 +496,47 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
     private func handleHoverExited() {
         hoverTimer?.invalidate()
         hoverTimer = nil
-        guard wasHoverRevealed else { return }
-        wasHoverRevealed = false
-        collapse()
+        if wasHoverRevealed {
+            startHoverExitMonitor()
+        }
+    }
+
+    private func startHoverExitMonitor() {
+        guard hoverExitMonitor == nil else { return }
+        hoverExitMonitor = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] timer in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    timer.invalidate()
+                    return
+                }
+                guard self.isPointerInMenuBar else {
+                    timer.invalidate()
+                    self.hoverExitMonitor = nil
+                    guard self.wasHoverRevealed else { return }
+                    self.wasHoverRevealed = false
+                    self.collapseWithoutPersisting()
+                    return
+                }
+            }
+        }
+    }
+
+    private var isPointerInMenuBar: Bool {
+        let pointer = NSEvent.mouseLocation
+        return NSScreen.screens.contains { screen in
+            let menuBarBottom = screen.visibleFrame.maxY
+            return pointer.x >= screen.frame.minX
+                && pointer.x <= screen.frame.maxX
+                && pointer.y >= menuBarBottom
+                && pointer.y <= screen.frame.maxY
+        }
     }
 
     // MARK: - Screen observer
 
     private func subscribeToScreenChanges() {
         guard screenObserver == nil else { return }
-        screenObserver = NSWorkspace.shared.notificationCenter.addObserver(
+        screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
@@ -442,7 +550,7 @@ public final class MenuBarCleanerModule: DropThingsModule, ObservableObject {
 
     private func unsubscribeFromScreenChanges() {
         if let screenObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(screenObserver)
+            NotificationCenter.default.removeObserver(screenObserver)
             self.screenObserver = nil
         }
     }
