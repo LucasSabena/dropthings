@@ -37,4 +37,6 @@ public enum DTSize {
     public static let colorFeedbackWidth: CGFloat = 220
     public static let colorFeedbackHeight: CGFloat = 64
     public static let shelfInspectorWidth: CGFloat = 288
+    public static let markdownViewerWidth: CGFloat = 960
+    public static let markdownViewerHeight: CGFloat = 640
 }

@@ -67,6 +67,7 @@ extension DropThingsModule {
         case .windowSnap: return "rectangle.split.2x2"
         case .snippets: return "doc.text"
         case .textTools: return "textformat"
+        case .markdownViewer: return "doc.richtext"
         case .screenshotRegion: return "camera.viewfinder"
         default: return "square.stack.3d.up"
         }

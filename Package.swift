@@ -61,6 +61,9 @@ let package = Package(
                 "Snippets",
                 "TextTools",
                 "WindowSnap"
+            ],
+            resources: [
+                .copy("MarkdownViewer/Resources")
             ]
         ),
         .testTarget(

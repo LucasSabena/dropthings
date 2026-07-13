@@ -50,6 +50,7 @@ final class AppServices: ObservableObject {
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
         registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
+        registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
         registry.pruneUnregisteredEnablement()
         recordedModuleStates = registry.states
 

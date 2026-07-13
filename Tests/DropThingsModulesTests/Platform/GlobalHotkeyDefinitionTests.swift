@@ -31,11 +31,17 @@ final class GlobalHotkeyDefinitionTests: XCTestCase {
         let definitions = [
             GlobalHotkey.defaultShelfHotkey,
             GlobalHotkey.defaultColorPickerHotkey,
-            GlobalHotkey.defaultClipboardHistoryHotkey
+            GlobalHotkey.defaultClipboardHistoryHotkey,
+            GlobalHotkey.defaultMarkdownViewerHotkey
         ].compactMap { $0 }
 
         let chords = definitions.map { "\($0.keyCode):\($0.modifiers)" }
         XCTAssertEqual(Set(chords).count, chords.count, "Every shipped default chord must be unique")
+    }
+
+    func testDisplayStringForDefaultMarkdownViewer() {
+        let def = GlobalHotkey.defaultMarkdownViewerHotkey
+        XCTAssertEqual(def?.displayString, "⌥⌘M")
     }
 
     // MARK: - displayString
