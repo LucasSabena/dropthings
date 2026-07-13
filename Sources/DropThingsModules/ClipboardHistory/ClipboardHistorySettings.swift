@@ -60,8 +60,11 @@ struct ClipboardHistorySettingsView: View {
                     Text("Max history")
                         .font(DTTypography.body)
                     Spacer()
+                    Text("\(module.settings.maxHistory)")
+                        .font(DTTypography.caption.monospacedDigit())
+                        .foregroundStyle(DTColor.textSecondary)
                     Stepper(
-                        "\(module.settings.maxHistory)",
+                        "",
                         value: Binding(
                             get: { module.settings.maxHistory },
                             set: { module.setMaxHistory($0) }
