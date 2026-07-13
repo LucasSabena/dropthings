@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 import DropThingsCore
 import DropThingsDesignSystem
 
@@ -10,6 +11,8 @@ import DropThingsDesignSystem
 final class MarkdownViewerWindowController {
     private var window: NSWindow?
     private var hostingController: NSHostingController<MarkdownViewerRootView>?
+    private var documentObserver: AnyCancellable?
+    private let windowDelegate = MarkdownWindowDelegate()
 
     /// A stable size token so the window persists its frame between opens
     /// within a single app session (full state persistence is v2).
@@ -32,6 +35,10 @@ final class MarkdownViewerWindowController {
 
     func hide() {
         window?.orderOut(nil)
+    }
+
+    func close() {
+        window?.performClose(nil)
     }
 
     /// Rebuild the hosted root view and title from the module's current
@@ -63,6 +70,10 @@ final class MarkdownViewerWindowController {
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
         window.isReleasedWhenClosed = false
+        windowDelegate.shouldClose = { [weak module] in
+            module?.shouldCloseWindow() ?? true
+        }
+        window.delegate = windowDelegate
         window.setFrameAutosaveName("app.dropthings.markdown-viewer.window")
         window.contentMinSize = NSSize(width: 480, height: 360)
 
@@ -72,11 +83,29 @@ final class MarkdownViewerWindowController {
         window.isMovableByWindowBackground = true
         self.window = window
         self.hostingController = hosting
+        observeDirtyState(of: document)
     }
 
     private func updateRoot(document: MarkdownDocument, settings: MarkdownViewerSettings, module: MarkdownViewerModule) {
         let root = MarkdownViewerRootView(document: document, settings: settings, module: module)
         hostingController?.rootView = root
         window?.title = document.displayName
+        observeDirtyState(of: document)
+    }
+
+    private func observeDirtyState(of document: MarkdownDocument) {
+        documentObserver = document.$isDirty
+            .removeDuplicates()
+            .sink { [weak self] isDirty in
+                self?.window?.isDocumentEdited = isDirty
+            }
+    }
+}
+
+private final class MarkdownWindowDelegate: NSObject, NSWindowDelegate {
+    var shouldClose: (() -> Bool)?
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        shouldClose?() ?? true
     }
 }

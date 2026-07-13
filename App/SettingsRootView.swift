@@ -731,7 +731,7 @@ private struct PermissionsCenterView: View {
                 VStack(alignment: .leading, spacing: DTSpace.xs) {
                     Label("What DropThings does not request", systemImage: "lock.shield")
                         .font(DTTypography.sectionTitle)
-                    Text("The current five utilities do not require Screen Recording, Full Disk Access, Automation, Contacts, Camera, or Microphone access.")
+                    Text("The current six utilities do not require Screen Recording, Full Disk Access, Contacts, Camera, or Microphone access. Markdown Viewer requests Finder Automation only if you enable its optional selection shortcut.")
                         .font(DTTypography.body)
                         .foregroundStyle(DTColor.textSecondary)
                 }

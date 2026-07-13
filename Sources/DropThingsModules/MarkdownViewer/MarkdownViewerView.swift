@@ -76,6 +76,9 @@ struct MarkdownViewerSettingsView: View {
                 Text("When you press the shortcut with Finder in front, DropThings opens the Markdown file you've selected. The first time, macOS asks for permission to control Finder (Automation). Without it, the shortcut opens the viewer with the last document instead.")
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
+                if let issue = module.finderSelectionIssue {
+                    InlineAlert(style: .warning, message: issue)
+                }
 
                 recentsSection
             }

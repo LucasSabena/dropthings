@@ -59,6 +59,7 @@ struct MarkdownEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? MarkdownTextView else { return }
+        context.coordinator.owner = self
         let newSize = CGFloat(fontSize)
         if let font = textView.font, font.fontName != NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular).fontName || font.pointSize != newSize {
             textView.font = NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
@@ -66,7 +67,13 @@ struct MarkdownEditorView: NSViewRepresentable {
         if textView.string != text {
             let selected = textView.selectedRanges
             textView.string = text
-            textView.selectedRanges = selected
+            textView.selectedRanges = selected.map { value in
+                let range = value.rangeValue
+                let location = min(range.location, textView.string.utf16.count)
+                let length = min(range.length, textView.string.utf16.count - location)
+                return NSValue(range: NSRange(location: location, length: length))
+            }
+            context.coordinator.didApplyExternalText(text)
         }
         let wantRuler = showLineNumbers
         if wantRuler && scrollView.verticalRulerView == nil {
@@ -99,10 +106,15 @@ struct MarkdownEditorView: NSViewRepresentable {
             let new = textView.string
             guard new != lastReported else { return }
             lastReported = new
-            DispatchQueue.main.async {
-                owner.text = new
-                owner.onChange()
-            }
+            // NSTextView delegates run on the main thread. Publishing here is
+            // intentional: deferring it creates a race where Save writes the
+            // previous value when the user clicks the toolbar or presses ⌘S.
+            owner.text = new
+            owner.onChange()
+        }
+
+        func didApplyExternalText(_ text: String) {
+            lastReported = text
         }
     }
 }

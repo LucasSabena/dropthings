@@ -12,8 +12,6 @@ struct MarkdownViewerRootView: View {
     let settings: MarkdownViewerSettings
     @ObservedObject var module: MarkdownViewerModule
 
-    @State private var layout: MarkdownLayout = .split
-
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -24,11 +22,14 @@ struct MarkdownViewerRootView: View {
                 InlineAlert(style: .warning, message: error)
                     .padding(DTSpace.sm)
             }
+            if let issue = module.finderSelectionIssue {
+                InlineAlert(style: .warning, message: issue)
+                    .padding(DTSpace.sm)
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(DTColor.background)
-        .onAppear { layout = settings.layout }
         .onDrop(of: [.fileURL, .utf8PlainText], isTargeted: nil) { providers in
             handleDrop(providers)
             return true
@@ -39,6 +40,21 @@ struct MarkdownViewerRootView: View {
             Group {
                 Button("") { module.openNewDocument() }
                     .keyboardShortcut("t", modifiers: .command)
+                    .hidden()
+                Button("") { module.openFilePanel() }
+                    .keyboardShortcut("o", modifiers: .command)
+                    .hidden()
+                Button("") { module.saveCurrentDocument() }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .hidden()
+                Button("") { module.saveCurrentDocumentAs() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .hidden()
+                Button("") { module.closeCurrentDocument() }
+                    .keyboardShortcut("w", modifiers: .command)
+                    .hidden()
+                Button("") { module.closeViewerWindow() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
                     .hidden()
                 ForEach(0..<min(module.openDocuments.count, 9), id: \.self) { index in
                     Button("") { module.selectDocument(at: index) }
@@ -136,23 +152,23 @@ struct MarkdownViewerRootView: View {
     }
 
     private var layoutPicker: some View {
-        Picker("", selection: $layout) {
+        Picker("", selection: Binding(
+            get: { settings.layout },
+            set: { module.setLayout($0) }
+        )) {
             ForEach(MarkdownLayout.allCases, id: \.self) { item in
                 Text(item.label).tag(item)
             }
         }
         .pickerStyle(.segmented)
         .frame(width: 180)
-        .onChange(of: layout) { _, newValue in
-            module.setLayout(newValue)
-        }
     }
 
     // MARK: - Content
 
     @ViewBuilder
     private var content: some View {
-        switch layout {
+        switch settings.layout {
         case .editor:
             editorPane
         case .preview:
@@ -212,8 +228,7 @@ struct MarkdownViewerRootView: View {
                     defer { group.leave() }
                     if let data = item as? Data,
                        let url = URL(dataRepresentation: data, relativeTo: nil) {
-                        let ext = url.pathExtension.lowercased()
-                        if ["md", "markdown", "mdown", "mkd"].contains(ext) {
+                        if MarkdownFileType.accepts(url) {
                             lock.lock(); urls.append(url); lock.unlock()
                         }
                     }
