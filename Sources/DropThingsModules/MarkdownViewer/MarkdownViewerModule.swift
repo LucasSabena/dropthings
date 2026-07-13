@@ -28,6 +28,7 @@ public final class MarkdownViewerModule: DropThingsModule {
     @Published public private(set) var settings: MarkdownViewerSettings
     @Published public private(set) var openDocuments: [MarkdownDocument]
     @Published public private(set) var activeDocumentIndex: Int = 0
+    @Published public private(set) var finderSelectionIssue: String?
 
     public var isWindowVisible: Bool { windowController.isWindowVisible }
 
@@ -126,7 +127,7 @@ public final class MarkdownViewerModule: DropThingsModule {
     /// `.md` as its own tab.
     public func openFilePanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.plainText]
+        panel.allowedContentTypes = MarkdownFileType.contentTypes
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -161,8 +162,9 @@ public final class MarkdownViewerModule: DropThingsModule {
     /// open in a tab are focused instead of duplicated. The last opened (or
     /// focused) tab becomes active. Recents are recorded in one batch.
     public func openURLs(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        _appendDocuments(urls: urls)
+        let accepted = urls.filter(MarkdownFileType.accepts)
+        guard !accepted.isEmpty else { return }
+        _appendDocuments(urls: accepted)
         openViewer()
         refreshWindow()
     }
@@ -173,13 +175,20 @@ public final class MarkdownViewerModule: DropThingsModule {
         guard !urls.isEmpty else { return }
         var lastIndex = activeDocumentIndex
         var openedURLs: [URL] = []
-        for url in urls {
-            if let existing = openDocuments.firstIndex(where: { $0.url == url }) {
+        for suppliedURL in urls where MarkdownFileType.accepts(suppliedURL) {
+            let url = suppliedURL.standardizedFileURL.resolvingSymlinksInPath()
+            if let existing = openDocuments.firstIndex(where: {
+                $0.url?.standardizedFileURL.resolvingSymlinksInPath() == url
+            }) {
                 lastIndex = existing
                 continue
             }
             let doc = MarkdownDocument()
-            doc.load(from: url)
+            guard doc.load(from: url) else {
+                openDocuments.append(doc)
+                lastIndex = openDocuments.count - 1
+                continue
+            }
             openDocuments.append(doc)
             lastIndex = openDocuments.count - 1
             openedURLs.append(url)
@@ -237,6 +246,40 @@ public final class MarkdownViewerModule: DropThingsModule {
         refreshWindow()
     }
 
+    /// Always asks for a destination, matching the standard ⇧⌘S command.
+    public func saveCurrentDocumentAs() {
+        guard currentDocument.saveAs() else { return }
+        if let url = currentDocument.url { recordRecentBatch([url]) }
+        refreshWindow()
+    }
+
+    public func closeCurrentDocument() {
+        closeDocument(at: activeDocumentIndex)
+    }
+
+    /// Called by the native window delegate for the red close button and
+    /// ⇧⌘W. Every dirty tab must be resolved before the window can disappear.
+    func shouldCloseWindow() -> Bool {
+        var savedURLs: [URL] = []
+        for doc in openDocuments where doc.isDirty {
+            switch promptCloseDecision(for: doc) {
+            case .cancel:
+                return false
+            case .save:
+                guard saveDocument(doc) else { return false }
+                if let url = doc.url { savedURLs.append(url) }
+            case .discard:
+                doc.discardChanges()
+            }
+        }
+        recordRecentBatch(savedURLs)
+        return true
+    }
+
+    public func closeViewerWindow() {
+        windowController.close()
+    }
+
     /// Marked dirty by the editor's `onChange`. The document already tracks
     /// its own dirty flag via its `@Published` observer; this is a hook for
     /// the module to react if needed in the future.
@@ -283,6 +326,7 @@ public final class MarkdownViewerModule: DropThingsModule {
     public func setOpenFinderSelectionWithHotkey(_ enabled: Bool) {
         var new = settings
         new.openFinderSelectionWithHotkey = enabled
+        if !enabled { finderSelectionIssue = nil }
         applySettings(new)
     }
 
@@ -432,11 +476,21 @@ public final class MarkdownViewerModule: DropThingsModule {
     /// nil, which falls back to opening the viewer.
     private func handleHotkeyFire() {
         if settings.openFinderSelectionWithHotkey,
-           FinderSelectionReader.isFinderFrontmost(),
-           let urls = FinderSelectionReader.selectedPaths(),
-           !FinderSelectionReader.markdownOnly(urls).isEmpty {
-            openURLs(FinderSelectionReader.markdownOnly(urls))
-            return
+           FinderSelectionReader.isFinderFrontmost() {
+            do {
+                let selected = try FinderSelectionReader.selectedPaths()
+                let markdown = FinderSelectionReader.markdownOnly(selected)
+                finderSelectionIssue = markdown.isEmpty
+                    ? "The Finder selection does not contain a Markdown file."
+                    : nil
+                if !markdown.isEmpty {
+                    openURLs(markdown)
+                    return
+                }
+            } catch {
+                finderSelectionIssue = error.localizedDescription
+                logger.warning("Finder selection failed: \(error.localizedDescription)")
+            }
         }
         openViewer()
     }

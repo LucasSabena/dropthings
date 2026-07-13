@@ -24,13 +24,15 @@ public final class MarkdownDocument: ObservableObject, Identifiable {
         self.id = id
         self.url = url
         self.text = text
+        self.isDirty = url == nil && !text.isEmpty
         observeEdits()
     }
 
     /// Replace the whole document from disk. Clears `isDirty` and any prior
     /// error. Throws are captured into `loadError` instead of propagating so
     /// the UI always has a stable state to render.
-    public func load(from url: URL) {
+    @discardableResult
+    public func load(from url: URL) -> Bool {
         isLoading = true
         loadError = nil
         do {
@@ -40,11 +42,14 @@ public final class MarkdownDocument: ObservableObject, Identifiable {
             self.url = url
             self.text = decoded
             self.isDirty = false
+            isLoading = false
+            return true
         } catch {
             self.loadError = "Could not open \(url.lastPathComponent): \(error.localizedDescription)"
             self.url = nil
+            isLoading = false
+            return false
         }
-        isLoading = false
     }
 
     /// Write the current text back to `url`. Returns true on success so the
@@ -52,14 +57,7 @@ public final class MarkdownDocument: ObservableObject, Identifiable {
     @discardableResult
     public func save() -> Bool {
         guard let url else { return false }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-            isDirty = false
-            return true
-        } catch {
-            loadError = "Could not save \(url.lastPathComponent): \(error.localizedDescription)"
-            return false
-        }
+        return save(to: url, adoptingURL: false)
     }
 
     /// Open the system Save panel so the user can pick a new path. On OK,
@@ -67,13 +65,21 @@ public final class MarkdownDocument: ObservableObject, Identifiable {
     @discardableResult
     public func saveAs() -> Bool {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
+        panel.allowedContentTypes = MarkdownFileType.contentTypes
         panel.nameFieldStringValue = url?.lastPathComponent ?? "Untitled.md"
+        panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let target = panel.url else { return false }
+        return save(to: target, adoptingURL: true)
+    }
+
+    /// Separated from the panel so persistence is directly regression-tested.
+    @discardableResult
+    func save(to target: URL, adoptingURL: Bool = true) -> Bool {
         do {
             try text.write(to: target, atomically: true, encoding: .utf8)
-            self.url = target
+            if adoptingURL { self.url = target }
             self.isDirty = false
+            self.loadError = nil
             return true
         } catch {
             loadError = "Could not save \(target.lastPathComponent): \(error.localizedDescription)"
@@ -88,6 +94,16 @@ public final class MarkdownDocument: ObservableObject, Identifiable {
         text = ""
         isDirty = false
         loadError = nil
+    }
+
+    /// Restore the last on-disk value, or clear an unsaved document. Used
+    /// only after the user explicitly chooses Discard.
+    public func discardChanges() {
+        if let url {
+            _ = load(from: url)
+        } else {
+            resetToUntitled()
+        }
     }
 
     public var displayName: String {

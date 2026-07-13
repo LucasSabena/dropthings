@@ -16,30 +16,40 @@ import AppKit
 @MainActor
 enum FinderSelectionReader {
 
+    struct SelectionError: LocalizedError {
+        let message: String
+
+        var errorDescription: String? {
+            "Could not read the Finder selection: \(message)"
+        }
+    }
+
     /// Run an AppleScript that returns the POSIX paths of the items selected
-    /// in the frontmost Finder window, one per line. Returns nil if the
-    /// script fails (permission denied, Finder not running, or no selection).
+    /// in the frontmost Finder window, one per line. Throws when Finder or
+    /// Automation is unavailable; an empty selection returns an empty array.
     @MainActor
-    static func selectedPaths() -> [URL]? {
+    static func selectedPaths() throws -> [URL] {
         let source = """
         tell application "Finder"
-            try
-                set sel to selection
-                if sel is {} or sel is missing value then return ""
-                set output to ""
-                repeat with anItem in sel
-                    set output to output & (POSIX path of (anItem as alias)) & linefeed
-                end repeat
-                return output
-            on error
-                return ""
-            end try
+            set sel to selection
+            if sel is {} or sel is missing value then return ""
+            set output to ""
+            repeat with anItem in sel
+                set output to output & (POSIX path of (anItem as alias)) & linefeed
+            end repeat
+            return output
         end tell
         """
         var errorInfo: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { return nil }
+        guard let script = NSAppleScript(source: source) else {
+            throw SelectionError(message: "the AppleScript could not be created")
+        }
         let result = script.executeAndReturnError(&errorInfo)
-        if errorInfo != nil { return nil }
+        if let errorInfo {
+            let message = errorInfo[NSAppleScript.errorMessage] as? String
+                ?? "macOS denied Automation access"
+            throw SelectionError(message: message)
+        }
         let output = result.stringValue ?? ""
         return parsePaths(output)
     }
@@ -54,8 +64,7 @@ enum FinderSelectionReader {
 
     /// Pure: keep only files whose extension is a Markdown type.
     nonisolated static func markdownOnly(_ urls: [URL]) -> [URL] {
-        let exts: Set<String> = ["md", "markdown", "mdown", "mkd"]
-        return urls.filter { exts.contains($0.pathExtension.lowercased()) }
+        urls.filter(MarkdownFileType.accepts)
     }
 
     /// True when Finder is the frontmost app — the only moment when reading
