@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Typography preset names that map to the values in `docs/design-tokens.json`.
+/// Canonical typography presets for every DropThings product surface.
 /// Use these instead of raw `Font.system(...)` so we can change the scale in
 /// one place.
 public enum DTTypography {

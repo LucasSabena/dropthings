@@ -125,8 +125,8 @@ disabled from the same About screen. Homebrew users can update with:
 brew upgrade --cask LucasSabena/dropthings/dropthings
 ```
 
-Use the [complete manual verification guide](docs/manual-checks.md) for
-module-by-module checks.
+The four replacement-product specifications and their manual verification
+matrices live under [`docs/`](docs/01-command-palette/README.md).
 
 ---
 
@@ -150,9 +150,9 @@ The dependency graph is one-way: `Core` is the base, `DesignSystem` and
 `Platform` build on it, and `Modules` consumes all three. Modules never
 import each other.
 
-See [`docs/decisions.md`](docs/decisions.md) for the durable design
-decisions and [`docs/architecture.md`](docs/architecture.md) for the
-detailed contract.
+Root architecture rules live in [`AGENTS.md`](AGENTS.md). Each replacement
+product has an executable specification, architecture, implementation plan,
+quality matrix, research ledger, and agent runbook under [`docs/`](docs/01-command-palette/README.md).
 
 ---
 
@@ -171,24 +171,26 @@ passes. New modules need to:
 - Live under `Sources/DropThingsModules/<Name>/`
 - Implement `DropThingsModule` (see `Sources/DropThingsCore/DropThingsModule.swift`)
 - Have at least one unit test under `Tests/DropThingsModulesTests/<Name>/`
-- Document manual checks in `docs/manual-checks.md`
-- Record durable tradeoffs in [`docs/decisions.md`](docs/decisions.md)
-
-See [`docs/audits/`](docs/audits/) for feature audits and
-[`docs/roadmap.md`](docs/roadmap.md) for the forward-looking backlog.
+- Document manual checks in the relevant product `QUALITY.md`
+- Record durable tradeoffs in the relevant product documentation
+- Record every copied/adapted upstream file in the relevant
+  `RESEARCH-AND-LICENSES.md` ledger
 
 ---
 
-## Roadmap
+## Replacement product plans
 
-The shipping product intentionally stays at five maintained utilities. The
-backlog and its rationale live in [`docs/roadmap.md`](docs/roadmap.md).
+- [Command Palette](docs/01-command-palette/README.md)
+- [Screenshot Studio](docs/02-screenshot-studio/README.md)
+- [Window Manager](docs/03-window-manager/README.md)
+- [Audio Control](docs/04-audio-control/README.md)
 
 ---
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+GPL-3.0-only. See [`LICENSE`](LICENSE). Third-party code retains its original
+copyright and license notices as recorded in the product research ledgers.
 
 ## Contributing
 

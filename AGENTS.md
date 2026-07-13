@@ -11,7 +11,7 @@ DropThings is a native macOS utility hub: one app, many small system tools, buil
 - Prefer Swift, SwiftUI, and AppKit for the app. Use lower-level macOS APIs only behind small adapters.
 - Keep files and functions short. Split long functions when they mix concerns, branches, permissions, state, and UI.
 - Do not create abstractions for imaginary future needs. Create them when two real modules need the same shape.
-- Do not copy code from open-source projects unless the license is compatible and the copied code is explicitly tracked in `docs/research/open-source-references.md`.
+- Do not copy code from open-source projects unless the license is compatible and the copied code is explicitly tracked in the relevant `docs/<product>/RESEARCH-AND-LICENSES.md` reuse ledger.
 - Do not store secrets, tokens, signing identities, provisioning profiles, or private certificates in git.
 
 ## Quality Loop
@@ -39,12 +39,12 @@ If the answer is weak, improve the design before moving on.
 
 ## Design Rules
 
-- Use the design tokens in `docs/design-system.md` before adding any visual constant.
+- Use the tokens in `Sources/DropThingsDesignSystem/Tokens/` and the relevant `docs/<product>/EXPERIENCE.md` before adding any visual constant.
 - The app should feel native, compact, trustworthy, and calm.
 - Do not make marketing screens inside the app. The first screen is the usable control center.
 - Every module needs enabled, disabled, missing-permission, error, and unavailable states.
 - Prefer clear labels, native controls, and short explanations at permission boundaries.
-- Before designing or changing product UI, use Lazyweb first and record the result or workflow note in `docs/research/lazyweb.md`.
+- Before designing or changing product UI, use Lazyweb first and record the result or workflow note in the relevant `docs/<product>/EXPERIENCE.md`.
 
 ## Implementation Rules
 
@@ -60,5 +60,4 @@ If the answer is weak, improve the design before moving on.
 
 - Update docs in the same change that changes architecture, module behavior, permissions, or design tokens.
 - Keep docs actionable. Prefer checklists, decisions, and constraints over broad essays.
-- If a tradeoff is important, record it in `docs/decisions.md`.
-
+- If a tradeoff is important, record the dated decision in the relevant product's architecture, implementation, or research document.

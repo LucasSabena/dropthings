@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Floating, focus-light panel for the File Shelf. macOS-level behavior lives
 /// here; the SwiftUI list and the module business logic stay out of this file
-/// so this remains a thin adapter per `docs/architecture.md` (Platform).
+/// so this remains a thin Platform adapter per `AGENTS.md`.
 public final class ShelfPanel: NSPanel {
     public init() {
         super.init(

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import DropThingsCore
 import DropThingsDesignSystem
 import DropThingsPlatform
@@ -90,6 +91,12 @@ public final class FileShelfModule: DropThingsModule {
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "file-shelf")
     private let reader = PasteboardItemReader()
     private let persistence: ShelfPersistence
+    private let captureArchive: CaptureArchive
+    private let clipboardMonitor = ClipboardMonitor()
+    private var screenshotFolderMonitor: DirectoryMonitor?
+    private var knownScreenshotURLs = Set<URL>()
+    private var captureArchiveObserver: UUID?
+    private var recentCaptureData: [Int: Date] = [:]
     private var panel: ShelfPanel?
     private var contentView: ShelfContentView?
     private var hotkey: GlobalHotkey?
@@ -107,20 +114,24 @@ public final class FileShelfModule: DropThingsModule {
     /// is never silent. Cleared on the next successful ingest.
     @Published public private(set) var ingestError: String?
 
-    public convenience init(settings: SettingsStore) {
-        self.init(settings: settings, persistence: .shared)
+    public convenience init(settings: SettingsStore, captureArchive: CaptureArchive = CaptureArchive()) {
+        self.init(settings: settings, persistence: .shared, captureArchive: captureArchive)
     }
 
-    internal init(settings: SettingsStore, persistence: ShelfPersistence) {
+    internal init(settings: SettingsStore, persistence: ShelfPersistence, captureArchive: CaptureArchive = CaptureArchive()) {
         self.settingsStore = settings
         self.persistence = persistence
+        self.captureArchive = captureArchive
         self.settings = settings.loadFileShelfSettings()
+        clipboardMonitor.handler = { [weak self] item in self?.archiveClipboardImage(item) }
     }
 
     public func start() async throws {
         loadPinnedFromDisk()
         ensureDefaultCollection()
+        ensureCaptureCollection()
         registerHotkey()
+        startCaptureArchive()
         if settings.shakeToShow || settings.flickToShow {
             startGestureDetection()
         }
@@ -134,6 +145,7 @@ public final class FileShelfModule: DropThingsModule {
 
     public func stop() async {
         unregisterHotkey()
+        stopCaptureArchive()
         stopGestureDetection()
         closePanel()
         savePinnedToDisk()
@@ -344,6 +356,122 @@ public final class FileShelfModule: DropThingsModule {
                 registerHotkey()
             }
         }
+        if state.isStarted { restartScreenshotFolderMonitor() }
+    }
+
+    public var archiveClipboardImages: Bool { settings.archiveClipboardImages }
+    public var screenshotFolderPath: String? { settings.screenshotFolderPath }
+
+    public func setArchiveClipboardImages(_ enabled: Bool) {
+        var next = settings; next.archiveClipboardImages = enabled; applySettings(next)
+        if enabled { clipboardMonitor.start(interval: 0.25) } else { clipboardMonitor.stop() }
+    }
+
+    public func setScreenshotFolder(_ url: URL?) {
+        var next = settings; next.screenshotFolderPath = url?.path; applySettings(next)
+    }
+
+    // MARK: - Capture archive
+
+    private func startCaptureArchive() {
+        captureArchiveObserver = captureArchive.observe { [weak self] entry in
+            self?.archive(entry)
+        }
+        if settings.archiveClipboardImages { clipboardMonitor.start(interval: 0.25) }
+        restartScreenshotFolderMonitor()
+    }
+
+    private func stopCaptureArchive() {
+        if let captureArchiveObserver { captureArchive.removeObserver(captureArchiveObserver) }
+        captureArchiveObserver = nil
+        clipboardMonitor.stop()
+        screenshotFolderMonitor?.stop()
+        screenshotFolderMonitor = nil
+        knownScreenshotURLs.removeAll()
+    }
+
+    private func restartScreenshotFolderMonitor() {
+        screenshotFolderMonitor?.stop()
+        screenshotFolderMonitor = nil
+        knownScreenshotURLs.removeAll()
+        guard let path = settings.screenshotFolderPath else { return }
+        let folder = URL(fileURLWithPath: path)
+        guard folder.hasDirectoryPath || FileManager.default.fileExists(atPath: folder.path) else {
+            ingestError = "The configured screenshots folder is unavailable. Choose it again in File Shelf settings."
+            return
+        }
+        knownScreenshotURLs = imageFiles(in: folder)
+        screenshotFolderMonitor = DirectoryMonitor(url: folder) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scanScreenshotFolder() }
+        }
+        screenshotFolderMonitor?.start()
+    }
+
+    private func scanScreenshotFolder() {
+        guard let path = settings.screenshotFolderPath else { return }
+        let current = imageFiles(in: URL(fileURLWithPath: path))
+        let newURLs = current.subtracting(knownScreenshotURLs)
+        knownScreenshotURLs = current
+        newURLs.sorted { $0.path < $1.path }.forEach { archive(.file($0)) }
+    }
+
+    private func imageFiles(in folder: URL) -> Set<URL> {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.contentTypeKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return Set(urls.filter { url in
+            guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return false }
+            return type.conforms(to: .image)
+        })
+    }
+
+    private func archiveClipboardImage(_ item: ClipboardMonitor.Item) {
+        guard settings.archiveClipboardImages,
+              !item.isTransient,
+              !item.isConcealed,
+              let data = item.imageData else { return }
+        archive(.png(data))
+    }
+
+    private func archive(_ entry: CaptureArchive.Entry) {
+        switch entry {
+        case .file(let url): ingestCapture(url)
+        case .png(let data):
+            guard markCaptureDataIfNew(data) else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let outcome = await self.ingestCoordinator.resolve(.image(data, .png)) { _ in }
+                if case .item(let kind) = outcome, case .file(let url) = kind { self.ingestCapture(url) }
+            }
+        }
+    }
+
+    /// Screenshot Studio may publish a capture and then put those exact bytes
+    /// on the pasteboard. Keep a tiny, short-lived digest cache so that one
+    /// user action becomes one shelf item rather than two.
+    private func markCaptureDataIfNew(_ data: Data) -> Bool {
+        let now = Date()
+        recentCaptureData = recentCaptureData.filter { now.timeIntervalSince($0.value) < 2 }
+        let digest = data.hashValue
+        guard recentCaptureData[digest] == nil else { return false }
+        recentCaptureData[digest] = now
+        return true
+    }
+
+    private func ingestCapture(_ url: URL) {
+        ensureCaptureCollection()
+        guard let index = collections.firstIndex(where: { $0.name == "Capturas" }) else { return }
+        let merged = Self.merged(collections[index].items, with: [.file(url)], maxItems: settings.maxItems)
+        collections[index].items = merged
+        ingestError = nil
+        savePinnedToDisk()
+    }
+
+    private func ensureCaptureCollection() {
+        guard !collections.contains(where: { $0.name == "Capturas" }) else { return }
+        collections.append(ShelfCollection(name: "Capturas"))
     }
 
     public func setHotkey(_ hotkey: GlobalHotkey.Definition?) {
@@ -553,7 +681,8 @@ public final class FileShelfModule: DropThingsModule {
     public func renameActiveCollection(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        guard let id = activeCollectionID,
+        guard activeCollection?.name != "Capturas",
+              let id = activeCollectionID,
               let index = collections.firstIndex(where: { $0.id == id }) else { return }
         collections[index].name = trimmed
     }
@@ -562,6 +691,7 @@ public final class FileShelfModule: DropThingsModule {
     /// the last one, it is cleared instead of deleted.
     public func removeActiveCollection() {
         guard let id = activeCollectionID else { return }
+        guard activeCollection?.name != "Capturas" else { return }
         if collections.count <= 1 {
             mutateActiveItems { $0.removeAll() }
             savePinnedToDisk()
@@ -585,7 +715,7 @@ public final class FileShelfModule: DropThingsModule {
 
     /// Start an inline rename of the given collection.
     public func beginRename(id: String) {
-        guard collections.contains(where: { $0.id == id }) else { return }
+        guard collections.contains(where: { $0.id == id && $0.name != "Capturas" }) else { return }
         renamingID = id
     }
 
@@ -594,7 +724,7 @@ public final class FileShelfModule: DropThingsModule {
         guard let id = renamingID else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty,
-           let index = collections.firstIndex(where: { $0.id == id }) {
+           let index = collections.firstIndex(where: { $0.id == id && $0.name != "Capturas" }) {
             collections[index].name = trimmed
             savePinnedToDisk()
         }
@@ -665,7 +795,7 @@ public final class FileShelfModule: DropThingsModule {
             ShelfCollection(
                 id: collection.id,
                 name: collection.name,
-                items: collection.items.filter(\.isPinned),
+                items: collection.name == "Capturas" ? collection.items : collection.items.filter(\.isPinned),
                 createdAt: collection.createdAt
             )
         }
@@ -700,6 +830,25 @@ public final class FileShelfModule: DropThingsModule {
         pb.clearContents()
         pb.setString(url.path, forType: .string)
         logger.info("Copied path \(url.path) to pasteboard")
+    }
+
+    /// Copies image pixels, rather than a file reference, so ⌘V works in
+    /// image-aware destinations just like a native macOS screenshot.
+    public func copyImage(_ item: FileShelfItem) {
+        guard let url = item.fileURL,
+              let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
+              type.conforms(to: .image),
+              let image = NSImage(contentsOf: url) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+        logger.info("Copied image (url.lastPathComponent) to pasteboard")
+    }
+
+    public func isImage(_ item: FileShelfItem) -> Bool {
+        guard let url = item.fileURL,
+              let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return false }
+        return type.conforms(to: .image)
     }
 
     /// Items for a drag that starts on `item`. When it is part of the current

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Spacing scale. Mirrors `docs/design-system.md` and `design-tokens.json`.
+/// Canonical DropThings spacing and radius scale. Product UI must reuse these values.
 public enum DTSpace {
     public static let xxs: CGFloat = 2
     public static let xs: CGFloat = 4

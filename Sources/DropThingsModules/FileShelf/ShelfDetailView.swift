@@ -82,6 +82,11 @@ struct ShelfDetailView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: DTSpace.sm) {
             if item.fileURL != nil {
+                if module.isImage(item) {
+                    Button { module.copyImage(item) } label: {
+                        Label("Copy image", systemImage: "doc.on.doc")
+                    }
+                }
                 Button { module.revealInFinder(item) } label: {
                     Label("Reveal in Finder", systemImage: "folder")
                 }

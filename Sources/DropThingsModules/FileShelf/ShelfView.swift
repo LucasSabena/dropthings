@@ -110,10 +110,12 @@ struct ShelfView: View {
                 }
                 .buttonStyle(.borderless)
                 .contextMenu {
-                    Button("Rename…") { module.beginRename(id: collection.id) }
-                    Button("Remove", role: .destructive) {
-                        module.selectCollection(id: collection.id)
-                        module.removeActiveCollection()
+                    if collection.name != "Capturas" {
+                        Button("Rename…") { module.beginRename(id: collection.id) }
+                        Button("Remove", role: .destructive) {
+                            module.selectCollection(id: collection.id)
+                            module.removeActiveCollection()
+                        }
                     }
                 }
             }
@@ -284,6 +286,33 @@ struct FileShelfSettingsView: View {
                     set: { module.updateClearOnQuit($0) }
                 ))
 
+                Divider()
+                Toggle("Archive images copied to the clipboard", isOn: Binding(
+                    get: { module.archiveClipboardImages },
+                    set: { module.setArchiveClipboardImages($0) }
+                ))
+                .help("Includes native macOS screenshots copied with Control-Shift-Command-3 or 4.")
+
+                HStack(spacing: DTSpace.sm) {
+                    VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                        Text("macOS screenshots folder")
+                        Text(module.screenshotFolderPath ?? "Not selected")
+                            .font(DTTypography.caption)
+                            .foregroundStyle(DTColor.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button("Choose…") { chooseScreenshotFolder() }
+                    if module.screenshotFolderPath != nil {
+                        Button("Clear") { module.setScreenshotFolder(nil) }
+                    }
+                }
+
+                Text("New image files from this folder appear in the Capturas tab. Choose the location set by macOS screenshot settings.")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+
                 if !module.items.isEmpty {
                     summaryRow
                 }
@@ -339,6 +368,15 @@ struct FileShelfSettingsView: View {
             }
             .controlSize(.small)
         }
+    }
+
+    private func chooseScreenshotFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Folder"
+        if panel.runModal() == .OK { module.setScreenshotFolder(panel.url) }
     }
 }
 

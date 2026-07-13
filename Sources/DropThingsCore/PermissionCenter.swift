@@ -168,6 +168,10 @@ public final class PermissionCenter: ObservableObject {
         if permission.supportsSystemPrompt {
             markPrompted(permission)
         }
+        // CGRequestScreenCaptureAccess and AXIsProcessTrustedWithOptions can
+        // return after the user approves access. Refresh immediately so the
+        // sheet does not keep showing a stale "Needs attention" state.
+        refresh()
         return result
     }
 

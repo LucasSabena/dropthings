@@ -1,6 +1,6 @@
 import Foundation
 
-/// Lifecycle state for a module. Mirrors `docs/architecture.md#failure-model`.
+/// Canonical lifecycle and failure state shared by all modules.
 ///
 /// The registry, settings UI, and diagnostics surface read this. Transitions are
 /// driven by `ModuleRegistry`, not by the module itself, so the UI sees a single

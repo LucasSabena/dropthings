@@ -28,6 +28,7 @@ extension ModuleID {
     public static let clipboardHistory = ModuleID("modules.clipboard-history")
     public static let commandPalette = ModuleID("modules.command-palette")
     public static let screenshotRegion = ModuleID("modules.screenshot-region")
+    public static let screenshotStudio = ModuleID("modules.screenshot-studio")
     public static let windowSnap = ModuleID("modules.window-snap")
     public static let snippets = ModuleID("modules.snippets")
     public static let textTools = ModuleID("modules.text-tools")

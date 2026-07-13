@@ -68,7 +68,7 @@ else
     echo "==> WARNING: no code-signing identity is installed"
     echo "    This build is ad-hoc. macOS ties Accessibility to this exact build,"
     echo "    so changing and reinstalling it will require granting access again."
-    echo "    A reboot alone will not. See docs/signing.md for the permanent fix."
+    echo "    A reboot alone will not. Install a stable signing identity to preserve TCC grants."
 fi
 
 echo "==> Removing previous install (if any)"

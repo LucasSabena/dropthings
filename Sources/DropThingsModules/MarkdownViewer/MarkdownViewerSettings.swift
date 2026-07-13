@@ -162,7 +162,7 @@ public extension SettingsStore {
 }
 
 public extension GlobalHotkey {
-    /// `⌥⌘M` — M for Markdown. Free chord per `docs/modules.md`.
+    /// `⌥⌘M` — M for Markdown.
     /// `id` 501 follows the Snippets 401 namespace block.
     static var defaultMarkdownViewerHotkey: Definition? {
         Definition(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(cmdKey | optionKey), id: 501)

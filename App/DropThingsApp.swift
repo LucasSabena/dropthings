@@ -19,6 +19,7 @@ final class AppServices: ObservableObject {
     let permissions: PermissionCenter
     let diagnostics: DiagnosticsStore
     let registry: ModuleRegistry
+    let captureArchive: CaptureArchive
     let settingsWindow: SettingsWindowController
     let launchAtLogin = LaunchAtLoginController()
     let updates: SparkleUpdaterController
@@ -37,6 +38,7 @@ final class AppServices: ObservableObject {
         self.permissions = PermissionCenter(settings: settings)
         self.diagnostics = DiagnosticsStore()
         self.registry = ModuleRegistry(settings: settings, permissions: permissions)
+        self.captureArchive = CaptureArchive()
         self.updates = SparkleUpdaterController()
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
@@ -45,18 +47,28 @@ final class AppServices: ObservableObject {
         // The product intentionally ships only the modules that have a
         // reliable end-to-end interaction. Keeping this composition explicit
         // prevents half-finished modules from leaking back into the UI.
-        registry.register(FileShelfModule(settings: settings))
+        registry.register(FileShelfModule(settings: settings, captureArchive: captureArchive))
         registry.register(ScrollControlModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
         registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
         registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
+        registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
         registry.pruneUnregisteredEnablement()
         recordedModuleStates = registry.states
 
         settingsWindow.setContent(
             SettingsRootView().environmentObject(self)
         )
+        NotificationCenter.default.addObserver(
+            forName: .dropThingsCaptureWillBegin,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // A global hotkey may activate DropThings. Keep its settings window
+            // from covering the target that the user is trying to capture.
+            self?.settingsWindow.hide()
+        }
         importer.onImport = { [weak self] in
             self?.reloadAfterImport()
         }

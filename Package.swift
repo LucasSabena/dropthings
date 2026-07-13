@@ -41,8 +41,6 @@ let package = Package(
             exclude: [
                 "Adapters/DropThingsStatusItem.swift",
                 "Adapters/HoverTrackingView.swift",
-                "Adapters/ScreenCapture.swift",
-                "Adapters/ScreenCoordinateMapper.swift",
                 "Adapters/WindowSnapper.swift"
             ]
         ),
@@ -81,8 +79,7 @@ let package = Package(
                 "ScreenshotRegion",
                 "Snippets",
                 "TextTools",
-                "WindowSnap",
-                "Platform/ScreenCoordinateMapperTests.swift"
+                "WindowSnap"
             ]
         )
     ]

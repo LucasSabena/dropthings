@@ -1,5 +1,11 @@
 import Foundation
 import SwiftUI
+
+public extension Notification.Name {
+    /// Posted before a module presents a full-screen capture surface. The app
+    /// shell uses it to move nonessential windows out of the way.
+    static let dropThingsCaptureWillBegin = Notification.Name("app.dropthings.capture-will-begin")
+}
 import Combine
 
 /// A single runnable action surfaced by a module for the menu bar and similar
@@ -63,12 +69,11 @@ extension DropThingsModule {
         case .colorPicker: return "eyedropper"
         case .clipboardHistory: return "clipboard"
         case .commandPalette: return "command"
-        case .screenshotRegion: return "camera.viewfinder"
+        case .screenshotRegion, .screenshotStudio: return "camera.viewfinder"
         case .windowSnap: return "rectangle.split.2x2"
         case .snippets: return "doc.text"
         case .textTools: return "textformat"
         case .markdownViewer: return "doc.richtext"
-        case .screenshotRegion: return "camera.viewfinder"
         default: return "square.stack.3d.up"
         }
     }

@@ -29,7 +29,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>DropThings. All rights reserved.</string>
+	<string>DropThings © 2026 Lucas Sabena and contributors. GPLv3.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>DropThings can read the Markdown files selected in Finder when you explicitly enable that shortcut option.</string>
 	<key>NSSupportsAutomaticTermination</key>

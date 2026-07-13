@@ -15,6 +15,8 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
     public var shakeSensitivity: ShakeSensitivity
     public var layout: ShelfLayout
     public var hotkey: GlobalHotkey.Definition?
+    public var archiveClipboardImages: Bool
+    public var screenshotFolderPath: String?
 
     public init(
         maxItems: Int = FileShelfSettings.maxItemsDefault,
@@ -23,7 +25,9 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
         flickToShow: Bool = false,
         shakeSensitivity: ShakeSensitivity = .medium,
         layout: ShelfLayout = .list,
-        hotkey: GlobalHotkey.Definition? = GlobalHotkey.defaultShelfHotkey
+        hotkey: GlobalHotkey.Definition? = GlobalHotkey.defaultShelfHotkey,
+        archiveClipboardImages: Bool = true,
+        screenshotFolderPath: String? = nil
     ) {
         self.maxItems = maxItems
         self.clearOnQuit = clearOnQuit
@@ -32,10 +36,12 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
         self.shakeSensitivity = shakeSensitivity
         self.layout = layout
         self.hotkey = hotkey
+        self.archiveClipboardImages = archiveClipboardImages
+        self.screenshotFolderPath = screenshotFolderPath
     }
 
     enum CodingKeys: String, CodingKey {
-        case maxItems, clearOnQuit, shakeToShow, flickToShow, shakeSensitivity, layout, hotkey
+        case maxItems, clearOnQuit, shakeToShow, flickToShow, shakeSensitivity, layout, hotkey, archiveClipboardImages, screenshotFolderPath
     }
 
     /// Decodes defensively: every field added after launch uses
@@ -50,6 +56,8 @@ public struct FileShelfSettings: Sendable, Equatable, Codable {
         self.layout = try c.decodeIfPresent(ShelfLayout.self, forKey: .layout) ?? .list
         self.hotkey = try c.decodeIfPresent(GlobalHotkey.Definition.self, forKey: .hotkey)
             ?? GlobalHotkey.defaultShelfHotkey
+        self.archiveClipboardImages = try c.decodeIfPresent(Bool.self, forKey: .archiveClipboardImages) ?? true
+        self.screenshotFolderPath = try c.decodeIfPresent(String.self, forKey: .screenshotFolderPath)
     }
 
     public static func sanitized(

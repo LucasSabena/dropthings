@@ -45,6 +45,17 @@ final class PermissionCenterTests: XCTestCase {
         XCTAssertEqual(backend.openCount[.accessibility], 1)
     }
 
+    func testPrivacySettingsURLsUseSystemSettingsDeepLinkFormat() {
+        XCTAssertEqual(
+            SystemPermission.accessibility.settingsPaneURL?.absoluteString,
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        )
+        XCTAssertEqual(
+            SystemPermission.screenRecording.settingsPaneURL?.absoluteString,
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        )
+    }
+
     func testRequestPermissionRecordsPromptedFlagForAccessibility() {
         let backend = FakePermissionBackend(states: [.accessibility: .notDetermined])
         let center = PermissionCenter(backend: backend, settings: settings)

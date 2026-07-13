@@ -1,8 +1,8 @@
 import Foundation
 
 /// macOS permissions DropThings may ask for. Keep the set small: each extra
-/// permission makes the app harder to trust. See
-/// `docs/permissions-security.md` for the principles.
+/// permission makes the app harder to trust. Product permission boundaries are
+/// specified in each product's documentation and enforced by `AGENTS.md`.
 public enum SystemPermission: String, Hashable, Sendable, CaseIterable {
     case accessibility
     case screenRecording
@@ -80,21 +80,15 @@ extension SystemPermission {
     /// Path in System Settings the user must visit to grant this permission.
     /// Returned as a `URL` so the OS can present the pane when supported.
     public var settingsPaneURL: URL? {
-        var components = URLComponents()
-        components.scheme = "x-apple.systempreferences"
         switch self {
         case .accessibility:
-            components.host = "com.apple.preference.security"
-            components.queryItems = [URLQueryItem(name: "Privacy_Accessibility", value: "1")]
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         case .screenRecording:
-            components.host = "com.apple.preference.security"
-            components.queryItems = [URLQueryItem(name: "Privacy_ScreenCapture", value: "1")]
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         case .fullDiskAccess:
-            components.host = "com.apple.preference.security"
-            components.queryItems = [URLQueryItem(name: "Privacy_AllFiles", value: "1")]
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
         case .automation:
             return nil
         }
-        return components.url
     }
 }
