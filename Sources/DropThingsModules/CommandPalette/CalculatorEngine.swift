@@ -43,8 +43,25 @@ public struct CalculatorEngine: Sendable {
 
     public func resultIfCalculation(_ expression: String) -> CalculatorValue? {
         let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.rangeOfCharacter(from: .decimalDigits) != nil || ["pi", "e"].contains(trimmed.lowercased()) else { return nil }
+        guard Self.looksLikeCalculation(trimmed) || ["pi", "e"].contains(trimmed.lowercased()) else { return nil }
         return try? evaluate(trimmed)
+    }
+
+    /// Identifies calculator intent early enough for the palette to switch
+    /// presentation while the expression is still incomplete. A bare one- or
+    /// two-digit query remains a normal search; three consecutive digits or a
+    /// numeric expression with an arithmetic operator enters calculator mode.
+    public static func looksLikeCalculation(_ expression: String) -> Bool {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        if trimmed.range(of: #"\d{3,}"#, options: .regularExpression) != nil {
+            return true
+        }
+
+        let hasAtLeastTwoDigits = trimmed.filter(\.isNumber).count >= 2
+        let hasArithmeticOperator = trimmed.contains { "+-*/%".contains($0) }
+        return hasAtLeastTwoDigits && hasArithmeticOperator
     }
 
     private func normalizeDecimalSeparator(_ input: String) -> String {

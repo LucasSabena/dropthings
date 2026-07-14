@@ -27,6 +27,7 @@ public struct ModuleMenuBarPresentation {
     public let accessibilityLabel: String
     public let preferredContentSize: CGSize
     public let isVisibleByDefault: Bool
+    public let allowsVisibilityCustomization: Bool
     public let togglesModuleLifecycle: Bool
     private let content: (@MainActor () -> AnyView)?
 
@@ -35,6 +36,7 @@ public struct ModuleMenuBarPresentation {
         accessibilityLabel: String,
         preferredContentSize: CGSize,
         isVisibleByDefault: Bool = false,
+        allowsVisibilityCustomization: Bool = true,
         togglesModuleLifecycle: Bool = false,
         content: (@MainActor () -> AnyView)? = nil
     ) {
@@ -42,6 +44,7 @@ public struct ModuleMenuBarPresentation {
         self.accessibilityLabel = accessibilityLabel
         self.preferredContentSize = preferredContentSize
         self.isVisibleByDefault = isVisibleByDefault
+        self.allowsVisibilityCustomization = allowsVisibilityCustomization
         self.togglesModuleLifecycle = togglesModuleLifecycle
         self.content = content
     }
@@ -117,6 +120,7 @@ extension DropThingsModule {
         case .markdownViewer: return "doc.richtext"
         case .audioControl: return "speaker.wave.2"
         case .networkPriority: return "cable.connector.horizontal"
+        case .keyboardLock: return "keyboard"
         default: return "square.stack.3d.up"
         }
     }

@@ -59,6 +59,7 @@ final class AppServices: ObservableObject {
         registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
         registry.register(AudioControlModule(settings: settings))
         registry.register(NetworkPriorityModule())
+        registry.register(KeyboardLockModule(permissions: permissions))
         let commandPalette = CommandPaletteModule(
             settings: settings,
             permissions: permissions,

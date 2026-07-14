@@ -134,7 +134,9 @@ public final class PermissionCenter: ObservableObject {
                 next[permission] = backendState
             }
         }
-        states = next
+        if states != next {
+            states = next
+        }
     }
 
     @discardableResult

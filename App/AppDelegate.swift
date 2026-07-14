@@ -37,7 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { @MainActor in
-            AppServices.shared.permissions.refresh()
             await AppServices.shared.registry.refreshPermissionsAndRetry()
         }
     }

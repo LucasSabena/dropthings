@@ -9,13 +9,12 @@ public final class ShelfPanel: NSPanel {
     public init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 440),
-            styleMask: [.titled, .resizable, .closable, .nonactivatingPanel],
+            styleMask: [.titled, .resizable, .closable],
             backing: .buffered,
             defer: false
         )
         title = "File Shelf"
-        becomesKeyOnlyIfNeeded = true
-        hidesOnDeactivate = false
+        hidesOnDeactivate = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         animationBehavior = .utilityWindow

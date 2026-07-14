@@ -12,10 +12,10 @@
   removes only this shortcut, not the module or the main DropThings item.
 - The compact menu-bar surface exposes system output selection, system volume
   and mute, per-app volume/mute/solo, per-app routing, and app actions.
-- When macOS exposes an active Now Playing session, the compact surface also
-  shows its source app, title, artist/album, and previous/play-pause/next
-  controls. This card is omitted when the compatibility bridge is unavailable
-  or the active player publishes no session.
+- The compact surface always reserves a small Media controls card. When macOS
+  exposes an active Now Playing session, it shows its source app, title,
+  artist/album, and previous/play-pause/next controls; otherwise it clearly
+  says that nothing is playing.
 - The footer opens this module's settings and offers Quit. DropThings does not
   copy FineTune's donation/marketing affordance.
 
@@ -59,9 +59,9 @@
 
 The menu-bar symbol now reflects live master
 output: muted/zero, low, medium, and high volume use progressively distinct SF
-Symbols. The shared popover is semitransient and no longer forces itself key,
-preventing internal controls from being mistaken for outside clicks and keeping
-the previously focused application responder intact.
+Symbols. The shared popover is transient and no longer forces itself key. It
+closes when the user returns to another application, while internal controls
+remain usable.
 
 ## Discovery reliability — 2026-07-14
 
