@@ -208,9 +208,9 @@ private final class ModuleStatusItem: NSObject {
         openSettings: @escaping (ModuleID) -> Void
     ) {
         guard let content = presentation.makeContentView() else { return }
-        // Semitransient popovers survive a global screenshot hotkey and its
-        // selection overlay, but still dismiss with normal outside activity.
-        popover.behavior = .semitransient
+        // A module popup is temporary control surface. Once the user returns
+        // to another app, dismiss it instead of leaving controls over that app.
+        popover.behavior = .transient
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.contentSize = presentation.preferredContentSize
         popover.contentViewController = NSHostingController(

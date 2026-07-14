@@ -32,6 +32,14 @@ final class CalculatorEngineTests: XCTestCase {
         XCTAssertEqual(try spanish.evaluate("1,5 + 2").value, 3.5)
     }
 
+    func testCalculatorIntentDetection() {
+        XCTAssertTrue(CalculatorEngine.looksLikeCalculation("123"))
+        XCTAssertTrue(CalculatorEngine.looksLikeCalculation("12 + 8"))
+        XCTAssertTrue(CalculatorEngine.looksLikeCalculation("12%5"))
+        XCTAssertFalse(CalculatorEngine.looksLikeCalculation("12"))
+        XCTAssertFalse(CalculatorEngine.looksLikeCalculation("notes"))
+    }
+
     func testDeterministicFuzzInputsNeverCrashOrReturnNonFiniteValues() {
         var generator = CalculatorFuzzGenerator(seed: 0xC0FFEE)
         let alphabet = Array("0123456789+-*/%^()., abcdefgilmnoprstuq")

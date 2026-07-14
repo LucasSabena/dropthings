@@ -118,6 +118,7 @@ the permission it needs only when you enable that module.
 | Markdown Viewer | Automation (optional) | Reads Markdown files explicitly selected in Finder |
 | Audio Control | System Audio Recording | Processes app audio locally when a per-app control is changed; it never saves or transmits audio |
 | Network Priority | Administrator authentication | Changes the current macOS network location's service order after an explicit switch |
+| Keyboard Lock | Accessibility | Temporarily blocks physical keyboard input while you clean it; mouse/trackpad remain available to unlock it |
 
 If a module says it needs a permission but the system does not seem to know
 about DropThings:

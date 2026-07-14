@@ -62,8 +62,13 @@ provider prefix.
 
 ## Refinement note — 2026-07-14
 
-The palette is now a wider, borderless nonactivating panel: it can receive text
-without making the previously active app resign, and Escape returns directly to
-that app's existing responder. Results use quiet token-based cards instead of
-window chrome or category-heavy decoration. An entered query offers both the
+The palette is now a wider, borderless key panel: opening it makes DropThings
+the active application so the search field, arrow navigation, Return, and
+Escape always use one responder chain. Closing it restores the previously
+frontmost application. Results use quiet token-based cards instead of window
+chrome or category-heavy decoration. An entered query offers both the
 configured web engine/browser and Finder's native “Search this Mac” action.
+
+Calculator intent is recognized while typing: three consecutive digits, or a
+numeric expression with an arithmetic operator, shows a compact calculator
+summary. Once valid, Return copies the formatted answer.

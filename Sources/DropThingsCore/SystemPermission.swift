@@ -26,7 +26,7 @@ extension SystemPermission {
     public var reason: String {
         switch self {
         case .accessibility:
-            return "Scroll Control uses this to adjust scroll-wheel events."
+            return "Required by modules that adjust scroll events or temporarily block keyboard input."
         case .screenRecording:
             return "Required by modules that capture visible screen content."
         case .fullDiskAccess:
@@ -51,7 +51,7 @@ extension SystemPermission {
     public var privacyDetail: String {
         switch self {
         case .accessibility:
-            return "DropThings listens only for scroll events while Scroll Control is enabled. It does not need Screen Recording or Full Disk Access for this feature."
+            return "DropThings uses this only while an enabled module adjusts scroll events or blocks keyboard input for cleaning. It does not need Screen Recording or Full Disk Access for these features."
         case .screenRecording:
             return "Allows a feature to read pixels currently visible on your displays."
         case .fullDiskAccess:

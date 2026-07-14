@@ -42,10 +42,15 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     func show() {
         let startedAt = DispatchTime.now().uptimeNanoseconds
         let panel = panel ?? makePanel()
-        rememberFocusOwner()
+        if !panel.isVisible { rememberFocusOwner() }
         place(panel)
+        // A non-activating panel leaves keyboard events with the frontmost
+        // application. That makes a palette look focused while arrows, Return,
+        // and Escape never reach its responder chain. Activate only while the
+        // palette is open; hide() restores the app that owned focus before it.
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
-        presentation.requestFocus()
+        DispatchQueue.main.async { [presentation] in presentation.requestFocus() }
         let elapsedMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
         os_signpost(
             .event,
@@ -68,7 +73,7 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     private func makePanel() -> NSPanel {
         let panel = CommandPalettePanel(
             contentRect: NSRect(origin: .zero, size: Layout.size),
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -105,12 +110,15 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     }
 
     private func restoreFocusOwnerIfNeeded() {
+        defer {
+            previouslyKeyWindow = nil
+            previouslyActiveApplication = nil
+        }
         if let previouslyKeyWindow, previouslyKeyWindow.isVisible {
             previouslyKeyWindow.makeKey()
         }
         guard NSApp.isActive, let application = previouslyActiveApplication else { return }
         application.activate(options: [])
-        previouslyActiveApplication = nil
     }
 
     private func place(_ panel: NSPanel) {
@@ -141,9 +149,8 @@ final class CommandPalettePresentationState: ObservableObject {
     func requestFocus() { focusRequest &+= 1 }
 }
 
-/// A non-activating panel can become key without making DropThings the active
-/// application. That gives the search field keyboard focus while preserving
-/// the front app's responder chain for when the panel disappears.
+/// The palette deliberately becomes key while visible so its SwiftUI field and
+/// local keyboard monitor share the same responder chain.
 private final class CommandPalettePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }

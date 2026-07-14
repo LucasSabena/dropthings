@@ -117,6 +117,7 @@ extension DropThingsModule {
         case .markdownViewer: return "doc.richtext"
         case .audioControl: return "speaker.wave.2"
         case .networkPriority: return "cable.connector.horizontal"
+        case .keyboardLock: return "keyboard"
         default: return "square.stack.3d.up"
         }
     }

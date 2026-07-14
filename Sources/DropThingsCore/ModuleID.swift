@@ -35,4 +35,5 @@ extension ModuleID {
     public static let markdownViewer = ModuleID("modules.markdown-viewer")
     public static let audioControl = ModuleID("modules.audio-control")
     public static let networkPriority = ModuleID("modules.network-priority")
+    public static let keyboardLock = ModuleID("modules.keyboard-lock")
 }

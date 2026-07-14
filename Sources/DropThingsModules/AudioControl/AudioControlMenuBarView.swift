@@ -19,12 +19,11 @@ struct AudioControlMenuBarView: View {
 
             Divider()
 
-            if let media = module.observedState?.mediaPlayback {
-                nowPlaying(media)
-                    .padding(.horizontal, DTSpace.lg)
-                    .padding(.vertical, DTSpace.md)
-                Divider()
-            }
+            nowPlayingSection
+                .padding(.horizontal, DTSpace.lg)
+                .padding(.vertical, DTSpace.md)
+
+            Divider()
 
             appsHeader
                 .padding(.horizontal, DTSpace.lg)
@@ -157,6 +156,29 @@ struct AudioControlMenuBarView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var nowPlayingSection: some View {
+        if let media = module.observedState?.mediaPlayback {
+            nowPlaying(media)
+        } else {
+            HStack(spacing: DTSpace.sm) {
+                Image(systemName: "music.note")
+                    .foregroundStyle(DTColor.textTertiary)
+                    .frame(width: DTSize.utilityIcon, height: DTSize.utilityIcon)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                    Text("Media controls")
+                        .font(DTTypography.body.weight(.semibold))
+                    Text("Nothing is playing right now")
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                }
+                Spacer()
+            }
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private func nowPlaying(_ media: MediaPlaybackState) -> some View {

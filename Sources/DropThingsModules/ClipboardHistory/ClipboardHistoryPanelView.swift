@@ -353,6 +353,7 @@ struct ClipboardHistoryPanelView: View {
     private func installMonitor() {
         selectedID = filteredItems.first?.id
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window?.isKeyWindow == true else { return event }
             if handleKeyEvent(event) { return nil }
             return event
         }

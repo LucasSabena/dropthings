@@ -35,12 +35,11 @@ public final class MenuBarCleanerOverflowPanelController {
     private func createPanel() {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 320),
-            styleMask: [.titled, .closable, .nonactivatingPanel],
+            styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         panel.title = "Menu Bar Cleaner"
-        panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

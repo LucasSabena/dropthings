@@ -18,6 +18,14 @@ struct CommandPalettePanelView: View {
         coordinator.results.first(where: { $0.id == selection })?.result
     }
 
+    private var calculationResult: PaletteResult? {
+        coordinator.results.first(where: { $0.result.kind == .calculation })?.result
+    }
+
+    private var isCalculatorMode: Bool {
+        CalculatorEngine.looksLikeCalculation(coordinator.query)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             searchField
@@ -78,7 +86,7 @@ struct CommandPalettePanelView: View {
 
     @ViewBuilder
     private var content: some View {
-        if coordinator.results.isEmpty {
+        if coordinator.results.isEmpty && !isCalculatorMode {
             VStack(spacing: DTSpace.sm) {
                 Spacer()
                 Image(systemName: coordinator.loadingProviders.isEmpty ? "magnifyingglass" : "clock")
@@ -92,23 +100,39 @@ struct CommandPalettePanelView: View {
             .frame(maxWidth: .infinity)
         } else {
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: DTSpace.xs) {
-                        ForEach(Array(coordinator.results.enumerated()), id: \.element.id) { index, ranked in
-                            CommandPaletteResultRow(
-                                result: ranked.result,
-                                index: index,
-                                count: coordinator.results.count,
-                                selected: ranked.id == selection
-                            ) {
-                                selection = ranked.id
-                                executePrimary(ranked.result)
+                VStack(spacing: 0) {
+                    if isCalculatorMode {
+                        CalculatorPaletteSummary(result: calculationResult)
+                            .padding(.horizontal, DTSpace.lg)
+                            .padding(.vertical, DTSpace.md)
+                    }
+
+                    if coordinator.results.isEmpty {
+                        Spacer()
+                        Text("Continue the expression to calculate it.")
+                            .font(DTTypography.body)
+                            .foregroundStyle(DTColor.textSecondary)
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: DTSpace.xs) {
+                                ForEach(Array(coordinator.results.enumerated()), id: \.element.id) { index, ranked in
+                                    CommandPaletteResultRow(
+                                        result: ranked.result,
+                                        index: index,
+                                        count: coordinator.results.count,
+                                        selected: ranked.id == selection
+                                    ) {
+                                        selection = ranked.id
+                                        executePrimary(ranked.result)
+                                    }
+                                    .id(ranked.id)
+                                }
                             }
-                            .id(ranked.id)
+                            .padding(.horizontal, DTSpace.sm)
+                            .padding(.vertical, DTSpace.md)
                         }
                     }
-                    .padding(.horizontal, DTSpace.sm)
-                    .padding(.vertical, DTSpace.md)
                 }
                 .onChange(of: selection) { _, id in
                     if let id {
@@ -233,6 +257,44 @@ struct CommandPalettePanelView: View {
         Task {
             if await coordinator.execute(action, for: result) { onClose() }
         }
+    }
+}
+
+private struct CalculatorPaletteSummary: View {
+    let result: PaletteResult?
+
+    var body: some View {
+        HStack(spacing: DTSpace.md) {
+            Image(systemName: "function")
+                .font(DTTypography.moduleIcon)
+                .foregroundStyle(DTColor.accent)
+                .frame(width: DTSize.utilityIcon, height: DTSize.utilityIcon)
+                .background(DTColor.accent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text("Calculator")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                if let result {
+                    Text("= \(result.title)")
+                        .font(DTTypography.windowTitle.monospacedDigit())
+                        .foregroundStyle(DTColor.textPrimary)
+                    Text("Return copies the result")
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                } else {
+                    Text("Waiting for a complete expression")
+                        .font(DTTypography.body.weight(.medium))
+                        .foregroundStyle(DTColor.textPrimary)
+                }
+            }
+            Spacer()
+        }
+        .padding(DTSpace.md)
+        .background(DTColor.accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous).strokeBorder(DTColor.accent.opacity(0.2)))
     }
 }
 
