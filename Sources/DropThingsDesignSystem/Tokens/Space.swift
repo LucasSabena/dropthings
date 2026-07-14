@@ -39,4 +39,8 @@ public enum DTSize {
     public static let shelfInspectorWidth: CGFloat = 288
     public static let markdownViewerWidth: CGFloat = 960
     public static let markdownViewerHeight: CGFloat = 640
+    public static let moduleMenuBarWidth: CGFloat = 480
+    public static let moduleMenuBarHeight: CGFloat = 520
+    public static let moduleMenuBarFooterHeight: CGFloat = 44
+    public static let compactMessageWidth: CGFloat = 300
 }

@@ -19,11 +19,13 @@ final class AppServices: ObservableObject {
     let permissions: PermissionCenter
     let diagnostics: DiagnosticsStore
     let registry: ModuleRegistry
+    let moduleMenuBarPreferences: ModuleMenuBarPreferences
     let captureArchive: CaptureArchive
     let settingsWindow: SettingsWindowController
     let launchAtLogin = LaunchAtLoginController()
     let updates: SparkleUpdaterController
     let importer = SettingsImporter(suiteName: "app.dropthings")
+    private var moduleMenuBarController: ModuleMenuBarController?
     var bundleInfo: BundleInfo { BundleInfo.current() }
 
     /// Forwards change notifications from child observables so SwiftUI views
@@ -38,6 +40,7 @@ final class AppServices: ObservableObject {
         self.permissions = PermissionCenter(settings: settings)
         self.diagnostics = DiagnosticsStore()
         self.registry = ModuleRegistry(settings: settings, permissions: permissions)
+        self.moduleMenuBarPreferences = ModuleMenuBarPreferences(settings: settings)
         self.captureArchive = CaptureArchive()
         self.updates = SparkleUpdaterController()
         self.settingsWindow = SettingsWindowController(
@@ -54,7 +57,21 @@ final class AppServices: ObservableObject {
         registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
         registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
         registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
+        registry.register(AudioControlModule(settings: settings))
+        let commandPalette = CommandPaletteModule(
+            settings: settings,
+            permissions: permissions,
+            commandSource: { [weak registry] in
+                guard let registry else { return [] }
+                return registry.modules.values
+                    .filter { $0.id != .commandPalette && registry.isEnabled($0.id) }
+                    .flatMap(\.commands)
+            }
+        )
+        registry.register(commandPalette)
+        enableCommandPaletteByDefaultIfNeeded()
         registry.pruneUnregisteredEnablement()
+        moduleMenuBarPreferences.prune(registeredModuleIDs: Set(registry.modules.keys))
         recordedModuleStates = registry.states
 
         settingsWindow.setContent(
@@ -84,8 +101,9 @@ final class AppServices: ObservableObject {
             .store(in: &cancellables)
         registry.$states
             .dropFirst()
-            .sink { [weak self] states in
+            .sink { [weak self, weak commandPalette] states in
                 self?.recordModuleStateChanges(states)
+                commandPalette?.refreshCommands()
             }
             .store(in: &cancellables)
         launchAtLogin.objectWillChange
@@ -94,6 +112,15 @@ final class AppServices: ObservableObject {
         updates.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+
+        moduleMenuBarPreferences.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        moduleMenuBarController = ModuleMenuBarController(
+            registry: registry,
+            preferences: moduleMenuBarPreferences,
+            openSettings: { [weak self] moduleID in self?.showSettings(moduleID: moduleID) }
+        )
     }
 
     /// Plain-text dump of the bundle path and current permission states.
@@ -199,6 +226,40 @@ final class AppServices: ObservableObject {
         settingsWindow.show()
     }
 
+#if DEBUG
+    func showCommandPaletteForVisualTesting(runQuerySequence: Bool = false) async {
+        await registry.start(id: .commandPalette)
+        guard let module = registry.modules[.commandPalette] as? CommandPaletteModule else { return }
+        module.show()
+        guard runQuerySequence else { return }
+        try? await Task.sleep(for: .milliseconds(250))
+        var prefix = ""
+        for character in "safari browser search" {
+            prefix.append(character)
+            module.coordinator.query = prefix
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        module.coordinator.query = "2+3*4"
+        try? await Task.sleep(for: .milliseconds(200))
+        module.coordinator.query = "README"
+    }
+#endif
+
+    /// Existing installs predate Command Palette, so absence of its explicit
+    /// key means "new module" rather than "user disabled it". Persist the
+    /// default once; subsequent off values are always respected.
+    private func enableCommandPaletteByDefaultIfNeeded() {
+        var enabled: [String: Bool] = [:]
+        if let data = settings.data(ModuleRegistry.enabledKey),
+           let decoded = try? JSONDecoder().decode([String: Bool].self, from: data) {
+            enabled = decoded
+        }
+        guard enabled[ModuleID.commandPalette.rawValue] == nil else { return }
+        enabled[ModuleID.commandPalette.rawValue] = true
+        guard let data = try? JSONEncoder().encode(enabled) else { return }
+        settings.setData(data, ModuleRegistry.enabledKey)
+    }
+
     func showSettings(moduleID: ModuleID? = nil) {
         if let moduleID {
             // Publish the selection through @AppStorage keys so the split view
@@ -210,6 +271,13 @@ final class AppServices: ObservableObject {
         }
         settingsWindow.show()
     }
+
+#if DEBUG
+    func showMenuBarItemForVisualTesting(moduleID: ModuleID) {
+        (registry.modules[moduleID] as? AudioControlModule)?.prepareEmptyVisualTestingState()
+        moduleMenuBarController?.showForVisualTesting(moduleID: moduleID)
+    }
+#endif
 }
 
 @MainActor

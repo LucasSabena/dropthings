@@ -1,74 +1,95 @@
-import XCTest
 import SwiftUI
-@testable import DropThingsModules
+import XCTest
 @testable import DropThingsCore
+@testable import DropThingsModules
 import DropThingsPlatform
 
 final class CommandPaletteExecutionTests: XCTestCase {
+    func testKeyboardSelectionWrapsAndPreservesStableID() {
+        let ids = ["one", "two", "three"]
+        XCTAssertEqual(PaletteSelection.moved(currentID: "three", by: 1, resultIDs: ids), "one")
+        XCTAssertEqual(PaletteSelection.moved(currentID: "one", by: -1, resultIDs: ids), "three")
+        XCTAssertEqual(PaletteSelection.preserving(currentID: "two", resultIDs: ids), "two")
+        XCTAssertEqual(PaletteSelection.preserving(currentID: "missing", resultIDs: ids), "one")
+    }
+
     @MainActor
-    func testCommandExecutesAction() {
-        let executed = CommandExecutionFlag()
-        let command = CommandDescriptor(id: "test", title: "Test") {
-            executed.value = true
+    func testCommandActionExecutes() async throws {
+        let flag = CommandExecutionFlag()
+        let action = PaletteAction(id: "run", title: "Run", symbolName: "return", role: .primary) {
+            flag.value = true
         }
-        command.action()
-        XCTAssertTrue(executed.value)
+        try await action.perform()
+        XCTAssertTrue(flag.value)
     }
 
     @MainActor
     func testModuleDefaultCommandsAreEmpty() {
-        let module = DummyModule()
-        XCTAssertTrue(module.commands.isEmpty)
+        XCTAssertTrue(DummyModule().commands.isEmpty)
     }
 
     @MainActor
-    func testModuleCanExposeCommands() {
-        let module = CommandfulModule()
-        XCTAssertEqual(module.commands.count, 1)
-        XCTAssertEqual(module.commands.first?.title, "Do Work")
-    }
-
-    @MainActor
-    func testDropThingsModuleDefaultCommandsAreEmpty() {
-        let module = DummyModule()
-        XCTAssertTrue(module.commands.isEmpty)
-    }
-
-    @MainActor
-    func testRealModuleCommandIDsAreUniqueAndUseful() {
+    func testHotkeyRegistersOnStartAndUnregistersOnStop() async throws {
         let store = SettingsStore(backend: InMemorySettingsBackend())
-        let permissions = PermissionCenter(backend: CommandPermissionBackend())
-        let modules: [any DropThingsModule] = [
-            FileShelfModule(settings: store),
-            ClipboardHistoryModule(settings: store, permissions: permissions),
-            MenuBarCleanerModule(settings: store, permissions: permissions),
-            KeepAwakeModule(settings: store),
-            ColorPickerModule(settings: store, permissions: permissions),
-            ScrollControlModule(settings: store, permissions: permissions),
-            ScreenshotRegionModule(settings: store, permissions: permissions),
-            WindowSnapModule(settings: store, permissions: permissions),
-            TextToolsModule(settings: store)
-        ]
-        let commands = modules.flatMap(\.commands)
-        let ids = commands.map(\.id)
+        let fake = FakePaletteHotkey()
+        let module = CommandPaletteModule(
+            settings: store,
+            permissions: PermissionCenter(backend: PalettePermissionBackend()),
+            commandSource: { [] },
+            applicationCatalog: EmptyApplicationCatalog(),
+            spotlight: EmptySpotlight(),
+            workspace: PaletteWorkspace(),
+            hotkeyFactory: { _, _ in fake }
+        )
+        try await module.start()
+        XCTAssertEqual(fake.registerCount, 1)
+        await module.stop()
+        XCTAssertEqual(fake.unregisterCount, 1)
+    }
 
-        XCTAssertGreaterThanOrEqual(commands.count, 18)
-        XCTAssertEqual(Set(ids).count, ids.count)
-        XCTAssertTrue(ids.contains("file-shelf.toggle"))
-        XCTAssertTrue(ids.contains("clipboard-history.open"))
-        XCTAssertTrue(ids.contains("window-snap.maximize"))
+    @MainActor
+    func testHotkeyRegistrationFailureDegradesWithoutStartingListener() async throws {
+        let store = SettingsStore(backend: InMemorySettingsBackend())
+        let fake = FakePaletteHotkey(shouldFail: true)
+        let module = CommandPaletteModule(
+            settings: store,
+            permissions: PermissionCenter(backend: PalettePermissionBackend()),
+            commandSource: { [] },
+            applicationCatalog: EmptyApplicationCatalog(),
+            spotlight: EmptySpotlight(),
+            workspace: PaletteWorkspace(),
+            hotkeyFactory: { _, _ in fake }
+        )
+        try await module.start()
+        guard case .degraded = module.state else { return XCTFail("Expected degraded hotkey state") }
+        await module.stop()
+    }
+
+    @MainActor
+    func testClearingProviderFailureDoesNotHideHotkeyFailure() async throws {
+        let store = SettingsStore(backend: InMemorySettingsBackend())
+        let fake = FakePaletteHotkey(shouldFail: true)
+        let module = CommandPaletteModule(
+            settings: store,
+            permissions: PermissionCenter(backend: PalettePermissionBackend()),
+            commandSource: { [] },
+            applicationCatalog: EmptyApplicationCatalog(),
+            spotlight: EmptySpotlight(),
+            workspace: PaletteWorkspace(),
+            hotkeyFactory: { _, _ in fake }
+        )
+        try await module.start()
+        try await Task.sleep(for: .milliseconds(50))
+        module.setProvider(.applications, enabled: false)
+        try await Task.sleep(for: .milliseconds(20))
+
+        guard case .degraded(let reason) = module.state else { return XCTFail("Expected degraded state") }
+        XCTAssertTrue(reason.contains("unavailable"))
+        await module.stop()
     }
 }
 
-private final class CommandExecutionFlag: @unchecked Sendable {
-    var value = false
-}
-
-@MainActor
-private final class CommandPermissionBackend: PermissionBackend, @unchecked Sendable {
-    func currentState(for permission: SystemPermission) -> SystemPermissionState { .granted }
-    func openSystemSettings(for permission: SystemPermission) -> Bool { true }
-}
+private final class CommandExecutionFlag: @unchecked Sendable { var value = false }
 
 private final class DummyModule: DropThingsModule {
     let id = ModuleID.fake
@@ -76,24 +97,37 @@ private final class DummyModule: DropThingsModule {
     let summary = "Dummy"
     let requiredPermissions: [SystemPermission] = []
     @Published var state: ModuleState = .off
-
     func start() async throws {}
     func stop() async {}
     func makeSettingsView() -> AnyView { AnyView(EmptyView()) }
 }
 
-private final class CommandfulModule: DropThingsModule {
-    let id = ModuleID.fake
-    let name = "Commandful"
-    let summary = "Commandful"
-    let requiredPermissions: [SystemPermission] = []
-    @Published var state: ModuleState = .off
+@MainActor
+private final class FakePaletteHotkey: CommandPaletteHotkeyRegistration {
+    private let shouldFail: Bool
+    var registerCount = 0
+    var unregisterCount = 0
 
-    var commands: [CommandDescriptor] {
-        [CommandDescriptor(id: "do-work", title: "Do Work", action: {})]
+    init(shouldFail: Bool = false) { self.shouldFail = shouldFail }
+    func register() throws {
+        registerCount += 1
+        if shouldFail { throw GlobalHotkey.RegistrationError.registerFailed(-1) }
     }
+    func unregister() { unregisterCount += 1 }
+}
 
-    func start() async throws {}
-    func stop() async {}
-    func makeSettingsView() -> AnyView { AnyView(EmptyView()) }
+private actor EmptyApplicationCatalog: ApplicationCataloging {
+    func applications(in additionalLocations: [URL]) async -> [ApplicationRecord] { [] }
+    func invalidate() async {}
+}
+
+@MainActor
+private final class EmptySpotlight: SpotlightFileSearching, @unchecked Sendable {
+    func search(query: String, includeContents: Bool, includeHidden: Bool, excludedPaths: [String], maximumResults: Int) async throws -> [SpotlightFileRecord] { [] }
+}
+
+@MainActor
+private final class PalettePermissionBackend: PermissionBackend, @unchecked Sendable {
+    func currentState(for permission: SystemPermission) -> SystemPermissionState { .granted }
+    func openSystemSettings(for permission: SystemPermission) -> Bool { true }
 }

@@ -59,3 +59,47 @@
 - Audio resource inventory before/after fault tests.
 - Automated results and known incompatibilities.
 - Explicit owner approval before FineTune is uninstalled.
+
+## Evidence log — 2026-07-13
+
+Environment:
+
+- macOS 26.5.2 (25F84), Xcode 26.6 (17F113).
+- MacBook Air `Mac17,4`, Apple M5, 10 cores, 16 GB RAM.
+- Default output observed: built-in MacBook Air speakers, 48 kHz.
+
+Automated/build evidence:
+
+- `swift test --filter 'Audio(SafetyPolicy|Protocol|EngineCrashPolicy|ControlSettings|ControlModule)Tests'`:
+  11 tests passed, 0 failures.
+- Latest full `swift test`: 361 tests passed, 0 failures.
+- Debug and Release `xcodebuild -scheme AudioControlEngine ... build`: passed.
+- Debug and Release `xcodebuild -scheme DropThings ... build`: passed; the resulting app contains
+  `Contents/XPCServices/AudioControlEngine.xpc` and both bundles contain
+  `NSAudioCaptureUsageDescription`.
+- A local ad-hoc signed Debug bundle passed `codesign --verify --deep --strict`;
+  its nested XPC service has identifier `app.dropthings.AudioControlEngine`.
+- Launching the signed app with Audio Control enabled spawned the embedded XPC
+  helper. Terminating the test host also terminated its helper; the post-test
+  inventory remained 0 taps and 0 aggregate devices. No app control was changed,
+  so this check intentionally did not prompt or process audible content.
+- Read-only resource inventory before privileged testing: 0 process taps and 0
+  aggregate devices. Compile/unit verification creates no audio resource.
+- The existing unrelated AppKit actor-isolation warning and Xcode's no-AppIntents
+  metadata warning remain; neither originates in Audio Control.
+- Independent menu-bar preference tests cover defaults, persistence, and pruning.
+- Audio module tests cover system output volume/mute delegation and persisted
+  per-app routing desired state.
+- Product Design visual QA compared the supplied FineTune capture with the
+  native 480×520 rendered empty state. One P2 contrast issue on the unavailable
+  output selector was fixed and recaptured; the final report is `design-qa.md`.
+
+Hardware gate evidence still required:
+
+- [ ] Explicitly grant System Audio Recording from the built DropThings app.
+- [ ] Confirm one-app gain/mute at a safe speaker/headphone level and verify
+  normal audio after disable, app quit, helper kill, and DropThings force quit.
+- [ ] Record tap/aggregate inventory before and after every failure case.
+- [ ] Measure latency, CPU, overload count, and resource stability.
+- [ ] Complete the 24-hour Phase 1 run, the Phase 2 matrix, and seven clean
+  daily-use days before enabling later phases or removing FineTune.

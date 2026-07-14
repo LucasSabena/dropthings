@@ -19,7 +19,8 @@ platform.
 One global shortcut opens a fast search surface on the display the user is
 currently using. A single query can return installed applications, DropThings
 module commands, files and folders indexed by Spotlight, calculations, and a
-small curated set of system actions.
+small curated set of system actions. An opt-in web result can send an explicit
+search to the user's selected browser and search engine.
 
 ## Definition of done
 
@@ -33,14 +34,15 @@ when all of the following are true:
 - Ranking learns from local usage and remains deterministic enough to test.
 - Calculator results can be copied or executed without changing mode.
 - Every result has appropriate keyboard actions and clear failure feedback.
-- No network, account, extension store, AI feature, or telemetry is required.
+- No network, account, extension store, AI feature, or telemetry is required;
+  web search is optional and disabled by default.
 
-## Current baseline
+## Implemented baseline — 2026-07-13
 
-The repository already has `CommandPaletteModule`, a global hotkey, an
-`NSPanel`, keyboard navigation, and module command aggregation. The current
-filter is substring matching and the panel calls `center()`, so it is a useful
-prototype rather than the target product.
+The prototype was replaced with a provider-based module containing application
+cataloguing, module/system commands, a safe calculator, Spotlight-backed files,
+deterministic fuzzy ranking, bounded local history, active-display placement,
+result actions, application visibility/pinning, and opt-in web search.
 
 ## Delivery order
 
@@ -48,4 +50,5 @@ prototype rather than the target product.
 2. Apps + module commands + active-display placement.
 3. Calculator + ranking/history.
 4. Spotlight files/folders + actions/Quick Look.
-5. Reliability and latency pass across display/Space configurations.
+5. Pinned/selected applications + configurable web search.
+6. Reliability and latency pass across display/Space configurations.

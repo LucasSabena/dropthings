@@ -21,6 +21,9 @@ Reference: <https://www.lazyweb.com/canvas/flows/raycast/ask-ai-and-switch>
 - Command-Return reveals/open-containing-folder where applicable.
 - Typing never requires selecting a provider or entering a prefix.
 - Empty query favors recent/frequent items without noisy category headers.
+- Pinned applications sort ahead of ordinary applications. Pin/unpin lives in
+  the action menu; the settings screen owns bulk visibility selection.
+- Web search is a normal low-priority result and runs only after Return.
 
 ## Layout
 
@@ -57,4 +60,13 @@ Reference: <https://www.lazyweb.com/canvas/flows/raycast/ask-ai-and-switch>
 
 The first release requests no TCC permission merely to open the palette. File
 search explains that it uses the local Spotlight index and cannot see excluded
-or inaccessible content. No query text or history leaves the Mac.
+or inaccessible content. Usage history stays on the Mac. When web search is
+enabled, only an explicitly executed query is encoded into an HTTPS URL and
+given to the selected browser; merely typing never sends it.
+
+## Workflow extension note — 2026-07-13
+
+The existing Lazyweb-derived keyboard-first pattern was retained for recent and
+pinned apps and for the optional web result. These additions use progressive
+disclosure in the existing action menu and settings instead of adding a mode or
+provider prefix.

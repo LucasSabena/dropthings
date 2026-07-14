@@ -19,6 +19,29 @@ are enabled or when you click **Check for Updates**.
 | **Keep Awake** | Timed or indefinite awake sessions, with an optional display assertion. | — |
 | **Color Picker** | Fluid native sampler with visual copy feedback. Publishes real colors plus HEX/RGB/HSL/SwiftUI/CSS text. | — |
 | **Clipboard History** | Persistent local history for text, colors, images, videos, documents, and folders with native previews. | — |
+| **Command Palette** | Keyboard-first launcher for apps, files, module commands, calculator results, history, and optional web searches. | Accessibility only for optional Finder selection actions |
+| **Screenshot Studio** | Region, window, display, delayed, scrolling, and Shelf captures with native annotation tools. | Screen Recording |
+| **Markdown Viewer** | Native tabbed GitHub-flavored Markdown viewer with Finder integration and live reload. | Automation only for the optional Finder selection shortcut |
+| **Audio Control** | Independent menu-bar mixer with system output, master volume, per-app volume, mute, solo, and routing. | System Audio Recording when an app control is first changed |
+
+### Complete module inventory
+
+The table above lists the modules currently registered in the shipping app.
+The repository also contains these module implementations, kept out of the
+runtime composition until their end-to-end interaction meets the same release
+bar:
+
+| Module | What it does | Permission | Status |
+|---|---|---|---|
+| **Menu Bar Cleaner** | Collapses low-priority menu bar items behind one compact control, with named profiles and dividers. | — | Implemented, not currently registered |
+| **Window Snap** | Moves and resizes the frontmost window with configurable keyboard shortcuts. | Accessibility | Implemented, not currently registered |
+| **Snippets** | Stores named text snippets and copies them to the clipboard on demand. | — | Implemented, not currently registered |
+| **Text Tools** | Runs case, URL, JSON, Base64, line, and character-count transformations. | — | Implemented, not currently registered |
+| **Screenshot Region** | Captures a dragged screen region. | Screen Recording | Superseded in the shipping app by Screenshot Studio |
+
+This inventory mirrors every concrete module under
+`Sources/DropThingsModules`; test-only module identifiers are intentionally
+excluded.
 
 Every module:
 
@@ -89,6 +112,10 @@ the permission it needs only when you enable that module.
 | Clipboard History | — | Reads the system pasteboard while enabled |
 | File Shelf | — | Uses drag and drop plus user-selected files |
 | Keep Awake | — | Uses macOS power assertions |
+| Command Palette | Accessibility (optional) | Reads the Finder selection only when that integration is enabled |
+| Screenshot Studio | Screen Recording | Captures the screen, window, or selected region |
+| Markdown Viewer | Automation (optional) | Reads Markdown files explicitly selected in Finder |
+| Audio Control | System Audio Recording | Processes app audio locally when a per-app control is changed; it never saves or transmits audio |
 
 If a module says it needs a permission but the system does not seem to know
 about DropThings:
@@ -105,12 +132,16 @@ and automatic rechecking when you return.
 
 ## Usage
 
-Once installed, DropThings lives in the menu bar. Click the icon to open
+Once installed, DropThings lives in the menu bar. Click the main icon to open
 the menu:
 
 - **Open Settings…** — the main configuration window
 - An action for each active module that exposes one
 - **Quit DropThings**
+
+Modules can also declare an independent menu-bar surface. Audio Control ships
+with one enabled by default while the module is active; its module settings let
+you show or hide that icon without disabling Audio Control.
 
 Inside **Settings**, the sidebar lists each module. Click one to see its
 state, its settings, and its required permissions. Enable or disable with

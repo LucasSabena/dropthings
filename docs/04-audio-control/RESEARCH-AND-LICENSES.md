@@ -18,6 +18,12 @@ Last researched: 2026-07-13.
 - Apple Core Audio property listeners:
   <https://developer.apple.com/documentation/coreaudio/audiohardwareobject/addlistener(forproperties:dispatchqueue:)>
 
+The official Apple sample archive was downloaded and inspected on 2026-07-13 to
+verify the public tap/aggregate/IOProc lifecycle. Its `LICENSE.txt` is an MIT-like
+permissive license, copyright Apple Inc. 2024. No sample source file was copied;
+the DropThings helper was implemented independently against the documented API
+contract, uses no recording path, and has a different transactional/XPC design.
+
 ## FineTune inspection
 
 - Repository: <https://github.com/ronitsingh10/FineTune>

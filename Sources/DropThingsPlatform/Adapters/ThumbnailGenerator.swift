@@ -60,11 +60,16 @@ public final class ThumbnailGenerator {
             scale: scale,
             representationTypes: .all
         )
-        let generated: NSImage? = await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
-                continuation.resume(returning: representation?.nsImage)
+        let generated: NSImage? = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                    continuation.resume(returning: representation?.nsImage)
+                }
             }
+        } onCancel: {
+            QLThumbnailGenerator.shared.cancel(request)
         }
+        guard !Task.isCancelled else { return nil }
         let image = generated ?? thumbnail(for: url, edge: edge)
         if let image {
             cache.setObject(image, forKey: key)

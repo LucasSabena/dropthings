@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.1</string>
+	<string>0.6.0</string>
 	<key>CFBundleVersion</key>
-	<string>18</string>
+	<string>19</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/LucasSabena/dropthings/main/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>
@@ -32,6 +32,8 @@
 	<string>DropThings © 2026 Lucas Sabena and contributors. GPLv3.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>DropThings can read the Markdown files selected in Finder when you explicitly enable that shortcut option.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>DropThings processes app audio locally to provide per-app volume controls. It never records, saves, or transmits audio.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>

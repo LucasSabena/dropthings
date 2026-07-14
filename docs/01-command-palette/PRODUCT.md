@@ -4,7 +4,8 @@
 
 ### Root search
 
-- Empty query: recent and frequently used results, grouped sparingly.
+- Empty query: pinned applications first, followed by recent and frequently used
+  results, grouped sparingly.
 - Text query: merge results from all enabled providers into one ranked list.
 - Result kinds: application, module command, file, folder, calculation, and
   system action.
@@ -18,6 +19,21 @@
 - Deduplicate by canonical bundle URL/bundle identifier.
 - Hide helpers, login items, and invalid bundles by default.
 - Launch or activate with Return; reveal in Finder and copy path from actions.
+- Applications may be pinned from the result action menu. Settings may expose
+  every discovered application or only an explicit selection; pinned apps are
+  always included.
+
+### Web search
+
+- Disabled by default and enabled explicitly in settings.
+- Search engines: Google, Bing, DuckDuckGo, Brave Search, and Kagi.
+- Use the system default browser or a supported installed browser selected in
+  settings.
+- A web result is only executed with Return; typing alone never contacts a
+  network service.
+- Opening a URL targets the selected browser through Launch Services. A running
+  browser receives the URL in its existing process and applies its normal
+  new-tab/window preference; a stopped browser is launched.
 
 ### Files and folders
 
@@ -72,6 +88,8 @@
 
 - Global shortcut.
 - Included providers and their scopes.
+- Application visibility, explicit application selection, and pinned apps.
+- Optional web search engine and browser.
 - File-content search toggle.
 - Include hidden files toggle.
 - App/file exclusion paths.
@@ -83,7 +101,7 @@
 
 - Raycast AI, accounts, sync, teams, store, React extension runtime, or cloud.
 - Searching arbitrary content inside every third-party app.
-- Browser tabs/history until a separate, explicitly permissioned integration is
-  requested.
+- Searching or reading browser tabs/history. Web search only launches a
+  user-confirmed HTTPS URL.
 - A shell command runner.
 - A replacement Spotlight indexer in the first release.

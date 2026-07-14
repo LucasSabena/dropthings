@@ -15,12 +15,45 @@
 		D700000000000000000000AB /* SettingsImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BC /* SettingsImporter.swift */; };
 		D700000000000000000000AC /* BundleInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BD /* BundleInfo.swift */; };
 		D700000000000000000000AD /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BE /* SparkleUpdater.swift */; };
+		D700000000000000000000AF /* ModuleMenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000BF /* ModuleMenuBarController.swift */; };
 		D700000000000000000000A3 /* DropThingsCore in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C1 /* DropThingsCore */; };
 		D700000000000000000000A4 /* DropThingsDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C2 /* DropThingsDesignSystem */; };
 		D700000000000000000000A5 /* DropThingsPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C3 /* DropThingsPlatform */; };
 		D700000000000000000000A6 /* DropThingsModules in Frameworks */ = {isa = PBXBuildFile; productRef = D700000000000000000000C4 /* DropThingsModules */; };
 		D700000000000000000000A7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D700000000000000000000B7 /* Assets.xcassets */; };
+		A40000000000000000000001 /* AudioControlEngine.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = A40000000000000000000020 /* AudioControlEngine.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A40000000000000000000002 /* DropThingsAudioControlKit in Frameworks */ = {isa = PBXBuildFile; productRef = A40000000000000000000030 /* DropThingsAudioControlKit */; };
+		A40000000000000000000003 /* AudioControlEngineService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000021 /* AudioControlEngineService.swift */; };
+		A40000000000000000000004 /* AudioEngineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000022 /* AudioEngineCoordinator.swift */; };
+		A40000000000000000000005 /* CoreAudioCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000023 /* CoreAudioCatalog.swift */; };
+		A40000000000000000000006 /* ProcessAudioPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000024 /* ProcessAudioPipeline.swift */; };
+		A40000000000000000000007 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000025 /* main.swift */; };
+		A40000000000000000000008 /* DTAudioRTProcessor.mm in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000026 /* DTAudioRTProcessor.mm */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A40000000000000000000040 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D70000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A40000000000000000000010;
+			remoteInfo = AudioControlEngine;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A40000000000000000000050 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				A40000000000000000000001 /* AudioControlEngine.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D700000000000000000000B1 /* DropThingsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropThingsApp.swift; sourceTree = "<group>"; };
@@ -30,10 +63,22 @@
 		D700000000000000000000BC /* SettingsImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsImporter.swift; sourceTree = "<group>"; };
 		D700000000000000000000BD /* BundleInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleInfo.swift; sourceTree = "<group>"; };
 		D700000000000000000000BE /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
+		D700000000000000000000BF /* ModuleMenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleMenuBarController.swift; sourceTree = "<group>"; };
 		D700000000000000000000B5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D700000000000000000000B6 /* DropThings.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DropThings.entitlements; sourceTree = "<group>"; };
 		D700000000000000000000B7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D700000000000000000000B8 /* DropThings.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DropThings.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000000020 /* AudioControlEngine.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = AudioControlEngine.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000000021 /* AudioControlEngineService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioControlEngineService.swift; sourceTree = "<group>"; };
+		A40000000000000000000022 /* AudioEngineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineCoordinator.swift; sourceTree = "<group>"; };
+		A40000000000000000000023 /* CoreAudioCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioCatalog.swift; sourceTree = "<group>"; };
+		A40000000000000000000024 /* ProcessAudioPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessAudioPipeline.swift; sourceTree = "<group>"; };
+		A40000000000000000000025 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		A40000000000000000000026 /* DTAudioRTProcessor.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DTAudioRTProcessor.mm; sourceTree = "<group>"; };
+		A40000000000000000000027 /* DTAudioRTProcessor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DTAudioRTProcessor.h; sourceTree = "<group>"; };
+		A40000000000000000000028 /* AudioControlEngine-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AudioControlEngine-Bridging-Header.h"; sourceTree = "<group>"; };
+		A40000000000000000000029 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A4000000000000000000002A /* AudioControlEngine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AudioControlEngine.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +94,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A40000000000000000000051 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A40000000000000000000002 /* DropThingsAudioControlKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -56,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				D700000000000000000000F3 /* App */,
+				A40000000000000000000060 /* AudioControlEngine */,
 				D700000000000000000000F7 /* Package.swift */,
 				D700000000000000000000F5 /* Sources */,
 				D700000000000000000000F6 /* Tests */,
@@ -67,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				D700000000000000000000B8 /* DropThings.app */,
+				A40000000000000000000020 /* AudioControlEngine.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,6 +136,7 @@
 				D700000000000000000000BC /* SettingsImporter.swift */,
 				D700000000000000000000BD /* BundleInfo.swift */,
 				D700000000000000000000BE /* SparkleUpdater.swift */,
+				D700000000000000000000BF /* ModuleMenuBarController.swift */,
 				D700000000000000000000B5 /* Info.plist */,
 				D700000000000000000000B6 /* DropThings.entitlements */,
 				D700000000000000000000B7 /* Assets.xcassets */,
@@ -108,6 +164,23 @@
 			path = Tests;
 			sourceTree = "<group>";
 		};
+		A40000000000000000000060 /* AudioControlEngine */ = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000021 /* AudioControlEngineService.swift */,
+				A40000000000000000000022 /* AudioEngineCoordinator.swift */,
+				A40000000000000000000023 /* CoreAudioCatalog.swift */,
+				A40000000000000000000024 /* ProcessAudioPipeline.swift */,
+				A40000000000000000000025 /* main.swift */,
+				A40000000000000000000026 /* DTAudioRTProcessor.mm */,
+				A40000000000000000000027 /* DTAudioRTProcessor.h */,
+				A40000000000000000000028 /* AudioControlEngine-Bridging-Header.h */,
+				A40000000000000000000029 /* Info.plist */,
+				A4000000000000000000002A /* AudioControlEngine.entitlements */,
+			);
+			path = AudioControlEngine;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -118,10 +191,12 @@
 				D700000000000000000000E2 /* Sources */,
 				D700000000000000000000E1 /* Frameworks */,
 				D700000000000000000000E3 /* Resources */,
+				A40000000000000000000050 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A40000000000000000000041 /* PBXTargetDependency */,
 			);
 			name = DropThings;
 			packageProductDependencies = (
@@ -135,6 +210,25 @@
 			productReference = D700000000000000000000B8 /* DropThings.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A40000000000000000000010 /* AudioControlEngine */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A40000000000000000000070 /* Build configuration list for PBXNativeTarget "AudioControlEngine" */;
+			buildPhases = (
+				A40000000000000000000052 /* Sources */,
+				A40000000000000000000051 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AudioControlEngine;
+			packageProductDependencies = (
+				A40000000000000000000030 /* DropThingsAudioControlKit */,
+			);
+			productName = AudioControlEngine;
+			productReference = A40000000000000000000020 /* AudioControlEngine.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -147,6 +241,9 @@
 				TargetAttributes = {
 					D70000000000000000000010 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					A40000000000000000000010 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -169,6 +266,7 @@
 			projectRoot = "";
 			targets = (
 				D70000000000000000000010 /* DropThings */,
+				A40000000000000000000010 /* AudioControlEngine */,
 			);
 		};
 /* End PBXProject section */
@@ -196,10 +294,32 @@
 				D700000000000000000000AB /* SettingsImporter.swift in Sources */,
 				D700000000000000000000AC /* BundleInfo.swift in Sources */,
 				D700000000000000000000AD /* SparkleUpdater.swift in Sources */,
+				D700000000000000000000AF /* ModuleMenuBarController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A40000000000000000000052 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A40000000000000000000003 /* AudioControlEngineService.swift in Sources */,
+				A40000000000000000000004 /* AudioEngineCoordinator.swift in Sources */,
+				A40000000000000000000005 /* CoreAudioCatalog.swift in Sources */,
+				A40000000000000000000006 /* ProcessAudioPipeline.swift in Sources */,
+				A40000000000000000000007 /* main.swift in Sources */,
+				A40000000000000000000008 /* DTAudioRTProcessor.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A40000000000000000000041 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A40000000000000000000010 /* AudioControlEngine */;
+			targetProxy = A40000000000000000000040 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D70000000000000000000003 /* Debug */ = {
@@ -374,6 +494,44 @@
 			};
 			name = Release;
 		};
+		A40000000000000000000071 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AudioControlEngine/AudioControlEngine.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 18;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AudioControlEngine/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings.AudioControlEngine;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "AudioControlEngine/AudioControlEngine-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A40000000000000000000072 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AudioControlEngine/AudioControlEngine.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 18;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AudioControlEngine/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings.AudioControlEngine;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "AudioControlEngine/AudioControlEngine-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -391,6 +549,15 @@
 			buildConfigurations = (
 				D70000000000000000000005 /* Debug */,
 				D70000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A40000000000000000000070 /* Build configuration list for PBXNativeTarget "AudioControlEngine" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A40000000000000000000071 /* Debug */,
+				A40000000000000000000072 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -436,6 +603,10 @@
 		D700000000000000000000C4 /* DropThingsModules */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DropThingsModules;
+		};
+		A40000000000000000000030 /* DropThingsAudioControlKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DropThingsAudioControlKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

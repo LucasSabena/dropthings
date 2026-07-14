@@ -5,44 +5,52 @@ its gate passes.
 
 ## Phase 0 — baseline and seams
 
-- [ ] Include CommandPalette and its Platform adapters in a testable build target
+- [x] Include CommandPalette and its Platform adapters in a testable build target
   instead of relying on current SwiftPM exclusions.
-- [ ] Add baseline tests for existing filtering, hotkey lifecycle, and keyboard
+- [x] Add baseline tests for existing filtering, hotkey lifecycle, and keyboard
   selection.
-- [ ] Introduce `PaletteResult` and adapt `CommandDescriptor` without changing
+- [x] Introduce `PaletteResult` and adapt `CommandDescriptor` without changing
   visible behavior.
-- [ ] Add versioned settings and a migration from current hotkey settings.
+- [x] Add versioned settings and a migration from current hotkey settings.
 
 Gate: clean build, tests run in CI/local command, existing palette behavior is
 unchanged.
 
 ## Phase 1 — apps, commands, and panel reliability
 
-- [ ] Implement cached application catalog and deduplication.
-- [ ] Add token/fuzzy matching and deterministic ranking.
-- [ ] Place the panel on the active display and active Space.
-- [ ] Add app launch/activate and module command execution.
-- [ ] Add provider-specific empty/degraded diagnostics in settings.
+- [x] Implement cached application catalog and deduplication.
+- [x] Add token/fuzzy matching and deterministic ranking.
+- [x] Place the panel on the active display and active Space.
+- [x] Add app launch/activate and module command execution.
+- [x] Add provider-specific empty/degraded diagnostics in settings.
 
 Gate: the user can disable Spotlight/Raycast app launching for one week without
 a missed daily workflow.
 
 ## Phase 2 — calculator and local history
 
-- [ ] Implement tokenizer/parser/evaluator with typed errors.
-- [ ] Format results using current locale without ambiguous persisted values.
-- [ ] Add bounded recency/frequency history and clear-history setting.
-- [ ] Add copy result and action recording after success.
+- [x] Implement tokenizer/parser/evaluator with typed errors.
+- [x] Format results using current locale without ambiguous persisted values.
+- [x] Add bounded recency/frequency history and clear-history setting.
+- [x] Add copy result and action recording after success.
 
 Gate: fuzz/property tests produce no crashes, and ranking fixtures remain stable.
 
 ## Phase 3 — Spotlight files and actions
 
-- [ ] Implement cancellable `NSMetadataQuery` adapter.
-- [ ] Add filename search first; content search behind a setting.
-- [ ] Add Quick Look, open, reveal, copy path, and containing-folder actions.
-- [ ] Add exclusions and explain Spotlight limitations.
-- [ ] Add lazy icons/thumbnails with cancellation and cache bounds.
+- [x] Implement cancellable `NSMetadataQuery` adapter.
+- [x] Add filename search first; content search behind a setting.
+- [x] Add Quick Look, open, reveal, copy path, and containing-folder actions.
+- [x] Add exclusions and explain Spotlight limitations.
+- [x] Add lazy icons/thumbnails with cancellation and cache bounds.
+
+## Phase 3.5 — launcher personalization and web handoff
+
+- [x] Rank successfully opened applications from bounded local history.
+- [x] Add pin/unpin actions and an application visibility picker.
+- [x] Add an opt-in search-engine and browser picker.
+- [x] Hand explicit HTTPS searches to the selected running browser process via
+  Launch Services without browser scripting or query-history persistence.
 
 Gate: fast providers stay responsive during a cold Spotlight query and stale
 results never appear after rapid typing.
@@ -51,8 +59,8 @@ results never appear after rapid typing.
 
 - [ ] Test multiple displays, scaled displays, Stage Manager, all Spaces, and
   full-screen apps.
-- [ ] Tune ranking from anonymized local fixtures, not hard-coded personal paths.
-- [ ] Add performance signposts and diagnostics.
+- [x] Tune ranking from anonymized local fixtures, not hard-coded personal paths.
+- [x] Add performance signposts and diagnostics.
 - [ ] Complete manual matrix in `QUALITY.md`.
 
 Gate: 14 consecutive days as the owner's default launcher with no fallback to

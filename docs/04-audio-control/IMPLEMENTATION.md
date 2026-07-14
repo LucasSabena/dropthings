@@ -1,5 +1,26 @@
 # Implementation plan
 
+## Current implementation status — 2026-07-13
+
+The Phase 1 code slice is implemented and buildable, but the hardware gates are
+not waived. It is not evidence of FineTune parity and does not authorize
+removing FineTune. Automated checks cover protocol/settings/safety/lifecycle;
+the permission prompt, audible loopback, latency, CPU, long-run, and application
+matrix remain owner-hardware work listed in `QUALITY.md`.
+
+The independent module menu-bar vertical slice is implemented end to end:
+
+- [x] Generic optional module presentation contract.
+- [x] Persisted per-module `Show in menu bar` preference and settings control.
+- [x] App-shell `NSStatusItem`/`NSPopover` ownership with deterministic teardown.
+- [x] Audio popover with output selection, master volume/mute, app mixer,
+  per-app route menu, empty/error/loading states, settings, and quit.
+- [x] Core Audio adapter for default output and hardware volume/mute.
+- [x] VoiceOver labels/values, keyboard-operable native controls, template icon,
+  semantic colors, shared spacing/type/size tokens, and Reduce Motion handling.
+- [x] Debug-only deterministic visual-QA launch path; synthetic state is absent
+  from Release builds.
+
 ## Phase 0 — disposable feasibility spike
 
 - [ ] Add `NSAudioCaptureUsageDescription` on a spike branch/worktree only.
@@ -15,14 +36,20 @@ stop and revise architecture before product work.
 
 ## Phase 1 — isolated safe mixer
 
-- [ ] Create helper/XPC target and versioned desired/observed protocol.
-- [ ] Implement process monitor, stable identities, transactional tap resources,
+- [x] Create helper/XPC target and versioned desired/observed protocol.
+- [x] Implement process monitor, stable identities, transactional tap resources,
   gain ramp, soft limiter, safe bypass, and owned orphan cleanup.
-- [ ] Build host supervision, permission states, one-app UI, and settings storage.
-- [ ] Keep real-time callback allocation/lock/log free; add counters off-thread.
+- [x] Build host supervision, unavailable/failure states, multi-app UI, and
+  versioned settings storage. System Audio Recording is deliberately handled at
+  first tap start because macOS exposes no public preflight API.
+- [x] Keep real-time callback allocation/lock/log free; add atomic peak/overload
+  counters consumed off-thread.
 
 Gate: one controlled app runs for 24 hours across quit/relaunch and helper restart
 with no echo, stuck silence, orphan device, leak, or unsafe volume burst.
+
+Gate status: **not passed**. Do not advance the release claim or uninstall
+FineTune until the manual evidence below exists.
 
 ## Phase 2 — full per-app mixer lifecycle
 

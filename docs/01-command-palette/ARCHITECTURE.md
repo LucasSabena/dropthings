@@ -16,8 +16,9 @@ Names may change, responsibilities may not be merged.
 
 - `PaletteQueryCoordinator`: starts/cancels provider work for one query
   generation and publishes snapshots on the main actor.
-- `PaletteSearchProvider`: private module protocol with stable identifier,
-  supported query mode, and async result stream/return value.
+- `PaletteLocalSearchProviding`: module-private provider seam used by the app,
+  command/system, calculator, and web providers. Providers receive immutable
+  query context and return plain `PaletteResult` values.
 - `PaletteResult`: immutable value containing stable ID, kind, title, subtitle,
   icon descriptor, score inputs, and actions.
 - `PaletteRanker`: pure deterministic scoring and stable sorting.
@@ -27,6 +28,7 @@ Names may change, responsibilities may not be merged.
   owns notification lifetimes and query cancellation.
 - `CalculatorEngine`: pure tokenizer, parser, AST evaluator, and formatter.
 - `PaletteHistoryStore`: bounded, versioned records using `SettingsStore`.
+- `WebSearchEngine`: pure HTTPS URL construction for an explicit user query.
 - `PalettePanelController`: panel lifecycle, active-display placement, focus,
   Spaces behavior, and event monitors.
 
@@ -40,6 +42,13 @@ Names may change, responsibilities may not be merged.
    stale.
 5. The ranker merges provider snapshots; SwiftUI receives one immutable list.
 6. Executing an action records history only after the action reports success.
+   Web queries are deliberately excluded so raw search text is not persisted.
+
+App and command snapshots are cached between keystrokes. They are rebuilt only
+when the application catalog, module command set, or relevant settings change;
+calculator and web results remain query-specific. Result construction and
+ranking run in detached work so typing does not parse calculator expressions or
+sort the catalog on the main actor.
 
 ## Concurrency rules
 
@@ -48,6 +57,8 @@ Names may change, responsibilities may not be merged.
 - Cancellation is required; generation checks are a second line of defense.
 - Spotlight notifications and observers must be removed on cancellation/stop.
 - Icons and thumbnails load lazily and must not reorder results when they arrive.
+- Quick Look thumbnail requests are cancelled with their Swift task and use the
+  shared bounded thumbnail cache. Directories use the workspace icon fallback.
 
 ## Panel placement
 
@@ -57,12 +68,32 @@ Names may change, responsibilities may not be merged.
 - Use visible frame, not full frame, so menu bar, Dock, and notches are respected.
 - The panel must join the active Space and work as a full-screen auxiliary
   surface. Do not persist absolute screen coordinates.
+- While visible, reposition after `didChangeScreenParametersNotification` so a
+  display attach/detach or layout change cannot strand the panel off-screen.
+
+## Application catalog lifecycle
+
+The Platform catalog scans only configured application roots, validates real
+application bundles, filters helper bundles, deduplicates by bundle identifier
+and canonical path, and caches snapshots by the complete root set. Opening the
+palette reads that cache. Narrow directory monitors invalidate and rescan after
+application-directory changes; settings that only pin or hide apps reuse the
+existing snapshot.
 
 ## File search boundary
 
 `NSMetadataQuery` is the first implementation because it queries Spotlight and
 supports live updates. Encapsulate it behind `SpotlightFileSearching` so tests
 use a fake. Never expose `NSMetadataItem` to the module layer.
+
+## Web search boundary — 2026-07-13
+
+Web search is an opt-in local URL-construction provider. It performs no request
+while ranking or typing. On explicit execution, `PaletteWorkspace` asks
+`NSWorkspace` to open the HTTPS URL with either the chosen browser bundle or the
+system default. Launch Services targets an existing browser process when one is
+running; final tab-versus-window placement remains the browser's policy. No
+browser scripting, history access, cookies, or Automation permission is used.
 
 ## Failure boundaries
 

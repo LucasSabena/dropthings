@@ -1,4 +1,5 @@
 import AppKit
+import DropThingsCore
 
 /// Hooks for app lifecycle. `.accessory` activation policy hides the dock
 /// icon; the app lives in the menu bar.
@@ -7,6 +8,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         Task { @MainActor in
             AppServices.shared.registry.bootEnabledModules()
+#if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--profile-command-palette") {
+                await AppServices.shared.showCommandPaletteForVisualTesting(runQuerySequence: true)
+            } else if arguments.contains("--show-command-palette") {
+                await AppServices.shared.showCommandPaletteForVisualTesting()
+            }
+            if let previewIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--preview-module-menu-bar"),
+               ProcessInfo.processInfo.arguments.indices.contains(previewIndex + 1) {
+                let moduleID = ModuleID(ProcessInfo.processInfo.arguments[previewIndex + 1])
+                try? await Task.sleep(for: .milliseconds(800))
+                AppServices.shared.showMenuBarItemForVisualTesting(moduleID: moduleID)
+            }
+#endif
             if ProcessInfo.processInfo.arguments.contains("--show-settings") {
                 AppServices.shared.settingsWindow.show()
             } else {

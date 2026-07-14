@@ -23,6 +23,36 @@ public struct ModulePrimaryAction: Sendable {
     }
 }
 
+/// A module-owned surface that DropThings can present from an independent
+/// menu-bar icon. Core owns the opt-in preference and the app shell owns the
+/// AppKit status item; the module only supplies metadata and its compact view.
+@MainActor
+public struct ModuleMenuBarPresentation {
+    public let iconName: String
+    public let accessibilityLabel: String
+    public let preferredContentSize: CGSize
+    public let isVisibleByDefault: Bool
+    private let content: @MainActor () -> AnyView
+
+    public init(
+        iconName: String,
+        accessibilityLabel: String,
+        preferredContentSize: CGSize,
+        isVisibleByDefault: Bool = false,
+        content: @escaping @MainActor () -> AnyView
+    ) {
+        self.iconName = iconName
+        self.accessibilityLabel = accessibilityLabel
+        self.preferredContentSize = preferredContentSize
+        self.isVisibleByDefault = isVisibleByDefault
+        self.content = content
+    }
+
+    public func makeContentView() -> AnyView {
+        content()
+    }
+}
+
 /// Contract every module implements. The protocol stays small on purpose; add
 /// members only after two real modules need the same shape.
 ///
@@ -45,6 +75,11 @@ where ObjectWillChangePublisher == ObservableObjectPublisher {
     /// active. `nil` means the module has no one-tap action and the menu bar
     /// will fall back to opening the module's settings.
     var primaryAction: ModulePrimaryAction? { get }
+
+    /// Optional independent menu-bar surface. The app shell creates and owns
+    /// the status item only when the module is enabled and the user's per-
+    /// module visibility preference allows it.
+    var menuBarPresentation: ModuleMenuBarPresentation? { get }
 
     /// Begin doing work. Must be idempotent: calling `start()` on a running
     /// module should be a no-op.
@@ -74,6 +109,7 @@ extension DropThingsModule {
         case .snippets: return "doc.text"
         case .textTools: return "textformat"
         case .markdownViewer: return "doc.richtext"
+        case .audioControl: return "speaker.wave.2"
         default: return "square.stack.3d.up"
         }
     }
@@ -87,4 +123,7 @@ extension DropThingsModule {
     /// Most modules do not expose a one-tap menu-bar action. Conforming types
     /// override this when they have a clear primary action.
     public var primaryAction: ModulePrimaryAction? { nil }
+
+    /// Modules opt in explicitly; most utilities need no extra menu-bar item.
+    public var menuBarPresentation: ModuleMenuBarPresentation? { nil }
 }

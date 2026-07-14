@@ -33,4 +33,5 @@ extension ModuleID {
     public static let snippets = ModuleID("modules.snippets")
     public static let textTools = ModuleID("modules.text-tools")
     public static let markdownViewer = ModuleID("modules.markdown-viewer")
+    public static let audioControl = ModuleID("modules.audio-control")
 }

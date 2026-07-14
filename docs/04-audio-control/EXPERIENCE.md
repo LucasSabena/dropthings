@@ -10,6 +10,22 @@ unsupported benchmark is used.
 
 Lazyweb entry point: <https://www.lazyweb.com/>
 
+The query was repeated on 2026-07-13 immediately before implementation using
+`macOS per-app audio mixer volume routing equalizer` and `FineTune SoundSource
+macOS audio`. Results again contained adjacent mobile music/device-control
+products (for example Apple Music, Bose, and Sonos), but no relevant desktop
+per-app mixer flow. The implementation therefore reuses DropThings settings
+sections, semantic colors, spacing, typography, native sliders, menus, and
+application icons rather than importing an unrelated visual pattern.
+
+The query was repeated again before the independent menu-bar surface using
+`audio mixer menu bar volume app macOS FineTune`. Lazyweb still returned only
+adjacent podcast, music, and hardware-companion products, not a desktop per-app
+mixer. The supplied FineTune capture therefore remained the visual source of
+truth. Its hierarchy (output selector, master row, app section, empty state,
+settings/quit footer) was retained in a narrower native DropThings popover. No
+Lazyweb code or asset was reused.
+
 ## Primary surface
 
 - Compact list of active/pinned apps with icon, name, meter, mute, and volume.
@@ -17,6 +33,13 @@ Lazyweb entry point: <https://www.lazyweb.com/>
 - Advanced routing/EQ is disclosed per app; it does not make every row tall.
 - System/helper processes are hidden by default but discoverable in diagnostics.
 - A degraded app/device shows a local warning without disabling healthy rows.
+- Audio Control has an independent menu-bar icon by default while the module is
+  enabled. Its settings include a `Show in menu bar` switch; turning it off
+  removes only this shortcut, not the module or the main DropThings item.
+- The compact menu-bar surface exposes system output selection, system volume
+  and mute, per-app volume/mute/solo, per-app routing, and app actions.
+- The footer opens this module's settings and offers Quit. DropThings does not
+  copy FineTune's donation/marketing affordance.
 
 ## Safety interaction
 
@@ -50,3 +73,6 @@ Lazyweb entry point: <https://www.lazyweb.com/>
 - Meter color is not the only clipping indication; expose text/icon state.
 - Respect Reduce Motion and avoid high-frequency visual updates when the popup is
   closed or VoiceOver would be overwhelmed.
+- Menu-bar icons use template SF Symbols, keep a tooltip/VoiceOver label, and
+  disappear immediately when their module is disabled or their visibility
+  preference is turned off.

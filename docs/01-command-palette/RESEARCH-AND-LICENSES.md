@@ -38,6 +38,21 @@ Lazyweb was consulted first. The relevant available flow is recorded in
 
 No third-party source has been copied into this module as of 2026-07-13.
 
+## Known limitations — 2026-07-13
+
+- Spotlight cannot return unindexed, excluded, unavailable remote-only, or
+  permission-protected content; failures degrade only the file provider.
+- A selected browser receives the HTTPS URL through Launch Services. Existing
+  processes are reused, but tab-versus-window choice belongs to that browser's
+  own preferences and cannot be guaranteed without fragile scripting.
+- Browser tab/history search is intentionally absent.
+- Application roots are observed and rescanned after filesystem changes, but
+  apps outside the default and user-configured roots are intentionally absent.
+- Automated screen-placement tests cover synthetic display geometry, but the
+  current machine has only one physical display. Multi-display, Stage Manager,
+  full-screen evidence and the 14-day daily-driver gate remain pending.
+- No source code or visual asset was copied from Raycast or another launcher.
+
 Before copying any source, append one row:
 
 | DropThings file | Upstream repository/file | Commit | License | Modification |

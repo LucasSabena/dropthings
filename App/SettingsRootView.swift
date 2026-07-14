@@ -455,6 +455,7 @@ private struct ModuleDetailView: View {
                     VStack(alignment: .leading, spacing: DTSpace.xl) {
                         moduleHeader(module)
                         stateMessage(services.registry.states[module.id] ?? .off)
+                        moduleMenuBarSetting(module)
                         module.makeSettingsView()
                             .environmentObject(services)
                     }
@@ -468,6 +469,47 @@ private struct ModuleDetailView: View {
             } else {
                 ContentUnavailableView("Utility unavailable", systemImage: "questionmark.app")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func moduleMenuBarSetting(_ module: any DropThingsModule) -> some View {
+        if let presentation = module.menuBarPresentation {
+            HStack(spacing: DTSpace.md) {
+                Image(systemName: presentation.iconName)
+                    .font(DTTypography.moduleIcon)
+                    .foregroundStyle(DTColor.accent)
+                    .frame(width: DTSize.iconButton, height: DTSize.iconButton)
+                    .background(DTColor.surfaceRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
+                VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                    Text("Show in menu bar")
+                        .font(DTTypography.body.weight(.semibold))
+                    Text("Give \(module.name) its own icon and quick controls while it is enabled.")
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: {
+                        services.moduleMenuBarPreferences.isVisible(
+                            for: module.id,
+                            default: presentation.isVisibleByDefault
+                        )
+                    },
+                    set: { services.moduleMenuBarPreferences.setVisible($0, for: module.id) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .accessibilityLabel("Show \(module.name) in the menu bar")
+            }
+            .padding(DTSpace.md)
+            .background(DTColor.surfaceRaised)
+            .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous)
+                    .stroke(DTColor.border)
+            )
         }
     }
 

@@ -46,3 +46,24 @@
 - Instruments/signpost latency summary on the owner's Mac.
 - Screenshots or short recording of multi-display/full-screen behavior.
 - Remaining known limitations recorded in `RESEARCH-AND-LICENSES.md`.
+
+## Evidence — 2026-07-13
+
+- `swift test`: final full suite passed (361 tests, 0 failures), including
+  deterministic calculator fuzzing and the personalization/web-search slice.
+- The XCTest performance fixture ranked 10,000 pre-indexed results in 20 ms on
+  average (10 measurements), inside the 50 ms local-results budget.
+- Instruments trace `.build/command-palette-metrics-20260713.trace`, captured
+  from the locally built app with a 20-character rapid-query sequence, measured
+  panel visibility at 20.201 ms. Across 24 local-result signposts the slowest
+  event was 19.824 ms; the README Spotlight query completed in 150.884 ms,
+  including its deliberate 120 ms debounce. The Potential Hangs table contained
+  no events over 250 ms.
+- `xcodebuild -project App.xcodeproj -scheme DropThings -configuration Debug
+  -derivedDataPath .build/xcode-derived CODE_SIGNING_ALLOWED=NO build`: succeeded.
+- Native UI verification confirmed immediate search focus, 90 discovered apps,
+  calculator input `2+3*4` → `14`, Command-K actions, two-stage Escape, and
+  palette dismissal.
+- Available hardware exposed one built-in Retina display (2880×1864). The
+  multi-display, Stage Manager, full-screen, and 14-day replacement gates remain
+  operational acceptance work and are not claimed complete.

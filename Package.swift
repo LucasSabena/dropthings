@@ -20,11 +20,16 @@ let package = Package(
     ],
     products: [
         .library(name: "DropThingsCore", targets: ["DropThingsCore"]),
+        .library(name: "DropThingsAudioControlKit", targets: ["DropThingsAudioControlKit"]),
         .library(name: "DropThingsDesignSystem", targets: ["DropThingsDesignSystem"]),
         .library(name: "DropThingsPlatform", targets: ["DropThingsPlatform"]),
         .library(name: "DropThingsModules", targets: ["DropThingsModules"])
     ],
     targets: [
+        .target(
+            name: "DropThingsAudioControlKit",
+            path: "Sources/DropThingsAudioControlKit"
+        ),
         .target(
             name: "DropThingsCore",
             path: "Sources/DropThingsCore"
@@ -36,7 +41,7 @@ let package = Package(
         ),
         .target(
             name: "DropThingsPlatform",
-            dependencies: ["DropThingsCore"],
+            dependencies: ["DropThingsCore", "DropThingsAudioControlKit"],
             path: "Sources/DropThingsPlatform",
             exclude: [
                 "Adapters/DropThingsStatusItem.swift",
@@ -48,12 +53,12 @@ let package = Package(
             name: "DropThingsModules",
             dependencies: [
                 "DropThingsCore",
+                "DropThingsAudioControlKit",
                 "DropThingsDesignSystem",
                 "DropThingsPlatform"
             ],
             path: "Sources/DropThingsModules",
             exclude: [
-                "CommandPalette",
                 "MenuBarCleaner",
                 "ScreenshotRegion",
                 "Snippets",
@@ -70,11 +75,15 @@ let package = Package(
             path: "Tests/DropThingsCoreTests"
         ),
         .testTarget(
+            name: "DropThingsAudioControlKitTests",
+            dependencies: ["DropThingsAudioControlKit"],
+            path: "Tests/DropThingsAudioControlKitTests"
+        ),
+        .testTarget(
             name: "DropThingsModulesTests",
             dependencies: ["DropThingsCore", "DropThingsModules", "DropThingsPlatform"],
             path: "Tests/DropThingsModulesTests",
             exclude: [
-                "CommandPalette",
                 "MenuBarCleaner",
                 "ScreenshotRegion",
                 "Snippets",
