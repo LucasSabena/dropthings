@@ -33,15 +33,11 @@ public final class KeyboardLockModule: DropThingsModule {
             state = .needsPermission(missing: permissions.missing(from: requiredPermissions))
             return
         }
-        do {
-            try tap.start()
-            isKeyboardLocked = false
-            lastError = nil
-            state = .running
-        } catch {
-            lastError = error.localizedDescription
-            state = .failed(reason: "Keyboard Lock could not listen for keys: \(error.localizedDescription)", recovery: "Grant Accessibility, then disable and re-enable the module.")
-        }
+        guard !state.isActive else { return }
+        tap.stop()
+        isKeyboardLocked = false
+        lastError = nil
+        state = .running
     }
 
     public func stop() async {
@@ -74,7 +70,8 @@ public final class KeyboardLockModule: DropThingsModule {
             iconName: menuBarIconName,
             accessibilityLabel: menuBarAccessibilityLabel,
             preferredContentSize: CGSize(width: 320, height: 176),
-            isVisibleByDefault: true
+            isVisibleByDefault: true,
+            allowsVisibilityCustomization: false
         ) { [weak self] in
             guard let self else { return AnyView(EmptyView()) }
             return AnyView(KeyboardLockMenuBarView(module: self))
@@ -90,9 +87,41 @@ public final class KeyboardLockModule: DropThingsModule {
     }
 
     public func toggleLock() {
-        guard state.isStarted, tap.isActive else { return }
-        isKeyboardLocked.toggle()
-        tap.setLocked(isKeyboardLocked)
+        guard state.isStarted else { return }
+        if isKeyboardLocked {
+            unlockKeyboard()
+        } else {
+            lockKeyboard()
+        }
+    }
+
+    private func lockKeyboard() {
+        guard permissions.state(for: .accessibility) == .granted else {
+            state = .needsPermission(missing: [.accessibility])
+            return
+        }
+        tap.setLocked(true)
+        do {
+            try tap.start()
+            isKeyboardLocked = true
+            lastError = nil
+            state = .running
+        } catch {
+            tap.stop()
+            isKeyboardLocked = false
+            lastError = error.localizedDescription
+            state = .failed(
+                reason: "Keyboard Lock could not block keys: \(error.localizedDescription)",
+                recovery: "Confirm Accessibility access, then try Lock Keyboard again."
+            )
+        }
+    }
+
+    private func unlockKeyboard() {
+        tap.stop()
+        isKeyboardLocked = false
+        lastError = nil
+        state = .running
     }
 
     public func makeSettingsView() -> AnyView {

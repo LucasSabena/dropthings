@@ -29,6 +29,7 @@ public final class ColorPickerModule: DropThingsModule {
     private var activeSampler: NSColorSampler?
     private let feedbackWindow = ColorCopyFeedbackWindowController()
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "color-picker")
+    private let pasteboard: NSPasteboard
 
     public typealias ColorConverter = (NSColor) -> NSColor?
     private let colorConverter: ColorConverter
@@ -40,10 +41,12 @@ public final class ColorPickerModule: DropThingsModule {
     public init(
         settings: SettingsStore,
         permissions: PermissionCenter,
+        pasteboard: NSPasteboard = .general,
         colorConverter: @escaping ColorConverter = ColorPickerModule.defaultColorConverter
     ) {
         self.settingsStore = settings
         self.permissions = permissions
+        self.pasteboard = pasteboard
         self.colorConverter = colorConverter
         self.settings = settings.loadColorPickerSettings()
     }
@@ -186,7 +189,7 @@ public final class ColorPickerModule: DropThingsModule {
     }
 
     public func copyToPasteboard(_ picked: PickedColor) {
-        let pb = NSPasteboard.general
+        let pb = pasteboard
         pb.clearContents()
         let color = picked.rgb.nsColor
         let value = settings.copyFormat.string(r: picked.r, g: picked.g, b: picked.b)

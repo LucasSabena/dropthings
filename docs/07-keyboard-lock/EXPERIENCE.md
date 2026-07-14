@@ -9,6 +9,8 @@
   visibly names the locked state.
 - The unlock control is reachable without a keyboard. There is no hidden
   keyboard shortcut that could be accidentally blocked.
+- The dedicated menu-bar item cannot be hidden while the module is enabled.
+- When the keyboard is ready, no keyboard event tap or passive listener exists.
 
 ## Permission boundary
 
@@ -21,5 +23,5 @@
 - Missing Accessibility permission: module remains off and names the required
   System Settings page.
 - Event-tap failure: keyboard input continues normally and the module reports
-  a recoverable error.
+  a recoverable error with a direct retry path.
 - App/module stop: the event tap is removed and the keyboard is unlocked.

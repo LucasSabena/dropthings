@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import DropThingsCore
 
 @MainActor
@@ -23,6 +24,18 @@ final class PermissionCenterTests: XCTestCase {
         XCTAssertEqual(center.state(for: .screenRecording), .notDetermined)
         XCTAssertEqual(center.state(for: .fullDiskAccess), .unknown)
         XCTAssertEqual(center.state(for: .automation), .unknown)
+    }
+
+    func testRefreshDoesNotPublishWhenPermissionStateIsUnchanged() {
+        let backend = FakePermissionBackend(states: [.accessibility: .granted])
+        let center = PermissionCenter(backend: backend, settings: settings)
+        var publications = 0
+        let observation = center.$states.dropFirst().sink { _ in publications += 1 }
+
+        center.refresh()
+
+        XCTAssertEqual(publications, 0)
+        withExtendedLifetime(observation) {}
     }
 
     func testMissingReturnsOnlyUngranted() {

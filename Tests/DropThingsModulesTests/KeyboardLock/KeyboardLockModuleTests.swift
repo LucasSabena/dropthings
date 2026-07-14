@@ -37,21 +37,42 @@ final class KeyboardLockModuleTests: XCTestCase {
         return KeyboardLockModule(permissions: permissions, tap: tap)
     }
 
-    func testStartsUnlockedAndOnlyLocksAfterExplicitAction() async throws {
+    func testStartsReadyWithoutInstallingGlobalEventTap() async throws {
         let tap = FakeKeyboardTap()
         let module = makeModule(tap: tap)
 
         try await module.start()
 
         XCTAssertEqual(module.state, .running)
-        XCTAssertTrue(tap.isActive)
+        XCTAssertFalse(tap.isActive)
         XCTAssertFalse(module.isKeyboardLocked)
         XCTAssertFalse(tap.locked)
+    }
+
+    func testExplicitLockInstallsTapAndBlocksKeys() async throws {
+        let tap = FakeKeyboardTap()
+        let module = makeModule(tap: tap)
+        try await module.start()
 
         module.toggleLock()
 
+        XCTAssertTrue(tap.isActive)
         XCTAssertTrue(module.isKeyboardLocked)
         XCTAssertTrue(tap.locked)
+    }
+
+    func testUnlockRemovesTapInsteadOfLeavingPassiveListener() async throws {
+        let tap = FakeKeyboardTap()
+        let module = makeModule(tap: tap)
+        try await module.start()
+        module.toggleLock()
+
+        module.toggleLock()
+
+        XCTAssertFalse(tap.isActive)
+        XCTAssertFalse(module.isKeyboardLocked)
+        XCTAssertFalse(tap.locked)
+        XCTAssertEqual(module.state, .running)
     }
 
     func testStoppingAlwaysUnlocksAndRemovesTap() async throws {
@@ -74,9 +95,33 @@ final class KeyboardLockModuleTests: XCTestCase {
         let module = makeModule(tap: tap)
 
         try await module.start()
+        module.toggleLock()
 
         if case .failed = module.state {} else { XCTFail("Expected failed state") }
         XCTAssertFalse(module.isKeyboardLocked)
         XCTAssertFalse(tap.locked)
+    }
+
+    func testTapFailureCanBeRetriedWithoutTogglingModuleLifecycle() async throws {
+        let tap = FakeKeyboardTap()
+        tap.shouldFail = true
+        let module = makeModule(tap: tap)
+        try await module.start()
+        module.toggleLock()
+        tap.shouldFail = false
+
+        module.toggleLock()
+
+        XCTAssertEqual(module.state, .running)
+        XCTAssertTrue(module.isKeyboardLocked)
+        XCTAssertTrue(tap.isActive)
+        XCTAssertTrue(tap.locked)
+    }
+
+    func testMenuBarEscapeRouteCannotBeHidden() {
+        let module = makeModule(tap: FakeKeyboardTap())
+
+        XCTAssertEqual(module.menuBarPresentation?.isVisibleByDefault, true)
+        XCTAssertEqual(module.menuBarPresentation?.allowsVisibilityCustomization, false)
     }
 }

@@ -491,18 +491,24 @@ private struct ModuleDetailView: View {
                         .foregroundStyle(DTColor.textSecondary)
                 }
                 Spacer()
-                Toggle("", isOn: Binding(
-                    get: {
-                        services.moduleMenuBarPreferences.isVisible(
-                            for: module.id,
-                            default: presentation.isVisibleByDefault
-                        )
-                    },
-                    set: { services.moduleMenuBarPreferences.setVisible($0, for: module.id) }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .accessibilityLabel("Show \(module.name) in the menu bar")
+                if presentation.allowsVisibilityCustomization {
+                    Toggle("", isOn: Binding(
+                        get: {
+                            services.moduleMenuBarPreferences.isVisible(
+                                for: module.id,
+                                default: presentation.isVisibleByDefault
+                            )
+                        },
+                        set: { services.moduleMenuBarPreferences.setVisible($0, for: module.id) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("Show \(module.name) in the menu bar")
+                } else {
+                    Label("Required", systemImage: "lock.fill")
+                        .font(DTTypography.caption.weight(.semibold))
+                        .foregroundStyle(DTColor.textSecondary)
+                }
             }
             .padding(DTSpace.md)
             .background(DTColor.surfaceRaised)

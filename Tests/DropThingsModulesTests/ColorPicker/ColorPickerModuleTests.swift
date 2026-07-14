@@ -21,12 +21,14 @@ final class ColorPickerModuleTests: XCTestCase {
     private var backend: InMemorySettingsBackend!
     private var store: SettingsStore!
     private var permissions: PermissionCenter!
+    private var pasteboard: NSPasteboard!
 
     override func setUp() {
         super.setUp()
         backend = InMemorySettingsBackend()
         store = SettingsStore(backend: backend)
         permissions = PermissionCenter(backend: ColorPickerFakePermissionBackend())
+        pasteboard = NSPasteboard(name: NSPasteboard.Name("color-picker-tests-\(UUID().uuidString)"))
     }
 
     private func makeModule(colorConverter: ColorPickerModule.ColorConverter? = nil) -> ColorPickerModule {
@@ -34,10 +36,11 @@ final class ColorPickerModuleTests: XCTestCase {
             return ColorPickerModule(
                 settings: store,
                 permissions: permissions,
+                pasteboard: pasteboard,
                 colorConverter: colorConverter
             )
         }
-        return ColorPickerModule(settings: store, permissions: permissions)
+        return ColorPickerModule(settings: store, permissions: permissions, pasteboard: pasteboard)
     }
 
     // MARK: - setHistoryLimit
@@ -136,8 +139,8 @@ final class ColorPickerModuleTests: XCTestCase {
 
         module.copyToPasteboard(picked)
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#0C2238")
-        let copiedColor = NSPasteboard.general
+        XCTAssertEqual(pasteboard.string(forType: .string), "#0C2238")
+        let copiedColor = pasteboard
             .readObjects(forClasses: [NSColor.self], options: nil)?
             .first as? NSColor
         let rgb = copiedColor?.usingColorSpace(.sRGB)

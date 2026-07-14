@@ -47,7 +47,8 @@ final class ModuleMenuBarController {
         let eligible = registry.modules.values.filter { module in
             guard let presentation = module.menuBarPresentation else { return false }
             let enabled = registry.isEnabled(module.id)
-            let visible = preferences.isVisible(
+            let visible = !presentation.allowsVisibilityCustomization
+                || preferences.isVisible(
                     for: module.id,
                     default: presentation.isVisibleByDefault
                 )

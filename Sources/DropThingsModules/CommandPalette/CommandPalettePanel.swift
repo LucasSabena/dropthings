@@ -103,7 +103,12 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     }
 
     private func rememberFocusOwner() {
-        previouslyKeyWindow = NSApp.keyWindow
+        guard let app = NSApp else {
+            previouslyKeyWindow = nil
+            previouslyActiveApplication = nil
+            return
+        }
+        previouslyKeyWindow = app.keyWindow
         let current = NSRunningApplication.current
         let frontmost = NSWorkspace.shared.frontmostApplication
         previouslyActiveApplication = frontmost?.processIdentifier == current.processIdentifier ? nil : frontmost
@@ -117,7 +122,9 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
         if let previouslyKeyWindow, previouslyKeyWindow.isVisible {
             previouslyKeyWindow.makeKey()
         }
-        guard NSApp.isActive, let application = previouslyActiveApplication else { return }
+        guard let app = NSApp,
+              app.isActive,
+              let application = previouslyActiveApplication else { return }
         application.activate(options: [])
     }
 
@@ -125,7 +132,7 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
         let screens = NSScreen.screens.map { screen in
             PaletteDisplayGeometry(id: Self.id(for: screen), frame: screen.frame, visibleFrame: screen.visibleFrame)
         }
-        let fallback = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen
+        let fallback = NSApp?.keyWindow?.screen ?? NSApp?.mainWindow?.screen
         guard let target = PaletteScreenPlacement.targetDisplay(
             mouseLocation: NSEvent.mouseLocation,
             displays: screens,

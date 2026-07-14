@@ -4,5 +4,10 @@
 Platform owns the Core Graphics event tap and its lock-protected boolean state.
 The callback does not access SwiftUI or actor-isolated state.
 
+The event tap exists only while the keyboard is locked. The enabled-but-ready
+state has no global listener, so normal typing never enters DropThings. Unlock,
+module stop, tap failure, and permission revocation all remove the tap.
+
 The module has no dependency on other feature modules. Core supplies the shared
-Accessibility permission state and module registration.
+Accessibility permission state and module registration. Its menu-bar surface is
+mandatory while enabled because it is the mouse-only escape route.

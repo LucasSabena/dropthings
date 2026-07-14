@@ -165,7 +165,10 @@ public final class ModuleRegistry: ObservableObject {
                 if states[id] != .needsPermission(missing: missing) {
                     await module.stop()
                 }
-                states[id] = .needsPermission(missing: missing)
+                let blockedState = ModuleState.needsPermission(missing: missing)
+                if states[id] != blockedState {
+                    states[id] = blockedState
+                }
             } else if case .needsPermission = states[id] {
                 await start(id: id)
             }
