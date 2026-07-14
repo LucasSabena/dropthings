@@ -219,6 +219,12 @@ passes. New modules need to:
 - [Window Manager](docs/03-window-manager/README.md)
 - [Audio Control](docs/04-audio-control/README.md)
 - [Network Priority](docs/06-network-priority/README.md)
+- [Keyboard Lock](docs/07-keyboard-lock/README.md)
+- [Media Converter](docs/08-media-converter/README.md)
+- [Smart Clipboard](docs/09-smart-clipboard/README.md)
+- [Temporary Workbench](docs/10-temporary-workbench/README.md)
+- [Local Transcription](docs/11-local-transcription/README.md)
+- [Session Recorder](docs/12-session-recorder/README.md)
 
 ---
 
