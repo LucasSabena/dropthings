@@ -76,3 +76,12 @@ Lazyweb code or asset was reused.
 - Menu-bar icons use template SF Symbols, keep a tooltip/VoiceOver label, and
   disappear immediately when their module is disabled or their visibility
   preference is turned off.
+
+## Refinement note — 2026-07-14
+
+Lazyweb was unavailable in the active toolset, so the established native mixer
+research above remains the source. The menu-bar symbol now reflects live master
+output: muted/zero, low, medium, and high volume use progressively distinct SF
+Symbols. The shared popover is semitransient and no longer forces itself key,
+preventing internal controls from being mistaken for outside clicks and keeping
+the previously focused application responder intact.

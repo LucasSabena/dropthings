@@ -122,6 +122,10 @@ public struct ScreenCaptureKitService: ScreenCaptureService {
     private func screenshot(filter: SCContentFilter) async throws -> CGImage {
         let configuration = SCStreamConfiguration()
         configuration.showsCursor = false
+        let scale = max(1, CGFloat(filter.pointPixelScale))
+        configuration.width = max(1, Int(filter.contentRect.width * scale))
+        configuration.height = max(1, Int(filter.contentRect.height * scale))
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
         return try await withCheckedThrowingContinuation { continuation in
             SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) { image, error in
                 if let image { continuation.resume(returning: image) }
@@ -164,8 +168,9 @@ public enum ScreenCaptureTargets {
         }
     }
 
-    /// Finds the front-most normal window under the cursor. DropThings windows
-    /// are excluded by owner PID so invoking capture never captures its own UI.
+    /// Finds the front-most normal window under the cursor. Callers choose an
+    /// excluded owner; Screenshot Studio can deliberately capture DropThings'
+    /// own menu-bar controls while other modules may still exclude themselves.
     public static func window(at point: CGPoint, excludingOwnerPID pid: pid_t = getpid()) -> (id: CGWindowID, bounds: CGRect)? {
         let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         for info in list {

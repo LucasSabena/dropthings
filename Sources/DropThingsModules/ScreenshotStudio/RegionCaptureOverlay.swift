@@ -4,22 +4,23 @@ import AppKit
 /// the module so this AppKit surface has no filesystem or permission concerns.
 final class RegionCaptureOverlay {
     enum Result { case region(CGRect), cancelled }
-    private var window: NSWindow?
+    private var windows: [NSWindow] = []
     private var completion: ((Result) -> Void)?
 
     func show(completion: @escaping (Result) -> Void) {
         self.completion = completion
-        let frame = NSScreen.screens.map(\.frame).reduce(CGRect.null) { $0.union($1) }
-        let window = RegionCaptureWindow(frame: frame) { [weak self] result in self?.finish(result) }
-        self.window = window
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        windows = NSScreen.screens.map { screen in
+            RegionCaptureWindow(frame: screen.frame) { [weak self] result in self?.finish(result) }
+        }
+        windows.forEach { $0.orderFrontRegardless() }
+        let pointer = NSEvent.mouseLocation
+        (windows.first { $0.frame.contains(pointer) } ?? windows.first)?.makeKey()
     }
 
     func cancel() { finish(.cancelled) }
     private func finish(_ result: Result) {
-        window?.orderOut(nil)
-        window = nil
+        windows.forEach { $0.orderOut(nil) }
+        windows = []
         completion?(result)
         completion = nil
     }
@@ -27,7 +28,7 @@ final class RegionCaptureOverlay {
 
 private final class RegionCaptureWindow: NSWindow {
     init(frame: CGRect, completion: @escaping (RegionCaptureOverlay.Result) -> Void) {
-        super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .screenSaver
         backgroundColor = .clear
         isOpaque = false

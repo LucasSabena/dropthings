@@ -24,7 +24,7 @@ public final class ScreenshotStudioModule: DropThingsModule {
     private let fileManager: FileManager
     private let pasteboard: NSPasteboard
     private let captureArchive: CaptureArchive
-    private var hotkeys: [ScreenshotCaptureMode: GlobalHotkey] = [:]
+    private var hotkeys: [ScreenshotShortcutSlot: GlobalHotkey] = [:]
     private var overlay: RegionCaptureOverlay?
     private var isCapturing = false
     private var activationObserver: NSObjectProtocol?
@@ -76,6 +76,17 @@ public final class ScreenshotStudioModule: DropThingsModule {
         }
     }
 
+    public var menuBarPresentation: ModuleMenuBarPresentation? {
+        ModuleMenuBarPresentation(
+            iconName: iconName,
+            accessibilityLabel: name,
+            preferredContentSize: CGSize(width: 320, height: 300)
+        ) { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(ScreenshotStudioMenuBarView(module: self))
+        }
+    }
+
     public var commands: [CommandDescriptor] {
         ScreenshotCaptureMode.allCases.map { mode in
             CommandDescriptor(id: "screenshot-studio.capture.\(mode.rawValue)", title: "Capture \(mode.title)", subtitle: name, iconName: iconName) { [weak self] in
@@ -85,28 +96,32 @@ public final class ScreenshotStudioModule: DropThingsModule {
     }
 
     public func capture(_ mode: ScreenshotCaptureMode) {
+        let slot: ScreenshotShortcutSlot = mode == .region ? .regionCopy : ScreenshotShortcutSlot(rawValue: mode.rawValue)!
+        captureShortcut(slot)
+    }
+
+    public func captureShortcut(_ slot: ScreenshotShortcutSlot) {
         guard !isCapturing else { return }
         guard permissions.state(for: .screenRecording) == .granted else {
             state = .needsPermission(missing: [.screenRecording])
             return
         }
-        NotificationCenter.default.post(name: .dropThingsCaptureWillBegin, object: nil)
-        switch mode {
-        case .region: beginRegionCapture()
-        case .window: beginWindowCapture()
-        case .display: beginDisplayCapture()
-        case .scrolling: beginScrollingCapture()
+        switch slot.mode {
+        case .region: beginRegionCapture(output: settings.output(forShortcut: slot))
+        case .window: beginWindowCapture(output: settings.output(forShortcut: slot))
+        case .display: beginDisplayCapture(output: settings.output(forShortcut: slot))
+        case .scrolling: beginScrollingCapture(output: settings.output(forShortcut: slot))
         }
     }
 
-    public func setShortcut(_ shortcut: GlobalHotkey.Definition?, for mode: ScreenshotCaptureMode) {
+    public func setShortcut(_ shortcut: GlobalHotkey.Definition?, for slot: ScreenshotShortcutSlot) {
         var next = settings
-        next.shortcuts[mode] = shortcut
+        next.shortcuts[slot] = shortcut
         apply(settings: next)
     }
 
     public func setShortcutsEnabled(_ enabled: Bool) { var next = settings; next.shortcutsEnabled = enabled; apply(settings: next) }
-    public func setOutput(_ output: ScreenshotOutputAction, for mode: ScreenshotCaptureMode) { var next = settings; next.outputs[mode] = output; apply(settings: next) }
+    public func setOutput(_ output: ScreenshotOutputAction, for slot: ScreenshotShortcutSlot) { var next = settings; next.outputs[slot] = output; apply(settings: next) }
     public func setCapturePreviewVisible(_ visible: Bool) { var next = settings; next.showCapturePreview = visible; apply(settings: next) }
     public func setSaveLocation(_ url: URL?) { var next = settings; next.saveLocationPath = url?.path; apply(settings: next) }
     public func setIncludeWindowShadow(_ enabled: Bool) { var next = settings; next.includeWindowShadow = enabled; apply(settings: next) }
@@ -136,7 +151,7 @@ public final class ScreenshotStudioModule: DropThingsModule {
         }
     }
 
-    private func beginRegionCapture() {
+    private func beginRegionCapture(output: ScreenshotOutputAction) {
         isCapturing = true
         let overlay = RegionCaptureOverlay(); self.overlay = overlay
         overlay.show { [weak self] result in
@@ -146,33 +161,31 @@ public final class ScreenshotStudioModule: DropThingsModule {
             case .cancelled: self.isCapturing = false
             case .region(let appKitRect):
                 let rect = ScreenCoordinateMapper.current().cgRect(forAppKitRect: appKitRect) ?? appKitRect
-                self.performCapture(.region(rect))
+                self.performCapture(.region(rect), output: output)
             }
         }
     }
 
-    private func beginWindowCapture() {
+    private func beginWindowCapture(output: ScreenshotOutputAction) {
         isCapturing = true
         let cgPoint = ScreenCoordinateMapper.current().imagePoint(forAppKitPoint: NSEvent.mouseLocation)
-        guard let window = ScreenCaptureTargets.window(at: cgPoint) else {
+        guard let window = ScreenCaptureTargets.window(at: cgPoint, excludingOwnerPID: -1) else {
             isCapturing = false; state = .degraded(reason: "No capturable window was found under the pointer."); return
         }
-        performCapture(.window(window.id, window.bounds))
+        performCapture(.window(window.id, window.bounds), output: output)
     }
 
-    private func beginDisplayCapture() {
+    private func beginDisplayCapture(output: ScreenshotOutputAction) {
         isCapturing = true
-        let appKitPoint = NSEvent.mouseLocation
+        let capturePoint = ScreenCoordinateMapper.current().imagePoint(forAppKitPoint: NSEvent.mouseLocation)
         let displays = ScreenCaptureTargets.displays()
-        guard let display = displays.first(where: { screen in
-            NSScreen.screens.first(where: { $0.localizedName == screen.name })?.frame.contains(appKitPoint) == true
-        }) ?? displays.first else {
+        guard let display = displays.first(where: { $0.bounds.contains(capturePoint) }) ?? displays.first else {
             isCapturing = false; state = .degraded(reason: "No active display is available."); return
         }
-        performCapture(.display(display.id))
+        performCapture(.display(display.id), output: output)
     }
 
-    private func beginScrollingCapture() {
+    private func beginScrollingCapture(output: ScreenshotOutputAction) {
         guard permissions.state(for: .accessibility) == .granted else {
             _ = permissions.requestPermission(.accessibility)
             state = .needsPermission(missing: [.accessibility])
@@ -191,7 +204,7 @@ public final class ScreenshotStudioModule: DropThingsModule {
                         Task { @MainActor in self?.scrollState = next }
                     }
                     let captured = CapturedImage(image: result.image, sourceRect: rect)
-                    try route(captured, mode: .scrolling)
+                    try route(captured, output: output)
                     state = result.isPartial ? .degraded(reason: "Scrolling capture returned a clearly marked partial image.") : .running
                 } catch { state = .degraded(reason: "Scrolling capture failed: \(error.localizedDescription)") }
             }
@@ -200,13 +213,13 @@ public final class ScreenshotStudioModule: DropThingsModule {
 
     public func stopScrollingCapture() { scrollCoordinator.cancel() }
 
-    private func performCapture(_ request: ScreenCaptureRequest) {
+    private func performCapture(_ request: ScreenCaptureRequest, output: ScreenshotOutputAction) {
         Task { [weak self] in
             guard let self else { return }
             defer { self.isCapturing = false }
             do {
                 let captured = try await captureService.capture(request)
-                try route(captured, mode: mode(for: request))
+                try route(captured, output: output)
                 lastCaptureSize = captured.pixelSize
                 state = .running
             } catch let error as ScreenCaptureError {
@@ -217,9 +230,9 @@ public final class ScreenshotStudioModule: DropThingsModule {
         }
     }
 
-    private func route(_ captured: CapturedImage, mode: ScreenshotCaptureMode) throws {
+    private func route(_ captured: CapturedImage, output: ScreenshotOutputAction) throws {
         archive(captured.image)
-        switch settings.output(for: mode) {
+        switch output {
         case .editor: openEditor(captured)
         case .copy:
             copy(captured.image)
@@ -262,6 +275,31 @@ public final class ScreenshotStudioModule: DropThingsModule {
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
+
+#if DEBUG
+    public func openEditorForVisualTesting() {
+        let size = CGSize(width: 1200, height: 760)
+        guard let context = CGContext(
+            data: nil,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return }
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.fill(CGRect(origin: .zero, size: size))
+        context.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor)
+        context.fill(CGRect(x: 70, y: 480, width: 1060, height: 190))
+        context.setFillColor(NSColor.systemPurple.withAlphaComponent(0.35).cgColor)
+        context.fillEllipse(in: CGRect(x: 160, y: 100, width: 300, height: 300))
+        context.setFillColor(NSColor.systemOrange.withAlphaComponent(0.5).cgColor)
+        context.fill(CGRect(x: 630, y: 130, width: 380, height: 260))
+        guard let image = context.makeImage() else { return }
+        openEditor(CapturedImage(image: image, sourceRect: CGRect(origin: .zero, size: size)))
+    }
+#endif
 
     private func showThumbnail(_ captured: CapturedImage) {
         let id = UUID()
@@ -313,11 +351,11 @@ public final class ScreenshotStudioModule: DropThingsModule {
         guard settings.shortcutsEnabled else { return }
         let duplicates = settings.duplicateShortcuts
         guard duplicates.isEmpty else { state = .degraded(reason: "Two Screenshot Studio actions use the same shortcut. Choose distinct shortcuts."); return }
-        var registered: [ScreenshotCaptureMode: GlobalHotkey] = [:]
-        for mode in ScreenshotCaptureMode.allCases {
-            guard let definition = settings.shortcuts[mode] else { continue }
-            let hotkey = GlobalHotkey(definition: definition) { [weak self] in self?.capture(mode) }
-            do { try hotkey.register(); registered[mode] = hotkey }
+        var registered: [ScreenshotShortcutSlot: GlobalHotkey] = [:]
+        for slot in ScreenshotShortcutSlot.allCases {
+            guard let definition = settings.shortcuts[slot] else { continue }
+            let hotkey = GlobalHotkey(definition: definition) { [weak self] in self?.captureShortcut(slot) }
+            do { try hotkey.register(); registered[slot] = hotkey }
             catch { registered.values.forEach { $0.unregister() }; state = .degraded(reason: "\(definition.displayString) is unavailable. Choose another shortcut."); return }
         }
         hotkeys = registered

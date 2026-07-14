@@ -41,6 +41,14 @@ public final class PaletteWorkspace {
         guard workspace.open(url) else { throw PaletteWorkspaceError.couldNotOpen }
     }
 
+    /// Opens Finder's native Spotlight results for the query. This keeps
+    /// system search distinct from the palette's inline file suggestions.
+    public func searchSystem(for query: String) throws {
+        guard workspace.showSearchResults(forQueryString: query) else {
+            throw PaletteWorkspaceError.couldNotOpen
+        }
+    }
+
     /// Sends the URL to a specific installed browser through Launch Services.
     /// A running browser receives an open-URL event in that process and applies
     /// its own tab/window policy; if it is not running, macOS launches it.

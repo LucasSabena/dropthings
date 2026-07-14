@@ -132,6 +132,25 @@ final class PaletteQueryCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testSystemSearchIsAvailableWithoutEnablingWebSearch() async throws {
+        let store = SettingsStore(backend: InMemorySettingsBackend())
+        let coordinator = PaletteQueryCoordinator(
+            settings: CommandPaletteSettings(applicationsEnabled: false, commandsEnabled: false, calculatorEnabled: false, filesEnabled: false, webSearchEnabled: false),
+            commandSource: { [] },
+            applicationCatalog: FakeApplicationCatalog(records: []),
+            spotlight: FailingSpotlight(),
+            workspace: PaletteWorkspace(),
+            history: PaletteHistoryStore(settings: store)
+        )
+        coordinator.start()
+        coordinator.query = "quarterly report"
+        try await Task.sleep(for: .milliseconds(40))
+
+        XCTAssertTrue(coordinator.results.contains { $0.result.kind == .systemSearch })
+        XCTAssertFalse(coordinator.results.contains { $0.result.kind == .webSearch })
+    }
+
+    @MainActor
     func testPresentationUsesCatalogCacheWithoutForcedInvalidation() async throws {
         let catalog = CountingApplicationCatalog()
         let store = SettingsStore(backend: InMemorySettingsBackend())

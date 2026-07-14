@@ -131,8 +131,11 @@ final class AudioControlModuleTests: XCTestCase {
         )
 
         try await module.start()
+        XCTAssertEqual(module.menuBarIconName, "speaker.wave.2.fill")
         module.setSystemOutputVolume(0.65)
+        XCTAssertEqual(module.menuBarIconName, "speaker.wave.2.fill")
         module.toggleSystemOutputMute()
+        XCTAssertEqual(module.menuBarIconName, "speaker.slash.fill")
 
         XCTAssertEqual(module.systemOutputState?.volume, 0.65)
         XCTAssertEqual(output.volumes.first?.0, device.uid)

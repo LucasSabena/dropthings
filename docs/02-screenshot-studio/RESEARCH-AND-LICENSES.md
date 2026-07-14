@@ -1,6 +1,6 @@
 # Research and licenses
 
-Last researched: 2026-07-13.
+Last researched: 2026-07-14.
 
 ## Primary technical sources
 
@@ -27,6 +27,18 @@ Last researched: 2026-07-13.
 - No third-party code or assets were copied for the Phase 0 baseline.
 
 ## Open-source references inspected
+
+### Flameshot
+
+- Repository: <https://github.com/flameshot-org/flameshot>
+- License: GPL-3.0-or-later for the main code; upstream documents separate
+  licenses for icons and a small number of embedded components.
+- Public feature reference: <https://flameshot.org/>
+- Relevant behavior: persistent annotation tools, per-tool color/thickness,
+  arrow/line/shapes/freehand/text/highlight/counter/blur/pixelate, undo/redo,
+  keyboard tool selection, copy, and save.
+- Decision: behavior and workflow reference only. DropThings uses an original
+  Swift/AppKit implementation, SF Symbols, and no Flameshot code or assets.
 
 ### macshot
 
@@ -56,7 +68,7 @@ original DropThings UI.
 ## Reuse ledger
 
 No third-party source has been copied into DropThings Screenshot Studio as of
-2026-07-13.
+2026-07-14.
 
 | DropThings file | Upstream repository/file | Commit | License | Modification |
 | --- | --- | --- | --- | --- |

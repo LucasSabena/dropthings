@@ -1,11 +1,6 @@
 import Foundation
 import SwiftUI
 
-public extension Notification.Name {
-    /// Posted before a module presents a full-screen capture surface. The app
-    /// shell uses it to move nonessential windows out of the way.
-    static let dropThingsCaptureWillBegin = Notification.Name("app.dropthings.capture-will-begin")
-}
 import Combine
 
 /// A single runnable action surfaced by a module for the menu bar and similar
@@ -32,24 +27,27 @@ public struct ModuleMenuBarPresentation {
     public let accessibilityLabel: String
     public let preferredContentSize: CGSize
     public let isVisibleByDefault: Bool
-    private let content: @MainActor () -> AnyView
+    public let togglesModuleLifecycle: Bool
+    private let content: (@MainActor () -> AnyView)?
 
     public init(
         iconName: String,
         accessibilityLabel: String,
         preferredContentSize: CGSize,
         isVisibleByDefault: Bool = false,
-        content: @escaping @MainActor () -> AnyView
+        togglesModuleLifecycle: Bool = false,
+        content: (@MainActor () -> AnyView)? = nil
     ) {
         self.iconName = iconName
         self.accessibilityLabel = accessibilityLabel
         self.preferredContentSize = preferredContentSize
         self.isVisibleByDefault = isVisibleByDefault
+        self.togglesModuleLifecycle = togglesModuleLifecycle
         self.content = content
     }
 
-    public func makeContentView() -> AnyView {
-        content()
+    public func makeContentView() -> AnyView? {
+        content?()
     }
 }
 
@@ -80,6 +78,10 @@ where ObjectWillChangePublisher == ObservableObjectPublisher {
     /// the status item only when the module is enabled and the user's per-
     /// module visibility preference allows it.
     var menuBarPresentation: ModuleMenuBarPresentation? { get }
+
+    /// Live SF Symbol used by the independent status item. Unlike `iconName`,
+    /// this may change with module state (volume, mute, active/inactive, etc.).
+    var menuBarIconName: String { get }
 
     /// Begin doing work. Must be idempotent: calling `start()` on a running
     /// module should be a no-op.
@@ -124,6 +126,16 @@ extension DropThingsModule {
     /// override this when they have a clear primary action.
     public var primaryAction: ModulePrimaryAction? { nil }
 
-    /// Modules opt in explicitly; most utilities need no extra menu-bar item.
-    public var menuBarPresentation: ModuleMenuBarPresentation? { nil }
+    /// Every module can opt into an independent status item. Modules with a
+    /// compact control surface override this metadata; otherwise a click runs
+    /// the primary action (or opens that module's settings).
+    public var menuBarPresentation: ModuleMenuBarPresentation? {
+        ModuleMenuBarPresentation(
+            iconName: iconName,
+            accessibilityLabel: name,
+            preferredContentSize: CGSize(width: 320, height: 120)
+        )
+    }
+
+    public var menuBarIconName: String { iconName }
 }

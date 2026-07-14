@@ -46,11 +46,14 @@ final class ModuleMenuBarController {
     func synchronize() {
         let eligible = registry.modules.values.filter { module in
             guard let presentation = module.menuBarPresentation else { return false }
-            return registry.isEnabled(module.id)
-                && preferences.isVisible(
+            let enabled = registry.isEnabled(module.id)
+            let visible = preferences.isVisible(
                     for: module.id,
                     default: presentation.isVisibleByDefault
                 )
+            let pinnedLifecycleToggle = presentation.togglesModuleLifecycle
+                && preferences.hasExplicitVisibility(for: module.id)
+            return visible && (enabled || pinnedLifecycleToggle)
         }
         let eligibleIDs = Set(eligible.map(\.id))
 
@@ -62,10 +65,12 @@ final class ModuleMenuBarController {
         for module in eligible where items[module.id] == nil {
             guard let presentation = module.menuBarPresentation else { continue }
             items[module.id] = ModuleStatusItem(
-                moduleID: module.id,
+                module: module,
                 presentation: presentation,
                 closeOthers: { [weak self] id in self?.closeAll(except: id) },
                 openSettings: { [weak self] id in self?.openSettings(id) }
+                , isEnabled: { [weak self] id in self?.registry.isEnabled(id) ?? false }
+                , setEnabled: { [weak self] enabled, id in self?.registry.setEnabled(enabled, for: id) }
             )
         }
     }
@@ -75,10 +80,11 @@ final class ModuleMenuBarController {
     /// the same root view as the popover in a capturable panel.
     func showForVisualTesting(moduleID: ModuleID) {
         guard let module = registry.modules[moduleID],
-              let presentation = module.menuBarPresentation else { return }
+              let presentation = module.menuBarPresentation,
+              let content = presentation.makeContentView() else { return }
         let root = ModuleMenuBarPopoverView(
             moduleName: presentation.accessibilityLabel,
-            content: presentation.makeContentView(),
+            content: content,
             contentSize: presentation.preferredContentSize,
             openSettings: { [weak self] in self?.openSettings(moduleID) }
         )
@@ -107,24 +113,39 @@ final class ModuleMenuBarController {
 
 @MainActor
 private final class ModuleStatusItem: NSObject {
-    private let moduleID: ModuleID
+    private let module: any DropThingsModule
+    private var moduleID: ModuleID { module.id }
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let closeOthers: (ModuleID) -> Void
+    private let openSettings: (ModuleID) -> Void
+    private let isEnabled: (ModuleID) -> Bool
+    private let setEnabled: (Bool, ModuleID) -> Void
+    private let togglesModuleLifecycle: Bool
+    private var cancellable: AnyCancellable?
 
     init(
-        moduleID: ModuleID,
+        module: any DropThingsModule,
         presentation: ModuleMenuBarPresentation,
         closeOthers: @escaping (ModuleID) -> Void,
-        openSettings: @escaping (ModuleID) -> Void
+        openSettings: @escaping (ModuleID) -> Void,
+        isEnabled: @escaping (ModuleID) -> Bool,
+        setEnabled: @escaping (Bool, ModuleID) -> Void
     ) {
-        self.moduleID = moduleID
+        self.module = module
         self.closeOthers = closeOthers
+        self.openSettings = openSettings
+        self.isEnabled = isEnabled
+        self.setEnabled = setEnabled
+        self.togglesModuleLifecycle = presentation.togglesModuleLifecycle
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
         configureStatusButton(with: presentation)
         configurePopover(with: presentation, openSettings: openSettings)
+        cancellable = module.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.refreshStatusIcon() }
+        }
     }
 
     deinit {
@@ -137,9 +158,17 @@ private final class ModuleStatusItem: NSObject {
 
     func show() {
         guard let button = statusItem.button else { return }
+        guard popover.contentViewController != nil else {
+            if togglesModuleLifecycle {
+                setEnabled(!isEnabled(moduleID), moduleID)
+                return
+            }
+            if let action = module.primaryAction { action.action() }
+            else { openSettings(moduleID) }
+            return
+        }
         closeOthers(moduleID)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -153,7 +182,7 @@ private final class ModuleStatusItem: NSObject {
     private func configureStatusButton(with presentation: ModuleMenuBarPresentation) {
         guard let button = statusItem.button else { return }
         let image = NSImage(
-            systemSymbolName: presentation.iconName,
+            systemSymbolName: module.menuBarIconName,
             accessibilityDescription: presentation.accessibilityLabel
         )
         image?.isTemplate = true
@@ -165,17 +194,26 @@ private final class ModuleStatusItem: NSObject {
         statusItem.autosaveName = "app.dropthings.module.\(moduleID.rawValue)"
     }
 
+    private func refreshStatusIcon() {
+        let image = NSImage(systemSymbolName: module.menuBarIconName, accessibilityDescription: module.name)
+        image?.isTemplate = true
+        statusItem.button?.image = image
+    }
+
     private func configurePopover(
         with presentation: ModuleMenuBarPresentation,
         openSettings: @escaping (ModuleID) -> Void
     ) {
-        popover.behavior = .transient
+        guard let content = presentation.makeContentView() else { return }
+        // Semitransient popovers survive a global screenshot hotkey and its
+        // selection overlay, but still dismiss with normal outside activity.
+        popover.behavior = .semitransient
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.contentSize = presentation.preferredContentSize
         popover.contentViewController = NSHostingController(
             rootView: ModuleMenuBarPopoverView(
                 moduleName: presentation.accessibilityLabel,
-                content: presentation.makeContentView(),
+                content: content,
                 contentSize: presentation.preferredContentSize,
                 openSettings: { [weak self] in
                     guard let self else { return }

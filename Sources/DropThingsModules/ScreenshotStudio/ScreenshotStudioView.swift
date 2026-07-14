@@ -12,31 +12,15 @@ struct ScreenshotStudioSettingsView: View {
             caption: "Capture a region, the window under the pointer, or the display under the pointer. Screen Recording is requested only when you enable or invoke this module."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
-                HStack(spacing: DTSpace.sm) {
-                    ForEach(ScreenshotCaptureMode.allCases) { mode in
-                        Button("Capture \(mode.title)") { module.capture(mode) }
-                            .controlSize(.small)
-                    }
-                }
-
                 Toggle("Enable global shortcuts", isOn: Binding(get: { module.settings.shortcutsEnabled }, set: { module.setShortcutsEnabled($0) }))
 
-                ForEach(ScreenshotCaptureMode.allCases) { mode in
-                    ShortcutRecorder(
-                        title: "Capture \(mode.title)",
-                        definition: Binding(get: { module.settings.shortcuts[mode] }, set: { module.setShortcut($0, for: mode) })
-                    )
-                }
-
                 VStack(alignment: .leading, spacing: DTSpace.sm) {
-                    Text("After each capture").font(DTTypography.sectionTitle)
-                    ForEach(ScreenshotCaptureMode.allCases) { mode in
-                        Picker("Capture \(mode.title)", selection: Binding(
-                            get: { module.settings.output(for: mode) },
-                            set: { module.setOutput($0, for: mode) }
-                        )) {
-                            ForEach(ScreenshotOutputAction.allCases) { Text($0.title).tag($0) }
-                        }
+                    Text("Capture shortcuts").font(DTTypography.sectionTitle)
+                    Text("Each row is a complete workflow: choose its shortcut and what happens after capture.")
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                    ForEach(ScreenshotShortcutSlot.allCases) { slot in
+                        ScreenshotShortcutRow(module: module, slot: slot)
                     }
                 }
 
@@ -101,5 +85,82 @@ struct ScreenshotStudioSettingsView: View {
         if let path = module.settings.saveLocationPath { panel.directoryURL = URL(fileURLWithPath: path) }
         guard panel.runModal() == .OK else { return }
         module.setSaveLocation(panel.url)
+    }
+}
+
+private struct ScreenshotShortcutRow: View {
+    @ObservedObject var module: ScreenshotStudioModule
+    let slot: ScreenshotShortcutSlot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DTSpace.sm) {
+            HStack(spacing: DTSpace.md) {
+                VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                    Text(slot.title).font(DTTypography.body.weight(.semibold))
+                    Text(slot.mode == .scrolling ? "Select a fixed viewport, then DropThings scrolls and stitches it." : "Captures from the display under the pointer.")
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                }
+                Spacer()
+                Picker("Result", selection: Binding(
+                    get: { module.settings.output(forShortcut: slot) },
+                    set: { module.setOutput($0, for: slot) }
+                )) {
+                    ForEach(ScreenshotOutputAction.allCases) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .frame(width: 155)
+            }
+            ShortcutRecorder(
+                title: "Shortcut",
+                definition: Binding(get: { module.settings.shortcuts[slot] }, set: { module.setShortcut($0, for: slot) })
+            )
+        }
+        .padding(DTSpace.md)
+        .background(DTColor.surfaceRaised)
+        .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DTRadius.md).strokeBorder(DTColor.border))
+    }
+}
+
+struct ScreenshotStudioMenuBarView: View {
+    @ObservedObject var module: ScreenshotStudioModule
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DTSpace.xs) {
+            Text("New capture")
+                .font(DTTypography.sectionTitle)
+                .padding(.horizontal, DTSpace.md)
+                .padding(.top, DTSpace.md)
+            ForEach(ScreenshotShortcutSlot.allCases) { slot in
+                Button {
+                    module.captureShortcut(slot)
+                } label: {
+                    HStack {
+                        Label(slot.title, systemImage: symbol(for: slot.mode))
+                        Spacer()
+                        if let shortcut = module.settings.shortcuts[slot] {
+                            Text(shortcut.displayString)
+                                .foregroundStyle(DTColor.textSecondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, DTSpace.md)
+                .padding(.vertical, DTSpace.sm)
+            }
+            Spacer(minLength: 0)
+        }
+        .background(.regularMaterial)
+    }
+
+    private func symbol(for mode: ScreenshotCaptureMode) -> String {
+        switch mode {
+        case .region: return "viewfinder"
+        case .window: return "macwindow"
+        case .display: return "display"
+        case .scrolling: return "scroll"
+        }
     }
 }

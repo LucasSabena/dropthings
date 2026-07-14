@@ -34,6 +34,10 @@ public final class ModuleMenuBarPreferences: ObservableObject {
         persist()
     }
 
+    public func hasExplicitVisibility(for moduleID: ModuleID) -> Bool {
+        explicitVisibility[moduleID.rawValue] != nil
+    }
+
     public func prune(registeredModuleIDs: Set<ModuleID>) {
         let registered = Set(registeredModuleIDs.map(\.rawValue))
         let retained = explicitVisibility.filter { registered.contains($0.key) }

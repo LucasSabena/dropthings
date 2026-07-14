@@ -77,15 +77,6 @@ final class AppServices: ObservableObject {
         settingsWindow.setContent(
             SettingsRootView().environmentObject(self)
         )
-        NotificationCenter.default.addObserver(
-            forName: .dropThingsCaptureWillBegin,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // A global hotkey may activate DropThings. Keep its settings window
-            // from covering the target that the user is trying to capture.
-            self?.settingsWindow.hide()
-        }
         importer.onImport = { [weak self] in
             self?.reloadAfterImport()
         }
@@ -243,6 +234,11 @@ final class AppServices: ObservableObject {
         try? await Task.sleep(for: .milliseconds(200))
         module.coordinator.query = "README"
     }
+
+    func showScreenshotEditorForVisualTesting() {
+        guard let module = registry.modules[.screenshotStudio] as? ScreenshotStudioModule else { return }
+        module.openEditorForVisualTesting()
+    }
 #endif
 
     /// Existing installs predate Command Palette, so absence of its explicit
@@ -389,7 +385,13 @@ struct DropThingsApp: App {
 
     @ViewBuilder
     private func moduleMenuItem(module: any DropThingsModule) -> some View {
-        if let action = module.primaryAction {
+        if module.menuBarPresentation?.togglesModuleLifecycle == true {
+            Button {
+                services.registry.setEnabled(!services.registry.isEnabled(module.id), for: module.id)
+            } label: {
+                Label(services.registry.isEnabled(module.id) ? "Disable \(module.name)" : "Enable \(module.name)", systemImage: module.menuBarIconName)
+            }
+        } else if let action = module.primaryAction {
             Button {
                 action.action()
             } label: {

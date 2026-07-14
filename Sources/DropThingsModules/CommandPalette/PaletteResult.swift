@@ -8,6 +8,7 @@ public enum PaletteResultKind: String, Codable, CaseIterable, Sendable {
     case calculation
     case systemAction
     case webSearch
+    case systemSearch
 
     public var displayName: String {
         switch self {
@@ -18,6 +19,7 @@ public enum PaletteResultKind: String, Codable, CaseIterable, Sendable {
         case .calculation: return "Calculation"
         case .systemAction: return "System action"
         case .webSearch: return "Web search"
+        case .systemSearch: return "System search"
         }
     }
 }

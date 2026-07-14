@@ -195,11 +195,7 @@ struct AudioControlMenuBarView: View {
     }
 
     private var masterVolumeIcon: String {
-        guard module.systemOutputState?.isMuted != true else { return "speaker.slash.fill" }
-        let volume = module.systemOutputState?.volume ?? 0
-        if volume == 0 { return "speaker.fill" }
-        if volume < 0.34 { return "speaker.wave.1.fill" }
-        return "speaker.wave.2.fill"
+        module.menuBarIconName
     }
 
     private func outputDetail(_ device: AudioDeviceIdentity) -> String {

@@ -22,13 +22,31 @@ are watched only in an explicitly user-selected folder.
 
 ## Capture interaction
 
-- Invoking capture temporarily hides DropThings capture UI before acquiring
-  pixels, without visible flicker in the output.
+- Invoking capture preserves visible windows and popovers so DropThings itself
+  can be captured; the selection overlay is never included in acquired pixels.
 - Region mode shows precise crosshair, magnifier, and pixel dimensions.
 - Escape cancels; Space temporarily switches window/region selection only if the
   behavior is taught in the overlay.
 - Multi-display overlays preserve each display's native scale and coordinates.
 - After capture, the configured action occurs immediately; no unnecessary modal.
+
+## Workflow refinement — 2026-07-14
+
+Lazyweb was unavailable in the active toolset, so this work follows the existing
+record above. Shortcut rows now describe complete recipes: shortcut plus output.
+Region has two independent defaults (quick copy and open editor), while window,
+display, and scrolling retain their own recipe. Scrolling copy explains that the
+user selects a fixed viewport before DropThings scrolls and stitches it.
+
+## Editor rebuild workflow note — 2026-07-14
+
+Lazyweb was queried again before rebuilding the editor, but its indexed surface
+returned no usable screenshot-annotation flow. Flameshot's public feature list
+and shortcut documentation were used as the behavioral reference instead. The
+new editor is an original AppKit implementation: it uses a pixel-sized canvas,
+native scroll-view zoom, an explicit SF Symbol tool map, contextual color/stroke
+controls, predictable text commit/cancel, selection/move/resize, and quiet
+copy/save feedback.
 
 ## Editor interaction
 

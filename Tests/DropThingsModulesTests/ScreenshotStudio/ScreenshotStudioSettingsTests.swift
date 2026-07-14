@@ -6,9 +6,10 @@ import DropThingsPlatform
 final class ScreenshotStudioSettingsTests: XCTestCase {
     func testDefaultsAssignDistinctShortcutsPerCaptureMode() {
         let settings = ScreenshotStudioSettings()
-        XCTAssertEqual(settings.shortcuts.count, ScreenshotCaptureMode.allCases.count)
+        XCTAssertEqual(settings.shortcuts.count, ScreenshotShortcutSlot.allCases.count)
         XCTAssertTrue(settings.duplicateShortcuts.isEmpty)
-        XCTAssertEqual(settings.shortcuts[.region]?.displayString, "⌃⌥4")
+        XCTAssertEqual(settings.shortcuts[.regionCopy]?.displayString, "⌃⌥4")
+        XCTAssertNotNil(settings.shortcuts[.regionEditor])
     }
 
     func testDefaultsUseIndependentOutputsForFastAndEditingCaptures() {
@@ -23,7 +24,7 @@ final class ScreenshotStudioSettingsTests: XCTestCase {
     func testDuplicateShortcutsAreReported() {
         let hotkey = GlobalHotkey.Definition(keyCode: 18, modifiers: 256, id: 410)
         var settings = ScreenshotStudioSettings()
-        settings.shortcuts[.region] = hotkey
+        settings.shortcuts[.regionCopy] = hotkey
         settings.shortcuts[.window] = GlobalHotkey.Definition(keyCode: 18, modifiers: 256, id: 411)
         XCTAssertEqual(settings.duplicateShortcuts, Set([hotkey, settings.shortcuts[.window]!]))
     }
@@ -50,7 +51,7 @@ final class ScreenshotStudioSettingsTests: XCTestCase {
 
         let settings = store.loadScreenshotStudioSettings()
         XCTAssertFalse(settings.shortcutsEnabled)
-        XCTAssertEqual(settings.shortcuts[.region]?.keyCode, 12)
+        XCTAssertEqual(settings.shortcuts[.regionCopy]?.keyCode, 12)
         XCTAssertEqual(settings.saveLocationPath, "/tmp/captures")
         XCTAssertEqual(settings.defaultOutput, .save)
         XCTAssertNotNil(store.data(ScreenshotStudioSettingsKey.settings))

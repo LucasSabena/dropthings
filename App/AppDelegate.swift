@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await AppServices.shared.showCommandPaletteForVisualTesting(runQuerySequence: true)
             } else if arguments.contains("--show-command-palette") {
                 await AppServices.shared.showCommandPaletteForVisualTesting()
+            } else if arguments.contains("--show-screenshot-editor") {
+                AppServices.shared.showScreenshotEditorForVisualTesting()
             }
             if let previewIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--preview-module-menu-bar"),
                ProcessInfo.processInfo.arguments.indices.contains(previewIndex + 1) {

@@ -13,41 +13,11 @@ struct KeepAwakeSettingsView: View {
             caption: "Prevent idle sleep indefinitely or for a fixed time. No system permission is required."
         ) {
             VStack(alignment: .leading, spacing: DTSpace.md) {
-                Toggle(isOn: Binding(
-                    get: { module.keepAwakeSettings.enabled },
-                    set: { module.setKeepingAwake($0) }
-                )) {
-                    HStack(spacing: DTSpace.sm) {
-                        Text("Keep Mac awake")
-                            .font(DTTypography.body.weight(.semibold))
-                        if module.keepAwakeSettings.enabled {
-                            Text("·")
-                                .foregroundStyle(DTColor.textSecondary)
-                            Text("Active")
-                                .font(DTTypography.caption.weight(.semibold))
-                                .foregroundStyle(DTColor.success)
-                        }
-                    }
-                }
-
-                HStack {
-                    Text("Duration")
-                        .font(DTTypography.body)
-                    Spacer()
-                    Picker("", selection: Binding(
-                        get: { module.keepAwakeSettings.durationMinutes },
-                        set: { module.setDurationMinutes($0) }
-                    )) {
-                        Text("Until turned off").tag(Int?.none)
-                        Text("15 minutes").tag(Int?.some(15))
-                        Text("30 minutes").tag(Int?.some(30))
-                        Text("1 hour").tag(Int?.some(60))
-                        Text("2 hours").tag(Int?.some(120))
-                        Text("4 hours").tag(Int?.some(240))
-                        Text("8 hours").tag(Int?.some(480))
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                HStack(spacing: DTSpace.sm) {
+                    Image(systemName: module.isAssertionActive ? "sun.max.fill" : "moon.zzz")
+                        .foregroundStyle(module.isAssertionActive ? DTColor.success : DTColor.textSecondary)
+                    Text(module.isAssertionActive ? "Keep Awake is active" : "Enable this module to keep the Mac awake")
+                        .font(DTTypography.body.weight(.semibold))
                 }
 
                 Toggle("Also keep the display awake", isOn: Binding(
@@ -59,7 +29,7 @@ struct KeepAwakeSettingsView: View {
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
 
-                if module.keepAwakeSettings.enabled {
+                if module.state.isStarted {
                     if module.isAssertionActive {
                         HStack(spacing: DTSpace.xs) {
                             Image(systemName: "checkmark.circle")
@@ -67,11 +37,6 @@ struct KeepAwakeSettingsView: View {
                             Text("Power assertion active")
                                 .font(DTTypography.caption.weight(.semibold))
                                 .foregroundStyle(DTColor.success)
-                            if let remaining = module.remainingSeconds {
-                                Text("· \(remainingText(remaining)) remaining")
-                                    .font(DTTypography.caption.monospacedDigit())
-                                    .foregroundStyle(DTColor.textSecondary)
-                            }
                         }
                     } else {
                         InlineAlert(
@@ -84,12 +49,4 @@ struct KeepAwakeSettingsView: View {
         }
     }
 
-    private func remainingText(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded(.up)))
-        let hours = total / 3_600
-        let minutes = (total % 3_600) / 60
-        let secs = total % 60
-        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, secs) }
-        return String(format: "%d:%02d", minutes, secs)
-    }
 }

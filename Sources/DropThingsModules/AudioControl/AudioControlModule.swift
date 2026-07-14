@@ -61,6 +61,16 @@ public final class AudioControlModule: DropThingsModule {
         }
     }
 
+    public var menuBarIconName: String {
+        guard let output = systemOutputState else { return "speaker.wave.2" }
+        if output.isMuted || (output.volume ?? 0) <= 0.001 { return "speaker.slash.fill" }
+        switch output.volume ?? 0 {
+        case ..<0.34: return "speaker.wave.1.fill"
+        case ..<0.67: return "speaker.wave.2.fill"
+        default: return "speaker.wave.3.fill"
+        }
+    }
+
     public func start() async throws {
         guard #available(macOS 15, *) else {
             state = .unavailable(reason: "Audio Control requires macOS 15 or later.")

@@ -5,6 +5,7 @@ import DropThingsPlatform
 
 struct CommandPalettePanelView: View {
     @ObservedObject var coordinator: PaletteQueryCoordinator
+    @ObservedObject var presentation: CommandPalettePresentationState
     let onClose: () -> Void
 
     @State private var selection: String?
@@ -20,12 +21,12 @@ struct CommandPalettePanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchField
-            Divider()
             content
-            Divider()
             footer
         }
-        .background(DTColor.background)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous).strokeBorder(DTColor.border.opacity(0.7)))
         .overlay(alignment: .center) {
             if actionsVisible, let result = selectedResult {
                 actionMenu(for: result)
@@ -41,6 +42,9 @@ struct CommandPalettePanelView: View {
             selection = PaletteSelection.preserving(currentID: selection, resultIDs: ids)
         }
         .onChange(of: coordinator.query) { _, _ in actionsVisible = false }
+        .onChange(of: presentation.focusRequest) { _, _ in
+            Task { @MainActor in searchFocused = true }
+        }
     }
 
     private var searchField: some View {
@@ -48,7 +52,7 @@ struct CommandPalettePanelView: View {
             Image(systemName: "magnifyingglass")
                 .font(DTTypography.windowTitle)
                 .foregroundStyle(DTColor.textSecondary)
-            TextField("Search apps, files, commands, or calculate…", text: $coordinator.query)
+            TextField("Search apps, files, commands, the web, or this Mac…", text: $coordinator.query)
                 .textFieldStyle(.plain)
                 .font(DTTypography.windowTitle)
                 .focused($searchFocused)
@@ -68,7 +72,8 @@ struct CommandPalettePanelView: View {
             }
         }
         .padding(.horizontal, DTSpace.lg)
-        .padding(.vertical, DTSpace.md)
+        .padding(.vertical, DTSpace.lg)
+        .background(DTColor.surface.opacity(0.7))
     }
 
     @ViewBuilder
@@ -102,7 +107,8 @@ struct CommandPalettePanelView: View {
                             .id(ranked.id)
                         }
                     }
-                    .padding(DTSpace.sm)
+                    .padding(.horizontal, DTSpace.sm)
+                    .padding(.vertical, DTSpace.md)
                 }
                 .onChange(of: selection) { _, id in
                     if let id {
@@ -127,18 +133,19 @@ struct CommandPalettePanelView: View {
                 .padding(.horizontal, DTSpace.md)
                 .padding(.top, DTSpace.sm)
             }
-            HStack(spacing: DTSpace.lg) {
+            HStack(spacing: DTSpace.md) {
                 Text("\(coordinator.results.count) result\(coordinator.results.count == 1 ? "" : "s")")
                 Spacer()
-                Label("Navigate", systemImage: "arrow.up.arrow.down")
+                Text("↑↓ Navigate")
                 Text("↩ Open")
-                Text("⌘K Actions")
-                Text("esc Close")
+                Text("⌘K More")
+                Text("esc")
             }
             .font(DTTypography.caption)
             .foregroundStyle(DTColor.textSecondary)
             .padding(.horizontal, DTSpace.md)
             .padding(.vertical, DTSpace.sm)
+            .background(.ultraThinMaterial)
         }
     }
 
@@ -179,6 +186,7 @@ struct CommandPalettePanelView: View {
     private func installEventMonitor() {
         guard eventMonitor == nil else { return }
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window?.isKeyWindow == true else { return event }
             let handled = handleKey(event)
             return handled ? nil : event
         }
@@ -252,9 +260,10 @@ private struct CommandPaletteResultRow: View {
                     .foregroundStyle(DTColor.textTertiary)
             }
             .padding(.horizontal, DTSpace.md)
-            .padding(.vertical, DTSpace.sm)
-            .background(selected ? DTColor.accent.opacity(0.14) : Color.clear)
+            .padding(.vertical, DTSpace.md)
+            .background(selected ? DTColor.accent.opacity(0.16) : DTColor.surface.opacity(0.35))
             .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: DTRadius.md).strokeBorder(selected ? DTColor.accent.opacity(0.3) : DTColor.border.opacity(0.35)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -272,6 +281,7 @@ private struct CommandPaletteResultRow: View {
         case .calculation: return "equal.circle"
         case .systemAction: return "gearshape"
         case .webSearch: return "globe"
+        case .systemSearch: return "magnifyingglass.circle"
         }
     }
 

@@ -72,7 +72,7 @@ final class KeepAwakeModuleTests: XCTestCase {
         XCTAssertEqual(assertion.currentAssertionIDs, [1, 2])
     }
 
-    func testExpiredTimedSessionDoesNotReactivateOnLaunch() async throws {
+    func testEnabledModuleIsAuthoritativeOverExpiredLegacySession() async throws {
         store.saveKeepAwakeSettings(
             KeepAwakeSettings(
                 enabled: true,
@@ -84,18 +84,17 @@ final class KeepAwakeModuleTests: XCTestCase {
 
         try await module.start()
 
-        XCTAssertFalse(module.keepAwakeSettings.enabled)
-        XCTAssertFalse(assertion.isActive)
+        XCTAssertTrue(module.keepAwakeSettings.enabled)
+        XCTAssertTrue(assertion.isActive)
+        XCTAssertNil(module.keepAwakeSettings.activeUntil)
+        XCTAssertNil(module.keepAwakeSettings.durationMinutes)
         XCTAssertEqual(module.state, .running)
     }
 
     func testFailedAcquisitionSetsDegraded() async throws {
         let module = makeModule(enabled: false)
-        try await module.start()
-        XCTAssertEqual(module.state, .running)
-
         assertion.shouldFailNextAcquisition = true
-        module.setKeepingAwake(true)
+        try await module.start()
 
         if case .degraded = module.state {
             // Expected
@@ -106,28 +105,15 @@ final class KeepAwakeModuleTests: XCTestCase {
         XCTAssertNotNil(module.lastError)
     }
 
-    func testTogglingAfterFailureRecoversToRunning() async throws {
+    func testStoppingModuleAlwaysReleasesAssertion() async throws {
         let module = makeModule(enabled: false)
         try await module.start()
-
-        assertion.shouldFailNextAcquisition = true
-        module.setKeepingAwake(true)
-        if case .degraded = module.state { } else {
-            XCTFail("Expected degraded state after failed acquisition")
-        }
-        XCTAssertNotNil(module.lastError)
-
-        // A successful release (disable) should clear degraded and the error.
-        assertion.shouldFailNextAcquisition = false
-        module.setKeepingAwake(false)
-        XCTAssertEqual(module.state, .running)
-        XCTAssertNil(module.lastError)
-        XCTAssertFalse(assertion.isActive)
-
-        // A successful acquire should stay running.
-        module.setKeepingAwake(true)
-        XCTAssertEqual(module.state, .running)
-        XCTAssertNil(module.lastError)
         XCTAssertTrue(assertion.isActive)
+
+        await module.stop()
+
+        XCTAssertFalse(assertion.isActive)
+        XCTAssertFalse(module.keepAwakeSettings.enabled)
+        XCTAssertEqual(module.state, .off)
     }
 }

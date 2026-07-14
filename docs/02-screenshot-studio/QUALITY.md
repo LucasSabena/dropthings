@@ -1,5 +1,17 @@
 # Quality and verification
 
+## Editor rebuild verification — 2026-07-14
+
+- Verify every toolbar segment selects the tool shown by its SF Symbol.
+- Draw, export, undo, and redo arrow, line, rectangle, ellipse, pencil, text,
+  highlight, counter, blur, and pixelate annotations.
+- Select, move, resize, and delete annotations without handles appearing in the
+  copied or saved image.
+- Crop, fit, zoom, pan, copy, and save on both Retina and non-Retina displays.
+- Confirm Return commits text, Escape cancels text/drafts, and Command-Z,
+  Command-Shift-Z, Command-C, Command-S, Command-0, Command-Plus, and
+  Command-Minus work while the canvas is focused.
+
 ## Performance budgets
 
 - Shortcut-to-selection overlay warm p95: 120 ms or less.
@@ -53,15 +65,18 @@ Every scrolling bug receives a minimal fixture before its fix.
 - Test commands/results, memory/performance sample, multi-display screenshots,
   scroll fixture report, and known limitations.
 
-## Current automated evidence — 2026-07-13
+## Current automated evidence — 2026-07-14
 
-- `swift test`: 296 tests passed.
+- `swift test`: 362 tests passed.
 - `xcodebuild -project App.xcodeproj -scheme DropThings -configuration Debug
   build CODE_SIGNING_ALLOWED=NO`: succeeded.
 - Screenshot Studio fixtures cover shortcut collisions/settings migration,
   document undo/crop/render dimensions, canvas coordinate round-trips, exact
   and blank-frame alignment, and a scrolling sequence that stops on a repeated
   frame while preserving every pixel row of a valid 160-pixel composite.
+- The v3 settings tests cover both region recipes and migration from the prior
+  single-region shortcut. Full app compilation covers the per-display overlay,
+  ScreenCaptureKit output sizing, and menu-bar capture integration.
 
 Manual evidence is deliberately still outstanding. Actual Screen Recording and
 Accessibility behavior must be exercised on a consented desktop before the

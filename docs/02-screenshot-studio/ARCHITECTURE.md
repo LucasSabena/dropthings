@@ -61,8 +61,15 @@ registering overlapping shortcuts or permissions.
 
 Use `SCScreenshotManager`/ScreenCaptureKit on macOS 14+ for display/window/single
 frame capture. Keep the existing CoreGraphics wrapper only as a documented
-fallback if a verified OS-specific case requires it. Exclude every DropThings
-capture/editor/thumbnail/pin window from captured content where APIs allow.
+fallback if a verified OS-specific case requires it. Selection overlays are
+one nonactivating window per display, avoiding a mixed-scale virtual-desktop
+window. Ordinary DropThings windows are capturable when explicitly selected;
+selection overlays remain capture-only UI.
+
+`ScreenshotShortcutSlot` is the persisted capture recipe identity. It owns a
+hotkey and output action and maps to a capture mode. Version 3 migrates the old
+single region entry into `regionCopy` and adds `regionEditor` without discarding
+the existing shortcut.
 
 ## Scroll state machine
 

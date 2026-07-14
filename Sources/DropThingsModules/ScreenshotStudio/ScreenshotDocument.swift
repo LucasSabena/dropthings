@@ -22,6 +22,11 @@ public struct ScreenshotColor: Codable, Hashable, Sendable {
     public var cgColor: CGColor { CGColor(red: red, green: green, blue: blue, alpha: alpha) }
     public static let red = ScreenshotColor(red: 1, green: 0.23, blue: 0.19)
     public static let yellow = ScreenshotColor(red: 1, green: 0.82, blue: 0.1, alpha: 0.45)
+
+    @MainActor public init(_ color: NSColor) {
+        let converted = color.usingColorSpace(.sRGB) ?? color
+        self.init(red: converted.redComponent, green: converted.greenComponent, blue: converted.blueComponent, alpha: converted.alphaComponent)
+    }
 }
 
 public enum ScreenshotAnnotationKind: String, Codable, CaseIterable, Sendable {
@@ -71,10 +76,20 @@ public final class ScreenshotDocument: ObservableObject {
     public var canUndo: Bool { !undoStack.isEmpty }; public var canRedo: Bool { !redoStack.isEmpty }
 
     public func add(_ annotation: ScreenshotAnnotation) { mutate { annotations.append(annotation); selectedID = annotation.id } }
-    public func replace(_ annotation: ScreenshotAnnotation) { mutate { guard let index = annotations.firstIndex(where: { $0.id == annotation.id }) else { return }; annotations[index] = annotation } }
-    public func deleteSelected() { mutate { annotations.removeAll { $0.id == selectedID }; selectedID = nil } }
+    public func replace(_ annotation: ScreenshotAnnotation) {
+        guard annotations.contains(where: { $0.id == annotation.id }) else { return }
+        mutate { annotations[annotations.firstIndex(where: { $0.id == annotation.id })!] = annotation }
+    }
+    public func deleteSelected() {
+        guard let selectedID, annotations.contains(where: { $0.id == selectedID }) else { return }
+        mutate { annotations.removeAll { $0.id == selectedID }; self.selectedID = nil }
+    }
     public func select(_ id: UUID?) { selectedID = id }
-    public func setCrop(_ rect: CGRect?) { mutate { crop = rect.map { ScreenshotRect($0.intersection(sourceBounds)) } } }
+    public func setCrop(_ rect: CGRect?) {
+        let clipped = rect?.standardized.intersection(sourceBounds)
+        guard clipped?.width ?? sourceBounds.width >= 2, clipped?.height ?? sourceBounds.height >= 2 else { return }
+        mutate { crop = clipped.map(ScreenshotRect.init) }
+    }
     public func undo() { guard let previous = undoStack.popLast() else { return }; redoStack.append(snapshot()); restore(previous) }
     public func redo() { guard let next = redoStack.popLast() else { return }; undoStack.append(snapshot()); restore(next) }
     public func markSaved() { isDirty = false }

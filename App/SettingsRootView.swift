@@ -476,7 +476,7 @@ private struct ModuleDetailView: View {
     private func moduleMenuBarSetting(_ module: any DropThingsModule) -> some View {
         if let presentation = module.menuBarPresentation {
             HStack(spacing: DTSpace.md) {
-                Image(systemName: presentation.iconName)
+                Image(systemName: module.menuBarIconName)
                     .font(DTTypography.moduleIcon)
                     .foregroundStyle(DTColor.accent)
                     .frame(width: DTSize.iconButton, height: DTSize.iconButton)
@@ -485,7 +485,7 @@ private struct ModuleDetailView: View {
                 VStack(alignment: .leading, spacing: DTSpace.xxs) {
                     Text("Show in menu bar")
                         .font(DTTypography.body.weight(.semibold))
-                    Text("Give \(module.name) its own icon and quick controls while it is enabled.")
+                    Text("Give \(module.name) its own icon and one-click action or quick controls while it is enabled.")
                         .font(DTTypography.caption)
                         .foregroundStyle(DTColor.textSecondary)
                 }

@@ -130,7 +130,7 @@ public final class PaletteQueryCoordinator: ObservableObject {
         actionError = nil
         do {
             try await action.perform()
-            if result.kind != .webSearch {
+            if result.kind != .webSearch && result.kind != .systemSearch {
                 history.recordSuccessfulAction(resultID: result.id)
             }
             return true
@@ -247,7 +247,9 @@ public final class PaletteQueryCoordinator: ObservableObject {
                 } else {
                     staticResults = cachedStaticResults
                 }
-                let dynamicProviders: [any PaletteLocalSearchProviding] = [CalculatorResultProvider(), WebResultProvider()]
+                let dynamicProviders: [any PaletteLocalSearchProviding] = [
+                    CalculatorResultProvider(), WebResultProvider(), SystemSearchResultProvider()
+                ]
                 let built = staticResults + dynamicProviders.flatMap { $0.results(in: context) }
                 let grouped = Dictionary(grouping: built, by: Self.provider(for:))
                 let capped = grouped.values.flatMap {
@@ -352,7 +354,7 @@ public final class PaletteQueryCoordinator: ObservableObject {
         case .command, .systemAction: return .commands
         case .calculation: return .calculator
         case .file, .folder: return .files
-        case .webSearch: return .web
+        case .webSearch, .systemSearch: return .web
         }
     }
 

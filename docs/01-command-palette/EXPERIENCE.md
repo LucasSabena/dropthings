@@ -70,3 +70,13 @@ The existing Lazyweb-derived keyboard-first pattern was retained for recent and
 pinned apps and for the optional web result. These additions use progressive
 disclosure in the existing action menu and settings instead of adding a mode or
 provider prefix.
+
+## Refinement note — 2026-07-14
+
+Lazyweb was not available in the active Codex toolset, so this pass extended the
+already-recorded Raycast/Spotlight research rather than claiming a new lookup.
+The palette is now a wider, borderless nonactivating panel: it can receive text
+without making the previously active app resign, and Escape returns directly to
+that app's existing responder. Results use quiet token-based cards instead of
+window chrome or category-heavy decoration. An entered query offers both the
+configured web engine/browser and Finder's native “Search this Mac” action.

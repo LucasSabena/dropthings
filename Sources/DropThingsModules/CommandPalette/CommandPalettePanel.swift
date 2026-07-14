@@ -6,12 +6,15 @@ import DropThingsPlatform
 @MainActor
 final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     private enum Layout {
-        static let size = NSSize(width: 680, height: 480)
-        static let minimumSize = NSSize(width: 520, height: 320)
+        static let size = NSSize(width: 780, height: 500)
+        static let minimumSize = NSSize(width: 640, height: 340)
     }
 
     private let coordinator: PaletteQueryCoordinator
+    private let presentation = CommandPalettePresentationState()
     private var panel: NSPanel?
+    private weak var previouslyKeyWindow: NSWindow?
+    private var previouslyActiveApplication: NSRunningApplication?
     private var screenObserver: NSObjectProtocol?
     private let performanceLog = OSLog(subsystem: "app.dropthings", category: "command-palette-performance")
 
@@ -39,9 +42,10 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     func show() {
         let startedAt = DispatchTime.now().uptimeNanoseconds
         let panel = panel ?? makePanel()
+        rememberFocusOwner()
         place(panel)
-        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        presentation.requestFocus()
         let elapsedMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
         os_signpost(
             .event,
@@ -54,6 +58,7 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
 
     func hide() {
         panel?.orderOut(nil)
+        restoreFocusOwnerIfNeeded()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -61,28 +66,51 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+        let panel = CommandPalettePanel(
             contentRect: NSRect(origin: .zero, size: Layout.size),
-            styleMask: [.titled, .fullSizeContentView, .resizable],
+            styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
         )
         panel.title = "Command Palette"
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
+        panel.becomesKeyOnlyIfNeeded = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
         panel.minSize = Layout.minimumSize
-        panel.backgroundColor = .windowBackgroundColor
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: CommandPalettePanelView(
+        let hostingView = NSHostingView(rootView: CommandPalettePanelView(
             coordinator: coordinator,
+            presentation: presentation,
             onClose: { [weak self] in self?.hide() }
         ))
+        hostingView.wantsLayer = true
+        hostingView.layer?.cornerRadius = 18
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
+        panel.contentView = hostingView
         self.panel = panel
         return panel
+    }
+
+    private func rememberFocusOwner() {
+        previouslyKeyWindow = NSApp.keyWindow
+        let current = NSRunningApplication.current
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        previouslyActiveApplication = frontmost?.processIdentifier == current.processIdentifier ? nil : frontmost
+    }
+
+    private func restoreFocusOwnerIfNeeded() {
+        if let previouslyKeyWindow, previouslyKeyWindow.isVisible {
+            previouslyKeyWindow.makeKey()
+        }
+        guard NSApp.isActive, let application = previouslyActiveApplication else { return }
+        application.activate(options: [])
+        previouslyActiveApplication = nil
     }
 
     private func place(_ panel: NSPanel) {
@@ -105,4 +133,18 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
         }
         return "\(screen.frame.origin.x):\(screen.frame.origin.y):\(screen.frame.width)x\(screen.frame.height)"
     }
+}
+
+@MainActor
+final class CommandPalettePresentationState: ObservableObject {
+    @Published private(set) var focusRequest = 0
+    func requestFocus() { focusRequest &+= 1 }
+}
+
+/// A non-activating panel can become key without making DropThings the active
+/// application. That gives the search field keyboard focus while preserving
+/// the front app's responder chain for when the panel disappears.
+private final class CommandPalettePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }

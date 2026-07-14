@@ -137,9 +137,30 @@ struct WebResultProvider: PaletteLocalSearchProviding {
             subtitle: browserName,
             aliases: [query, "internet", "web"],
             icon: .system("globe"),
-            providerPriority: 110,
+            providerPriority: 130,
             actions: [PaletteAction(id: "search", title: "Search the Web", symbolName: "globe", shortcutHint: "↩", role: .primary) { [workspace = context.workspace] in
                 try await workspace.openWebURL(url, browserBundleIdentifier: context.settings.webBrowserBundleIdentifier)
+            }]
+        )]
+    }
+}
+
+struct SystemSearchResultProvider: PaletteLocalSearchProviding {
+    let id = PaletteProviderID.web
+
+    func results(in context: PaletteLocalProviderContext) -> [PaletteResult] {
+        let query = context.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+        return [PaletteResult(
+            id: "system-search:\(query)",
+            kind: .systemSearch,
+            title: "Search this Mac for “\(query)”",
+            subtitle: "Finder · Spotlight",
+            aliases: [query, "system", "spotlight", "finder"],
+            icon: .system("magnifyingglass.circle"),
+            providerPriority: 120,
+            actions: [PaletteAction(id: "search-system", title: "Search this Mac", symbolName: "magnifyingglass", shortcutHint: "↩", role: .primary) { [workspace = context.workspace] in
+                try workspace.searchSystem(for: query)
             }]
         )]
     }
