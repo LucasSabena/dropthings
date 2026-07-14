@@ -7,8 +7,7 @@
    the repository already implements it.
 3. Check `git status` and preserve unrelated user changes.
 4. Select exactly one unchecked phase slice from `IMPLEMENTATION.md`.
-5. For UI work, repeat or extend the Lazyweb note in `EXPERIENCE.md` before code.
-6. For external code, update the reuse ledger before copying.
+5. For external code, update the reuse ledger before copying.
 
 ## Implementation constraints
 

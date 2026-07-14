@@ -6,8 +6,7 @@
 2. Inspect current ScreenshotRegion code, Platform capture adapters, project
   target membership, and tests.
 3. Preserve unrelated changes and select one phase slice only.
-4. Repeat/extend the Lazyweb record before changing UI.
-5. Update the reuse ledger before adapting MacShot/ScrollSnap code.
+4. Update the reuse ledger before adapting MacShot/ScrollSnap code.
 
 ## Hard constraints
 

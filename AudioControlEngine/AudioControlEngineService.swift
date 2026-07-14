@@ -29,6 +29,24 @@ final class AudioControlEngineService: NSObject, AudioControlXPCServiceProtocol 
             reply(nil)
         }
     }
+
+    func sendMediaCommand(_ command: Int, reply: @escaping (Data?, String?) -> Void) {
+        Task {
+            do {
+                guard let command = MediaTransportCommand(rawValue: command) else {
+                    throw NSError(
+                        domain: "app.dropthings.audio-control",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Unsupported media command."]
+                    )
+                }
+                let observed = try await engine.sendMediaCommand(command)
+                reply(try AudioControlCodec.encode(observed), nil)
+            } catch {
+                reply(nil, error.localizedDescription)
+            }
+        }
+    }
 }
 
 final class AudioControlEngineListenerDelegate: NSObject, NSXPCListenerDelegate {

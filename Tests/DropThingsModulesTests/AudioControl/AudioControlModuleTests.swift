@@ -30,6 +30,7 @@ private final class FakeAudioControlEngine: AudioControlEngineClient {
     }
     func snapshot() async throws -> AudioControlObservedState { state }
     func restoreNormalAudio() async throws { restoreCount += 1 }
+    func sendMediaCommand(_ command: MediaTransportCommand) async throws -> AudioControlObservedState { state }
 }
 
 private final class FakeSystemAudioOutput: SystemAudioOutputControlling {

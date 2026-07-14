@@ -58,6 +58,7 @@ final class AppServices: ObservableObject {
         registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
         registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
         registry.register(AudioControlModule(settings: settings))
+        registry.register(NetworkPriorityModule())
         let commandPalette = CommandPaletteModule(
             settings: settings,
             permissions: permissions,
@@ -238,6 +239,12 @@ final class AppServices: ObservableObject {
     func showScreenshotEditorForVisualTesting() {
         guard let module = registry.modules[.screenshotStudio] as? ScreenshotStudioModule else { return }
         module.openEditorForVisualTesting()
+    }
+
+    func showNetworkPriorityForVisualTesting() {
+        guard let module = registry.modules[.networkPriority] as? NetworkPriorityModule else { return }
+        module.prepareVisualTestingState()
+        showSettings(moduleID: .networkPriority)
     }
 #endif
 

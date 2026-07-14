@@ -6,8 +6,7 @@
 2. Inspect current WindowSnap code, ScreenCoordinateMapper, GlobalHotkey,
   PermissionCenter, target membership, and tests.
 3. Preserve unrelated edits and choose one implementation phase slice.
-4. Repeat/extend Lazyweb research before changing UI.
-5. Record Rectangle source in the ledger before copying/adapting it.
+4. Record Rectangle source in the ledger before copying/adapting it.
 
 ## Hard constraints
 

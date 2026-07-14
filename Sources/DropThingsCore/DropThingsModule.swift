@@ -83,6 +83,10 @@ where ObjectWillChangePublisher == ObservableObjectPublisher {
     /// this may change with module state (volume, mute, active/inactive, etc.).
     var menuBarIconName: String { get }
 
+    /// Live accessible label and tooltip for the independent status item.
+    /// Modules whose icon communicates mutable state should name that state.
+    var menuBarAccessibilityLabel: String { get }
+
     /// Begin doing work. Must be idempotent: calling `start()` on a running
     /// module should be a no-op.
     func start() async throws
@@ -112,6 +116,7 @@ extension DropThingsModule {
         case .textTools: return "textformat"
         case .markdownViewer: return "doc.richtext"
         case .audioControl: return "speaker.wave.2"
+        case .networkPriority: return "cable.connector.horizontal"
         default: return "square.stack.3d.up"
         }
     }
@@ -138,4 +143,6 @@ extension DropThingsModule {
     }
 
     public var menuBarIconName: String { iconName }
+
+    public var menuBarAccessibilityLabel: String { name }
 }

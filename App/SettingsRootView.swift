@@ -8,6 +8,7 @@ private let productModuleOrder: [ModuleID] = [
     .clipboardHistory,
     .colorPicker,
     .scrollControl,
+    .networkPriority,
     .keepAwake
 ]
 
@@ -197,7 +198,7 @@ private struct ControlCenterView: View {
             VStack(alignment: .leading, spacing: DTSpace.xl) {
                 PageHeader(
                     title: "Control Center",
-                    subtitle: "Five focused utilities. Enable only what you use."
+                    subtitle: "Focused utilities. Enable only what you use."
                 ) {
                     StatusSummary(active: activeCount, total: orderedModules.count, attention: attentionCount)
                 }
@@ -896,7 +897,7 @@ private struct AboutView: View {
                     VStack(alignment: .leading, spacing: DTSpace.xs) {
                         Text("DropThings")
                             .font(DTTypography.pageTitle)
-                        Text("Five small utilities. Native, local, and under your control.")
+                        Text("Small utilities. Native, local, and under your control.")
                             .font(DTTypography.body)
                             .foregroundStyle(DTColor.textSecondary)
                         Text("Version \(services.bundleInfo.shortVersion) (\(services.bundleInfo.buildNumber))")

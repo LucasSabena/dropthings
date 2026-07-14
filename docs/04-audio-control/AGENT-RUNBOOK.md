@@ -5,9 +5,8 @@
 1. Read every file here and root `AGENTS.md`.
 2. Confirm current macOS/Xcode/hardware and capture baseline audio behavior.
 3. Preserve unrelated changes; choose one phase slice only.
-4. Repeat/extend Lazyweb before UI changes.
-5. Update the FineTune reuse ledger before copying/adapting source.
-6. For Phase 0, use a disposable branch/worktree and record cleanup instructions.
+4. Update the FineTune reuse ledger before copying/adapting source.
+5. For Phase 0, use a disposable branch/worktree and record cleanup instructions.
 
 ## Hard constraints
 

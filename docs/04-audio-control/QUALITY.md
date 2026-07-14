@@ -96,6 +96,13 @@ Automated/build evidence:
 
 Hardware gate evidence still required:
 
+- [ ] Test Now Playing metadata and transport controls with Spotify, Safari and
+  a Chromium browser on the owner's macOS version. Confirm an unavailable or
+  timed-out MediaRemote call merely hides the media card and never affects
+  audio processing.
+- [ ] With a Discord call and Spotify playback, confirm the owning app names
+  remain visible through stream handoffs; confirm an idle row receives no tap
+  and disappears when its app quits.
 - [ ] Explicitly grant System Audio Recording from the built DropThings app.
 - [ ] Confirm one-app gain/mute at a safe speaker/headphone level and verify
   normal audio after disable, app quit, helper kill, and DropThings force quit.

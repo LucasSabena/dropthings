@@ -1,31 +1,5 @@
 # Experience contract
 
-## Lazyweb workflow note — 2026-07-13
-
-Lazyweb was queried first for desktop audio mixers, equalizers, per-app volume,
-and routing surfaces. Its accessible indexed corpus did not expose a directly
-relevant FineTune/SoundSource macOS flow. The product therefore follows native
-menu-bar mixer conventions and inspected FineTune behavior; no Lazyweb asset or
-unsupported benchmark is used.
-
-Lazyweb entry point: <https://www.lazyweb.com/>
-
-The query was repeated on 2026-07-13 immediately before implementation using
-`macOS per-app audio mixer volume routing equalizer` and `FineTune SoundSource
-macOS audio`. Results again contained adjacent mobile music/device-control
-products (for example Apple Music, Bose, and Sonos), but no relevant desktop
-per-app mixer flow. The implementation therefore reuses DropThings settings
-sections, semantic colors, spacing, typography, native sliders, menus, and
-application icons rather than importing an unrelated visual pattern.
-
-The query was repeated again before the independent menu-bar surface using
-`audio mixer menu bar volume app macOS FineTune`. Lazyweb still returned only
-adjacent podcast, music, and hardware-companion products, not a desktop per-app
-mixer. The supplied FineTune capture therefore remained the visual source of
-truth. Its hierarchy (output selector, master row, app section, empty state,
-settings/quit footer) was retained in a narrower native DropThings popover. No
-Lazyweb code or asset was reused.
-
 ## Primary surface
 
 - Compact list of active/pinned apps with icon, name, meter, mute, and volume.
@@ -38,6 +12,10 @@ Lazyweb code or asset was reused.
   removes only this shortcut, not the module or the main DropThings item.
 - The compact menu-bar surface exposes system output selection, system volume
   and mute, per-app volume/mute/solo, per-app routing, and app actions.
+- When macOS exposes an active Now Playing session, the compact surface also
+  shows its source app, title, artist/album, and previous/play-pause/next
+  controls. This card is omitted when the compatibility bridge is unavailable
+  or the active player publishes no session.
 - The footer opens this module's settings and offers Quit. DropThings does not
   copy FineTune's donation/marketing affordance.
 
@@ -79,9 +57,20 @@ Lazyweb code or asset was reused.
 
 ## Refinement note — 2026-07-14
 
-Lazyweb was unavailable in the active toolset, so the established native mixer
-research above remains the source. The menu-bar symbol now reflects live master
+The menu-bar symbol now reflects live master
 output: muted/zero, low, medium, and high volume use progressively distinct SF
 Symbols. The shared popover is semitransient and no longer forces itself key,
 preventing internal controls from being mistaken for outside clicks and keeping
 the previously focused application responder intact.
+
+## Discovery reliability — 2026-07-14
+
+Multi-process applications are presented under their owning app name rather
+than a renderer/helper name. Once discovered, a row stays visible as `Idle`
+until that application quits, instead of disappearing during Core Audio stream
+handoffs or silence. Idle rows are never processed or muted; they only preserve
+a stable, understandable UI.
+
+Transport controls for third-party players remain a separately specified phase:
+macOS has no public universal API to control arbitrary apps' playback. This
+module must not emulate media keys with undocumented event APIs.

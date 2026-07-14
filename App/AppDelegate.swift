@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await AppServices.shared.showCommandPaletteForVisualTesting()
             } else if arguments.contains("--show-screenshot-editor") {
                 AppServices.shared.showScreenshotEditorForVisualTesting()
+            } else if arguments.contains("--show-network-priority") {
+                AppServices.shared.showNetworkPriorityForVisualTesting()
             }
             if let previewIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--preview-module-menu-bar"),
                ProcessInfo.processInfo.arguments.indices.contains(previewIndex + 1) {

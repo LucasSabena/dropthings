@@ -142,6 +142,42 @@ public struct AudioAppObservedState: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+public enum MediaTransportCommand: Int, Codable, Hashable, Sendable {
+    case play = 0
+    case pause = 1
+    case togglePlayPause = 2
+    case nextTrack = 4
+    case previousTrack = 5
+}
+
+/// Metadata published by the system's active Now Playing session. It is
+/// intentionally separate from process-audio discovery: a session can exist
+/// while the corresponding stream is momentarily silent.
+public struct MediaPlaybackState: Codable, Hashable, Sendable {
+    public let sourceBundleID: String?
+    public let sourceDisplayName: String
+    public let title: String
+    public let artist: String?
+    public let album: String?
+    public let isPlaying: Bool
+
+    public init(
+        sourceBundleID: String?,
+        sourceDisplayName: String,
+        title: String,
+        artist: String? = nil,
+        album: String? = nil,
+        isPlaying: Bool
+    ) {
+        self.sourceBundleID = sourceBundleID
+        self.sourceDisplayName = sourceDisplayName
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.isPlaying = isPlaying
+    }
+}
+
 public struct AudioControlObservedState: Codable, Hashable, Sendable {
     public let protocolVersion: Int
     public let generation: UInt64
@@ -150,6 +186,7 @@ public struct AudioControlObservedState: Codable, Hashable, Sendable {
     public let devices: [AudioDeviceIdentity]
     public let defaultOutputUID: String?
     public let overloadCount: UInt64
+    public let mediaPlayback: MediaPlaybackState?
 
     public init(
         generation: UInt64,
@@ -158,6 +195,7 @@ public struct AudioControlObservedState: Codable, Hashable, Sendable {
         devices: [AudioDeviceIdentity],
         defaultOutputUID: String?,
         overloadCount: UInt64 = 0,
+        mediaPlayback: MediaPlaybackState? = nil,
         protocolVersion: Int = AudioControlProtocolVersion.current
     ) {
         self.protocolVersion = protocolVersion
@@ -167,6 +205,7 @@ public struct AudioControlObservedState: Codable, Hashable, Sendable {
         self.devices = devices
         self.defaultOutputUID = defaultOutputUID
         self.overloadCount = overloadCount
+        self.mediaPlayback = mediaPlayback
     }
 }
 
@@ -198,4 +237,5 @@ public enum AudioControlCodec {
     func applyDesiredState(_ data: Data, reply: @escaping (Data?, String?) -> Void)
     func snapshot(reply: @escaping (Data?, String?) -> Void)
     func restoreNormalAudio(reply: @escaping (String?) -> Void)
+    func sendMediaCommand(_ command: Int, reply: @escaping (Data?, String?) -> Void)
 }

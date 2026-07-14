@@ -19,6 +19,13 @@ struct AudioControlMenuBarView: View {
 
             Divider()
 
+            if let media = module.observedState?.mediaPlayback {
+                nowPlaying(media)
+                    .padding(.horizontal, DTSpace.lg)
+                    .padding(.vertical, DTSpace.md)
+                Divider()
+            }
+
             appsHeader
                 .padding(.horizontal, DTSpace.lg)
                 .padding(.top, DTSpace.md)
@@ -150,6 +157,48 @@ struct AudioControlMenuBarView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func nowPlaying(_ media: MediaPlaybackState) -> some View {
+        HStack(spacing: DTSpace.sm) {
+            Image(systemName: media.isPlaying ? "waveform" : "pause.circle")
+                .foregroundStyle(DTColor.accent)
+                .frame(width: DTSize.utilityIcon, height: DTSize.utilityIcon)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                Text(media.title)
+                    .font(DTTypography.body.weight(.semibold))
+                    .lineLimit(1)
+                Text(mediaDetail(media))
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: DTSpace.xs)
+            Button { module.sendMediaCommand(.previousTrack) } label: {
+                Image(systemName: "backward.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Previous item")
+            Button { module.sendMediaCommand(.togglePlayPause) } label: {
+                Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(media.isPlaying ? "Pause" : "Play")
+            Button { module.sendMediaCommand(.nextTrack) } label: {
+                Image(systemName: "forward.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Next item")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Now playing in \(media.sourceDisplayName)")
+    }
+
+    private func mediaDetail(_ media: MediaPlaybackState) -> String {
+        [media.artist, media.album, media.sourceDisplayName]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .joined(separator: " · ")
     }
 
     @ViewBuilder

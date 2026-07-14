@@ -32,7 +32,7 @@ final class ProcessAudioPipeline {
         appIdentity = process.identity
         self.deviceUID = deviceUID
         do {
-            let description = CATapDescription(processes: [process.objectID], deviceUID: deviceUID, stream: 0)
+            let description = CATapDescription(processes: process.objectIDs, deviceUID: deviceUID, stream: 0)
             description.name = "DropThings · \(process.identity.displayName)"
             description.isPrivate = true
             description.muteBehavior = .mutedWhenTapped

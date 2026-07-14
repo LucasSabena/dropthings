@@ -29,6 +29,7 @@
 		A40000000000000000000006 /* ProcessAudioPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000024 /* ProcessAudioPipeline.swift */; };
 		A40000000000000000000007 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000025 /* main.swift */; };
 		A40000000000000000000008 /* DTAudioRTProcessor.mm in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000026 /* DTAudioRTProcessor.mm */; };
+		B60000000000000000000001 /* DTMediaRemoteBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = B60000000000000000000011 /* DTMediaRemoteBridge.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +80,8 @@
 		A40000000000000000000028 /* AudioControlEngine-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AudioControlEngine-Bridging-Header.h"; sourceTree = "<group>"; };
 		A40000000000000000000029 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A4000000000000000000002A /* AudioControlEngine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AudioControlEngine.entitlements; sourceTree = "<group>"; };
+		B60000000000000000000011 /* DTMediaRemoteBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DTMediaRemoteBridge.m; sourceTree = "<group>"; };
+		B60000000000000000000012 /* DTMediaRemoteBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DTMediaRemoteBridge.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -175,6 +178,8 @@
 				A40000000000000000000026 /* DTAudioRTProcessor.mm */,
 				A40000000000000000000027 /* DTAudioRTProcessor.h */,
 				A40000000000000000000028 /* AudioControlEngine-Bridging-Header.h */,
+				B60000000000000000000011 /* DTMediaRemoteBridge.m */,
+				B60000000000000000000012 /* DTMediaRemoteBridge.h */,
 				A40000000000000000000029 /* Info.plist */,
 				A4000000000000000000002A /* AudioControlEngine.entitlements */,
 			);
@@ -308,6 +313,7 @@
 				A40000000000000000000006 /* ProcessAudioPipeline.swift in Sources */,
 				A40000000000000000000007 /* main.swift in Sources */,
 				A40000000000000000000008 /* DTAudioRTProcessor.mm in Sources */,
+				B60000000000000000000001 /* DTMediaRemoteBridge.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -449,7 +455,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/DropThings.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -460,7 +466,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.6.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -475,7 +481,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/DropThings.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -486,7 +492,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.6.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -499,12 +505,12 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = AudioControlEngine/AudioControlEngine.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AudioControlEngine/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.6.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings.AudioControlEngine;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -518,12 +524,12 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = AudioControlEngine/AudioControlEngine.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AudioControlEngine/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.6.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.dropthings.AudioControlEngine;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

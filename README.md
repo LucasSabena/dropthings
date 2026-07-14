@@ -23,6 +23,7 @@ are enabled or when you click **Check for Updates**.
 | **Screenshot Studio** | Region, window, display, delayed, scrolling, and Shelf captures with native annotation tools. | Screen Recording |
 | **Markdown Viewer** | Native tabbed GitHub-flavored Markdown viewer with Finder integration and live reload. | Automation only for the optional Finder selection shortcut |
 | **Audio Control** | Independent menu-bar mixer with system output, master volume, per-app volume, mute, solo, and routing. | System Audio Recording when an app control is first changed |
+| **Network Priority** | One-click Ethernet-first/Wi-Fi-first service order with a live menu-bar icon. | Administrator authentication when macOS requires it |
 
 ### Complete module inventory
 
@@ -116,6 +117,7 @@ the permission it needs only when you enable that module.
 | Screenshot Studio | Screen Recording | Captures the screen, window, or selected region |
 | Markdown Viewer | Automation (optional) | Reads Markdown files explicitly selected in Finder |
 | Audio Control | System Audio Recording | Processes app audio locally when a per-app control is changed; it never saves or transmits audio |
+| Network Priority | Administrator authentication | Changes the current macOS network location's service order after an explicit switch |
 
 If a module says it needs a permission but the system does not seem to know
 about DropThings:
@@ -139,9 +141,9 @@ the menu:
 - An action for each active module that exposes one
 - **Quit DropThings**
 
-Modules can also declare an independent menu-bar surface. Audio Control ships
-with one enabled by default while the module is active; its module settings let
-you show or hide that icon without disabling Audio Control.
+Modules can also declare an independent menu-bar surface. Audio Control and
+Network Priority ship with one enabled by default while their modules are
+active; module settings show or hide those icons without disabling the module.
 
 Inside **Settings**, the sidebar lists each module. Click one to see its
 state, its settings, and its required permissions. Enable or disable with
@@ -156,8 +158,8 @@ disabled from the same About screen. Homebrew users can update with:
 brew upgrade --cask LucasSabena/dropthings/dropthings
 ```
 
-The four replacement-product specifications and their manual verification
-matrices live under [`docs/`](docs/01-command-palette/README.md).
+Product specifications and their manual verification matrices live under
+[`docs/`](docs/01-command-palette/README.md).
 
 ---
 
@@ -215,6 +217,7 @@ passes. New modules need to:
 - [Screenshot Studio](docs/02-screenshot-studio/README.md)
 - [Window Manager](docs/03-window-manager/README.md)
 - [Audio Control](docs/04-audio-control/README.md)
+- [Network Priority](docs/06-network-priority/README.md)
 
 ---
 

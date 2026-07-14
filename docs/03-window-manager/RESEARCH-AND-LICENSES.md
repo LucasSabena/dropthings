@@ -26,11 +26,6 @@ Last researched: 2026-07-13.
 - Decision: selective adaptation is allowed. Prefer DropThings' smaller pure
   geometry engine; copy only behavior/code that materially reduces risk.
 
-## Lazyweb record
-
-Lazyweb was consulted first as recorded in `EXPERIENCE.md`; no code/assets were
-copied.
-
 ## Reuse ledger
 
 No Rectangle source has yet been copied into DropThings as of 2026-07-13.

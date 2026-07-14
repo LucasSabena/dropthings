@@ -68,6 +68,16 @@ Messages include protocol version, request/generation ID, and deadline. Unknown
 new fields are tolerated where encoding permits; incompatible versions force
 safe bypass and a clear unavailable state.
 
+## Now Playing compatibility boundary — 2026-07-14
+
+With explicit owner approval, the XPC helper dynamically loads the private
+`MediaRemote` framework to read the system-wide active Now Playing session and
+send play/pause/previous/next commands. This is the only practical no-extension
+path for compatible Spotify and browser sessions (including YouTube/Netflix).
+It is not an App Store-safe or OS-stable API. The wrapper is synchronous with a
+short timeout, returns no media state when unavailable, and is isolated from
+the real-time path; a failure must never affect audio processing or output.
+
 ## Audio graph per controlled app
 
 Conceptual pipeline:
@@ -112,6 +122,12 @@ teardown as normal bypass: IOProc, aggregate, then tap.
   composite fallback and are not auto-controlled unless explicitly pinned.
 - Devices persist by Core Audio UID; disappearance retains desired routing but
   observed state uses safe fallback.
+- Discovery groups all active Core Audio processes belonging to the same outer
+  application bundle. This makes multi-process apps (for example Electron)
+  one app row and passes every active process ID to the tap. Once discovered,
+  an app row remains visible while its application is running, even if Core
+  Audio transiently reports no output. Its tap is always torn down until output
+  is active again.
 
 ## Recovery
 

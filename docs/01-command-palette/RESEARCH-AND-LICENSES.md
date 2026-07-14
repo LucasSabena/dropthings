@@ -29,11 +29,6 @@ feature is approved and tracked.
 - License: MIT.
 - Current reuse status: none.
 
-## Lazyweb record
-
-Lazyweb was consulted first. The relevant available flow is recorded in
-`EXPERIENCE.md`. No assets or code were copied.
-
 ## Reuse ledger
 
 No third-party source has been copied into this module as of 2026-07-13.

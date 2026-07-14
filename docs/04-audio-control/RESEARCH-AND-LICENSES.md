@@ -24,6 +24,21 @@ permissive license, copyright Apple Inc. 2024. No sample source file was copied;
 the DropThings helper was implemented independently against the documented API
 contract, uses no recording path, and has a different transactional/XPC design.
 
+## Now Playing compatibility research — 2026-07-14
+
+- Apple’s public `MPRemoteCommandCenter` API lets an app receive commands for
+  its own playback; it does not expose the active session of other apps.
+- The owner explicitly approved a compatibility exception for the private
+  `/System/Library/PrivateFrameworks/MediaRemote.framework` on 2026-07-14.
+  The implementation dynamically resolves the small set of read/transport
+  symbols at runtime in the XPC helper. It is omitted from the real-time path
+  and fails closed (no media card/controls) when unavailable.
+- `ungive/media-control`, revision `3ac3d4bdf862c7b5399b4fba4df5689f5c38609a`,
+  BSD-3-Clause, was inspected for compatibility behavior and symbols. No source
+  or headers were copied; DropThings uses an independently written, narrow
+  dynamic wrapper. Its README warns that this private-framework approach may
+  break across macOS releases.
+
 ## FineTune inspection
 
 - Repository: <https://github.com/ronitsingh10/FineTune>

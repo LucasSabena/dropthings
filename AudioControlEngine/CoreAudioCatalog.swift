@@ -3,27 +3,41 @@ import CoreAudio
 import DropThingsAudioControlKit
 
 struct RunningAudioProcess {
-    let objectID: AudioObjectID
+    /// An application can own several Core Audio processes (notably Electron
+    /// renderers). A single tap must include every process that is currently
+    /// producing output for that application.
+    let objectIDs: [AudioObjectID]
     let identity: AudioAppIdentity
     let isRunningOutput: Bool
 }
 
 struct CoreAudioCatalog {
     func processes() -> [RunningAudioProcess] {
-        objectIDs(selector: kAudioHardwarePropertyProcessObjectList).compactMap { objectID in
+        let rawProcesses = objectIDs(selector: kAudioHardwarePropertyProcessObjectList).compactMap { objectID -> RunningAudioProcess? in
             guard let pid: pid_t = scalar(objectID, selector: kAudioProcessPropertyPID) else { return nil }
             let running = (scalar(objectID, selector: kAudioProcessPropertyIsRunningOutput) as UInt32?) == 1
             let application = NSRunningApplication(processIdentifier: pid)
-            let reportedBundleID = string(objectID, selector: kAudioProcessPropertyBundleID) ?? application?.bundleIdentifier
-            let bundleID = reportedBundleID.flatMap { $0.isEmpty ? nil : $0 }
-            let fallback = application?.executableURL?.path ?? "unidentified-audio-process"
-            let displayName = application?.localizedName ?? bundleID ?? URL(fileURLWithPath: fallback).lastPathComponent
+            let identity = appIdentity(
+                for: application,
+                reportedBundleID: string(objectID, selector: kAudioProcessPropertyBundleID)
+            )
             return RunningAudioProcess(
-                objectID: objectID,
-                identity: AudioAppIdentity(bundleID: bundleID, processFallback: fallback, displayName: displayName),
+                objectIDs: running ? [objectID] : [],
+                identity: identity,
                 isRunningOutput: running
             )
         }
+
+        return Dictionary(grouping: rawProcesses, by: { $0.identity.stableID })
+            .compactMap { _, processes in
+                guard let first = processes.first else { return nil }
+                let outputObjectIDs = processes.flatMap(\.objectIDs)
+                return RunningAudioProcess(
+                    objectIDs: outputObjectIDs,
+                    identity: first.identity,
+                    isRunningOutput: !outputObjectIDs.isEmpty
+                )
+            }
     }
 
     func devices() -> [AudioDeviceIdentity] {
@@ -64,6 +78,14 @@ struct CoreAudioCatalog {
 
     func defaultOutputUID() -> String? {
         defaultOutputID().flatMap { string($0, selector: kAudioDevicePropertyDeviceUID) }
+    }
+
+    /// A row may outlive the Core Audio process object while its application is
+    /// open. This allows the UI to stay stable across stream teardown/recreate
+    /// cycles without treating an idle app as active audio.
+    func isApplicationRunning(_ identity: AudioAppIdentity) -> Bool {
+        guard let bundleID = identity.bundleID else { return false }
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
 
     func cleanupOwnedAggregateDevices() {
@@ -129,4 +151,37 @@ struct CoreAudioCatalog {
         default: return "Audio device"
         }
     }
+
+    private func appIdentity(
+        for application: NSRunningApplication?,
+        reportedBundleID: String?
+    ) -> AudioAppIdentity {
+        let containerBundle = application.flatMap(containingApplicationBundle)
+        let bundleID = containerBundle?.bundleIdentifier
+            ?? application?.bundleIdentifier
+            ?? reportedBundleID?.nonEmpty
+        let fallback = application?.executableURL?.path ?? "unidentified-audio-process"
+        let displayName = (containerBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (containerBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? application?.localizedName
+            ?? bundleID
+            ?? URL(fileURLWithPath: fallback).lastPathComponent
+        return AudioAppIdentity(bundleID: bundleID, processFallback: fallback, displayName: displayName)
+    }
+
+    /// Maps a helper nested inside an app bundle back to its owning app. This
+    /// uses only public bundle paths and keeps Electron helpers such as Discord
+    /// Renderer from appearing as unrelated applications.
+    private func containingApplicationBundle(_ application: NSRunningApplication) -> Bundle? {
+        guard let bundleURL = application.bundleURL else { return nil }
+        let components = bundleURL.pathComponents
+        guard let appIndex = components.firstIndex(where: { $0.hasSuffix(".app") }) else {
+            return Bundle(url: bundleURL)
+        }
+        return Bundle(url: URL(fileURLWithPath: "/").appendingPathComponent(components[1...appIndex].joined(separator: "/")))
+    }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

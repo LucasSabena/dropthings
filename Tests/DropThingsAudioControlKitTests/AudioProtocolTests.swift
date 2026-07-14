@@ -27,4 +27,31 @@ final class AudioProtocolTests: XCTestCase {
         XCTAssertTrue(OwnedAudioResource.isOwned(uid: "app.dropthings.audio.\(session.uuidString.lowercased()).tap", sessionID: session))
         XCTAssertFalse(OwnedAudioResource.isOwned(uid: "com.example.aggregate", sessionID: session))
     }
+
+    func testObservedStateRoundTripPreservesNowPlayingMetadata() throws {
+        let media = MediaPlaybackState(
+            sourceBundleID: "com.spotify.client",
+            sourceDisplayName: "Spotify",
+            title: "A Song",
+            artist: "An Artist",
+            album: "An Album",
+            isPlaying: true
+        )
+        let observed = AudioControlObservedState(
+            generation: 3,
+            engineHealth: .healthy,
+            apps: [],
+            devices: [],
+            defaultOutputUID: nil,
+            mediaPlayback: media
+        )
+
+        let decoded = try AudioControlCodec.decode(
+            AudioControlObservedState.self,
+            from: AudioControlCodec.encode(observed)
+        )
+
+        XCTAssertEqual(decoded.mediaPlayback, media)
+        XCTAssertEqual(MediaTransportCommand.togglePlayPause.rawValue, 2)
+    }
 }

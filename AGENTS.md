@@ -44,7 +44,6 @@ If the answer is weak, improve the design before moving on.
 - Do not make marketing screens inside the app. The first screen is the usable control center.
 - Every module needs enabled, disabled, missing-permission, error, and unavailable states.
 - Prefer clear labels, native controls, and short explanations at permission boundaries.
-- Before designing or changing product UI, use Lazyweb first and record the result or workflow note in the relevant `docs/<product>/EXPERIENCE.md`.
 
 ## Implementation Rules
 

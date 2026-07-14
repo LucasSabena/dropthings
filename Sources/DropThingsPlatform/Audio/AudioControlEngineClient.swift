@@ -23,6 +23,7 @@ public protocol AudioControlEngineClient: AnyObject {
     func apply(_ desiredState: AudioControlDesiredState) async throws -> AudioControlObservedState
     func snapshot() async throws -> AudioControlObservedState
     func restoreNormalAudio() async throws
+    func sendMediaCommand(_ command: MediaTransportCommand) async throws -> AudioControlObservedState
 }
 
 @MainActor
@@ -82,6 +83,14 @@ public final class XPCAudioControlEngineClient: AudioControlEngineClient {
                 } else {
                     continuation.resume(returning: ())
                 }
+            }
+        }
+    }
+
+    public func sendMediaCommand(_ command: MediaTransportCommand) async throws -> AudioControlObservedState {
+        try await withService { service, continuation in
+            service.sendMediaCommand(command.rawValue) { reply, error in
+                Self.resumeObserved(continuation, data: reply, error: error)
             }
         }
     }

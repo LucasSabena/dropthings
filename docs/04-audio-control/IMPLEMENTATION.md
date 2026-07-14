@@ -20,6 +20,11 @@ The independent module menu-bar vertical slice is implemented end to end:
   semantic colors, shared spacing/type/size tokens, and Reduce Motion handling.
 - [x] Debug-only deterministic visual-QA launch path; synthetic state is absent
   from Release builds.
+- [x] Group multi-process app output under the owning application and retain a
+  recently active app row during short Core Audio output-state handoffs.
+- [x] Isolated MediaRemote compatibility bridge for active Now Playing metadata
+  and play/pause/previous/next transport controls. It is dynamically loaded and
+  degrades to no media card when unavailable.
 
 ## Phase 0 — disposable feasibility spike
 

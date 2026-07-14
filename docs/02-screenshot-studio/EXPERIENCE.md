@@ -1,25 +1,5 @@
 # Experience contract
 
-## Lazyweb workflow note — 2026-07-13
-
-Lazyweb was queried first for screenshot editors, annotation canvases, and
-desktop capture flows. Its accessible indexed corpus did not provide a directly
-relevant Shottr/CleanShot macOS editor flow. The design therefore uses native
-macOS interaction conventions and product/API research; no unsupported
-Lazyweb-derived visual claim or asset is used.
-
-Lazyweb entry point: <https://www.lazyweb.com/>
-
-Follow-up — 2026-07-13: the entry point was rechecked while implementing the
-baseline. It still supplied no applicable indexed screenshot-editor flow, so
-the module uses native controls, SF Symbols, and original layout only.
-
-Follow-up — 2026-07-13: Lazyweb was consulted before adding the Shelf capture
-archive. Its browser-accessible surface did not expose a macOS capture-history
-flow suitable for direct comparison. The feature therefore follows native
-macOS expectations: copied screenshots remain pasteable and saved screenshots
-are watched only in an explicitly user-selected folder.
-
 ## Capture interaction
 
 - Invoking capture preserves visible windows and popovers so DropThings itself
@@ -32,18 +12,16 @@ are watched only in an explicitly user-selected folder.
 
 ## Workflow refinement — 2026-07-14
 
-Lazyweb was unavailable in the active toolset, so this work follows the existing
-record above. Shortcut rows now describe complete recipes: shortcut plus output.
+Shortcut rows now describe complete recipes: shortcut plus output.
 Region has two independent defaults (quick copy and open editor), while window,
 display, and scrolling retain their own recipe. Scrolling copy explains that the
 user selects a fixed viewport before DropThings scrolls and stitches it.
 
 ## Editor rebuild workflow note — 2026-07-14
 
-Lazyweb was queried again before rebuilding the editor, but its indexed surface
-returned no usable screenshot-annotation flow. Flameshot's public feature list
-and shortcut documentation were used as the behavioral reference instead. The
-new editor is an original AppKit implementation: it uses a pixel-sized canvas,
+Flameshot's public feature list and shortcut documentation were used as the
+behavioral reference. The new editor is an original AppKit implementation: it
+uses a pixel-sized canvas,
 native scroll-view zoom, an explicit SF Symbol tool map, contextual color/stroke
 controls, predictable text commit/cancel, selection/move/resize, and quiet
 copy/save feedback.

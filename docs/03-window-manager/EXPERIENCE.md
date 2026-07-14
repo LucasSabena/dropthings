@@ -1,15 +1,5 @@
 # Experience contract
 
-## Lazyweb workflow note — 2026-07-13
-
-Lazyweb was queried first for desktop window-manager settings, snap footprints,
-and shortcut configuration. Its accessible indexed corpus did not expose a
-directly relevant Rectangle/macOS desktop workflow. UI decisions therefore use
-native macOS conventions plus observed Rectangle behavior; no Lazyweb asset or
-unsupported benchmark is used.
-
-Lazyweb entry point: <https://www.lazyweb.com/>
-
 ## Keyboard experience
 
 - Actions feel immediate and never bring DropThings settings to front.

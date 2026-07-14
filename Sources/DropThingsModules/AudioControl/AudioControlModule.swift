@@ -212,6 +212,20 @@ public final class AudioControlModule: DropThingsModule {
         update(identity) { $0.isSoloed.toggle() }
     }
 
+    public func sendMediaCommand(_ command: MediaTransportCommand) {
+        guard state.isStarted else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                self.observedState = try await self.engine.sendMediaCommand(command)
+                self.refreshSystemOutputState()
+                self.outputControlError = nil
+            } catch {
+                self.outputControlError = error.localizedDescription
+            }
+        }
+    }
+
     public func togglePin(for identity: AudioAppIdentity) {
         update(identity) { $0.isPinned.toggle() }
     }

@@ -183,21 +183,24 @@ private final class ModuleStatusItem: NSObject {
         guard let button = statusItem.button else { return }
         let image = NSImage(
             systemSymbolName: module.menuBarIconName,
-            accessibilityDescription: presentation.accessibilityLabel
+            accessibilityDescription: module.menuBarAccessibilityLabel
         )
         image?.isTemplate = true
         button.image = image
-        button.toolTip = presentation.accessibilityLabel
-        button.setAccessibilityLabel(presentation.accessibilityLabel)
+        button.toolTip = module.menuBarAccessibilityLabel
+        button.setAccessibilityLabel(module.menuBarAccessibilityLabel)
         button.target = self
         button.action = #selector(togglePopover(_:))
         statusItem.autosaveName = "app.dropthings.module.\(moduleID.rawValue)"
     }
 
     private func refreshStatusIcon() {
-        let image = NSImage(systemSymbolName: module.menuBarIconName, accessibilityDescription: module.name)
+        let label = module.menuBarAccessibilityLabel
+        let image = NSImage(systemSymbolName: module.menuBarIconName, accessibilityDescription: label)
         image?.isTemplate = true
         statusItem.button?.image = image
+        statusItem.button?.toolTip = label
+        statusItem.button?.setAccessibilityLabel(label)
     }
 
     private func configurePopover(

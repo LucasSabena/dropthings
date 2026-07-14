@@ -57,6 +57,17 @@
   hidden devices, meters, and advanced diagnostics.
 - Never use app display names or transient AudioObjectIDs as persistent keys.
 
+## Now Playing compatibility
+
+- Show the current system Now Playing session with app source, title, artist,
+  album, and playing/paused state when macOS makes it available.
+- Offer previous, play/pause, and next against that active session. A player may
+  reject commands it does not support; this is a local media-control failure,
+  never an audio-engine failure.
+- This owner-approved compatibility integration uses a private macOS framework
+  and is intentionally optional at runtime. If macOS removes or blocks it, hide
+  the card and preserve the rest of Audio Control.
+
 ## Explicit non-goals for first release
 
 - Recording audio to disk, microphone capture, streaming, analytics, or network
