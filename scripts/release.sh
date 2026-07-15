@@ -30,6 +30,8 @@ xcodebuild \
     -scheme DropThings \
     -configuration Release \
     -derivedDataPath "$BUILD_DIR" \
+    -destination 'generic/platform=macOS' \
+    ARCHS=arm64 \
     build
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")
@@ -48,22 +50,47 @@ mkdir -p "$DIST_DIR"
 # ad-hoc-signed embedded Sparkle.framework despite the Team-ID mismatch
 # that Hardened Runtime library validation would otherwise reject.
 #
-# Sparkle.framework must be re-signed in the same pass as the app so both
-# share a consistent signature. `--deep` walks nested code; we sign the
-# framework explicitly first to guarantee it is covered even if `--deep`
-# is ever removed.
 ENTITLEMENTS="$PROJECT_ROOT/App/DropThings.entitlements"
+thin_to_arm64() {
+    while IFS= read -r -d '' binary; do
+        local architectures
+        architectures="$(lipo -archs "$binary" 2>/dev/null || true)"
+        if [[ "$architectures" == *arm64* && "$architectures" == *x86_64* ]]; then
+            local thinned="${binary}.arm64"
+            lipo "$binary" -thin arm64 -output "$thinned"
+            chmod "$(stat -f '%Lp' "$binary")" "$thinned"
+            mv "$thinned" "$binary"
+        fi
+    done < <(find "$APP_PATH" -type f -perm -111 -print0)
+}
+
+sign_app() {
+    local identity="$1"
+    local ffmpeg_dir="$APP_PATH/Contents/XPCServices/MediaConverterEngine.xpc/Contents/SharedSupport/FFmpeg"
+    for executable in "$ffmpeg_dir/ffmpeg" "$ffmpeg_dir/ffprobe"; do
+        [[ ! -f "$executable" ]] || codesign --force --options runtime --sign "$identity" "$executable"
+    done
+    while IFS= read -r bundle; do
+        codesign --force --options runtime --deep --sign "$identity" "$bundle"
+    done < <(find "$APP_PATH/Contents/XPCServices" -type d -name '*.xpc' -print 2>/dev/null)
+    while IFS= read -r framework; do
+        codesign --force --options runtime --deep --sign "$identity" "$framework"
+    done < <(find "$APP_PATH/Contents/Frameworks" -type d -name '*.framework' -print 2>/dev/null)
+    codesign --force --options runtime --deep --entitlements "$ENTITLEMENTS" --sign "$identity" "$APP_PATH"
+}
+
+echo "==> Thinning embedded frameworks to Apple Silicon"
+thin_to_arm64
+
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
     echo "==> Signing app with $DEVELOPER_ID"
-    codesign --force --options runtime --deep --sign "$DEVELOPER_ID" "$APP_PATH"
+    sign_app "$DEVELOPER_ID"
 else
     echo "==> No DEVELOPER_ID set; ad-hoc signing (Gatekeeper will warn)"
-    codesign --force --options runtime --sign - \
-        "$APP_PATH/Contents/Frameworks/Sparkle.framework"
-    codesign --force --options runtime \
-        --entitlements "$ENTITLEMENTS" --sign - "$APP_PATH"
+    sign_app -
 fi
-codesign --verify --verbose "$APP_PATH"
+codesign --verify --deep --strict --verbose "$APP_PATH"
+[[ "$(lipo -archs "$APP_PATH/Contents/MacOS/DropThings")" == "arm64" ]]
 
 echo "==> Creating DMG"
 STAGING_DIR="$DIST_DIR/dmg-staging"

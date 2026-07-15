@@ -19,11 +19,14 @@ are enabled or when you click **Check for Updates**.
 | **Keep Awake** | Timed or indefinite awake sessions, with an optional display assertion. | — |
 | **Color Picker** | Fluid native sampler with visual copy feedback. Publishes real colors plus HEX/RGB/HSL/SwiftUI/CSS text. | — |
 | **Clipboard History** | Persistent local history for text, colors, images, videos, documents, and folders with native previews. | — |
+| **Smart Clipboard** | Local content-aware actions for the current clipboard: text, URL, JSON, color, files, and images through one shared pasteboard observer. | Accessibility only for optional paste-back |
 | **Command Palette** | Keyboard-first launcher for apps, files, module commands, calculator results, history, and optional web searches. | Accessibility only for optional Finder selection actions |
 | **Screenshot Studio** | Region, window, display, delayed, scrolling, and Shelf captures with native annotation tools. | Screen Recording |
 | **Markdown Viewer** | Native tabbed GitHub-flavored Markdown viewer with Finder integration and live reload. | Automation only for the optional Finder selection shortcut |
 | **Audio Control** | Independent menu-bar mixer with system output, master volume, per-app volume, mute, solo, and routing. | System Audio Recording when an app control is first changed |
 | **Network Priority** | One-click Ethernet-first/Wi-Fi-first service order with a live menu-bar icon. | Administrator authentication when macOS requires it |
+| **Local Transcription** | Offline queue for verified Tiny/Base/Small models and 16 kHz mono PCM WAV export to TXT/JSON. Inference runs in an isolated bundled helper. | — |
+| **Media Converter** | Local batch conversion, resizing, compression and optimization. Native image conversion (PNG/JPEG/HEIC/WebP/TIFF); audio (AAC/FLAC/Opus/WAV) and video (H.264) via a bundled, reproducibly built FFmpeg helper. | — |
 
 ### Complete module inventory
 
@@ -111,6 +114,7 @@ the permission it needs only when you enable that module.
 | Scroll Control | Accessibility | Read and rewrite scroll events |
 | Color Picker | — | Uses the native macOS color sampler |
 | Clipboard History | — | Reads the system pasteboard while enabled |
+| Smart Clipboard | Accessibility (optional) | Paste-back into the previous app only when the user enables it |
 | File Shelf | — | Uses drag and drop plus user-selected files |
 | Keep Awake | — | Uses macOS power assertions |
 | Command Palette | Accessibility (optional) | Reads the Finder selection only when that integration is enabled |
@@ -174,10 +178,13 @@ DropThings/
   App/                       # macOS app target (Info.plist, entitlements)
   Sources/
     DropThingsCore/          # registry, settings, permissions, diagnostics
+    DropThingsTranscriptionKit/ # Foundation-only transcription contracts and schemas
+    DropThingsWhisperEngine/ # Narrow whisper.cpp C API adapter used by the XPC helper
     DropThingsDesignSystem/  # tokens + shared components
     DropThingsPlatform/      # fragile macOS adapters (CGEventTap, AX, IOPower, ...)
     DropThingsModules/       # one folder per feature
   Tests/                     # swift test, runs via `swift test`
+  TranscriptionEngine/       # Isolated, bundled whisper.cpp XPC service
 ```
 
 The dependency graph is one-way: `Core` is the base, `DesignSystem` and
@@ -219,6 +226,12 @@ passes. New modules need to:
 - [Window Manager](docs/03-window-manager/README.md)
 - [Audio Control](docs/04-audio-control/README.md)
 - [Network Priority](docs/06-network-priority/README.md)
+- [Keyboard Lock](docs/07-keyboard-lock/README.md)
+- [Media Converter](docs/08-media-converter/README.md)
+- [Smart Clipboard](docs/09-smart-clipboard/README.md)
+- [Temporary Workbench](docs/10-temporary-workbench/README.md)
+- [Local Transcription](docs/11-local-transcription/README.md)
+- [Session Recorder](docs/12-session-recorder/README.md)
 
 ---
 

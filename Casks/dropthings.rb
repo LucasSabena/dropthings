@@ -1,22 +1,22 @@
 # DropThings — Homebrew Cask template
 #
 # Publish a GitHub release asset named:
-#   DropThings-0.6.4.dmg
+#   DropThings-0.7.0.dmg
 #
 # Then update the sha256 below with:
-#   shasum -a 256 .build/dist/DropThings-0.6.4.dmg
+#   shasum -a 256 .build/dist/DropThings-0.7.0.dmg
 #
 # Install command once this repo is used as a tap:
 #   brew tap LucasSabena/dropthings https://github.com/LucasSabena/dropthings
 #   brew install --cask LucasSabena/dropthings/dropthings
 
 cask "dropthings" do
-  version "0.6.4"
-  sha256 "7f2eae8078e09a119e319a93b3537bdca5e81aed0eb31695b9566037efbb2440"
+  version "0.7.0"
+  sha256 "a8d8fce294dbb160fce16f525b3d042089852d1280d1cec6f1f9440e1ab145c8"
 
   url "https://github.com/LucasSabena/dropthings/releases/download/v#{version}/DropThings-#{version}.dmg"
   name "DropThings"
-  desc "Native macOS utility hub"
+  desc "Native utility hub for small system tools"
   homepage "https://github.com/LucasSabena/dropthings"
 
   depends_on macos: :sonoma

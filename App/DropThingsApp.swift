@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 import Sparkle
 import DropThingsCore
 import DropThingsDesignSystem
+import DropThingsPlatform
 import DropThingsModules
 
 /// Owns the long-lived services and exposes them to the UI. Lives in the App
@@ -25,6 +26,14 @@ final class AppServices: ObservableObject {
     let launchAtLogin = LaunchAtLoginController()
     let updates: SparkleUpdaterController
     let importer = SettingsImporter(suiteName: "app.dropthings")
+    /// Single shared pasteboard observer for Clipboard History and Smart
+    /// Clipboard so they never run two pollers and never echo each other's
+    /// writes back as new changes.
+    let pasteboardHub: PasteboardHub
+    /// Core-owned registry for cross-module file actions. Smart Clipboard
+    /// consumes actions published by other modules through this instead of
+    /// importing them.
+    let fileActionRegistry: FileActionRegistry
     private var moduleMenuBarController: ModuleMenuBarController?
     var bundleInfo: BundleInfo { BundleInfo.current() }
 
@@ -46,6 +55,8 @@ final class AppServices: ObservableObject {
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
         )
+        self.pasteboardHub = PasteboardHub(backend: ClipboardMonitor())
+        self.fileActionRegistry = FileActionRegistry()
 
         // The product intentionally ships only the modules that have a
         // reliable end-to-end interaction. Keeping this composition explicit
@@ -54,12 +65,20 @@ final class AppServices: ObservableObject {
         registry.register(ScrollControlModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
-        registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions))
+        registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions, hub: pasteboardHub))
+        registry.register(SmartClipboardModule(
+            settings: settings,
+            permissions: permissions,
+            hub: pasteboardHub,
+            fileActionRegistry: fileActionRegistry
+        ))
         registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
         registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
         registry.register(AudioControlModule(settings: settings))
+        registry.register(LocalTranscriptionModule(settings: settings))
         registry.register(NetworkPriorityModule())
         registry.register(KeyboardLockModule(permissions: permissions))
+        registry.register(MediaConverterModule(settings: settings, fileActionRegistry: fileActionRegistry))
         let commandPalette = CommandPaletteModule(
             settings: settings,
             permissions: permissions,

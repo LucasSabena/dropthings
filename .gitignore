@@ -1,5 +1,7 @@
 .DS_Store
 .build/
+/.zcode/
+/build/
 /.swiftpm/
 Packages/
 *.xcuserdata
@@ -9,3 +11,6 @@ DerivedData/
 # Agent tooling remains local. Product specifications under `docs/` are tracked
 # so every implementation agent works from the same contracts and research.
 /.agents/
+
+# Bundled FFmpeg binary (built by scripts/build-ffmpeg.sh, not committed)
+App/Resources/FFmpeg/
