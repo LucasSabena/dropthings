@@ -1,5 +1,26 @@
 # Quality and verification
 
+## Phase 1 automated evidence — 2026-07-14
+
+- SwiftPM builds the new kit, Platform client, module UI and module tests.
+- Automated coverage includes WAV structure/format/duration, transcript timing and
+  schema validation, TXT/JSON encoding, output conflicts, curated manifest shape,
+  settings sanitation and module availability lifecycle.
+- The full 531-test `swift test` suite passed during the final 0.7.0 audit (one
+  opt-in real-model fixture is skipped unless its model/audio paths are set).
+- A real inference test passed against the upstream `samples/jfk.wav` fixture and
+  the checksum-verified multilingual Tiny model using Metal.
+- Unsigned (`CODE_SIGNING_ALLOWED=NO`) Debug and Apple Silicon Release app builds
+  succeeded with the XPC helper and `whisper.framework` embedded inside it. The
+  app, helper and framework all contain `arm64`; the helper links only
+  the embedded framework plus Apple system/Swift libraries.
+
+This is Phase 1 development evidence, not evidence that the later product phases
+are complete. Signed distribution verification, Base/Small Spanish/English
+measurements, cancellation/crash fault injection, long-media soak and accessibility
+screenshots remain release evidence to collect before claiming the full product
+definition of done.
+
 ## Safety invariants
 
 - Select multiple common audio/video files, choose model/language/outputs and run a visible cancellable local queue.
@@ -41,4 +62,4 @@
 - No user content appears in default logs.
 - Seven days of owner daily use for the core workflow.
 - Documentation and research ledger match the exact shipped implementation.
-- Module remains unregistered until the gate is complete.
+- Do not describe Phases 2–3 as shipped until this gate is complete for that scope.

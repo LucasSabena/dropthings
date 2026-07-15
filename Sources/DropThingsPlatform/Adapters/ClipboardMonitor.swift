@@ -1,10 +1,15 @@
 import AppKit
 import UniformTypeIdentifiers
+import DropThingsCore
 
 /// Reads the public pasteboard and emits new items. Lives in Platform because
 /// `NSPasteboard` is a system adapter; the module decides what to store.
+///
+/// Conforms to `PasteboardBackend` so the shared `PasteboardHub` can drive one
+/// observer for every interested module. The legacy `handler` property is kept
+/// for existing direct callers (File Shelf) until they migrate to the hub.
 @MainActor
-public final class ClipboardMonitor {
+public final class ClipboardMonitor: PasteboardBackend {
     public struct Item: Sendable, Equatable {
         public let text: String?
         public let url: URL?
@@ -29,14 +34,32 @@ public final class ClipboardMonitor {
             self.isConcealed = isConcealed
             self.sourceBundleID = sourceBundleID
         }
+
+        /// Bridge to the hub's Foundation-only snapshot. Loses `changeCount`,
+        /// which the hub fills in itself.
+        public func snapshot(changeCount: Int) -> PasteboardHub.Snapshot {
+            PasteboardHub.Snapshot(
+                changeCount: changeCount,
+                text: text,
+                url: url,
+                fileURLs: fileURLs,
+                imageData: imageData,
+                colorHex: colorHex,
+                isTransient: isTransient,
+                isConcealed: isConcealed,
+                sourceBundleID: sourceBundleID
+            )
+        }
     }
 
     public typealias Handler = @MainActor (Item) -> Void
 
+    /// Legacy handler for direct callers not yet on `PasteboardHub`.
     public var handler: Handler
     private var timer: Timer?
     private var lastChangeCount: Int
     private let pasteboard = NSPasteboard.general
+    private var hubHandler: (@MainActor @Sendable (PasteboardHub.Snapshot) -> Void)?
 
     public init(handler: @escaping Handler = { _ in }) {
         self.handler = handler
@@ -45,6 +68,15 @@ public final class ClipboardMonitor {
 
     public convenience init(_ handler: @escaping Handler) {
         self.init(handler: handler)
+    }
+
+    // MARK: - PasteboardBackend
+
+    public var isRunning: Bool { timer != nil }
+
+    public func start(interval: TimeInterval, handler: @escaping @MainActor @Sendable (PasteboardHub.Snapshot) -> Void) {
+        hubHandler = handler
+        start(interval: interval)
     }
 
     public func start(interval: TimeInterval = 0.5) {
@@ -60,6 +92,7 @@ public final class ClipboardMonitor {
     public func stop() {
         timer?.invalidate()
         timer = nil
+        hubHandler = nil
     }
 
     private func poll() {
@@ -68,9 +101,19 @@ public final class ClipboardMonitor {
         lastChangeCount = current
         guard let item = readCurrent() else { return }
         handler(item)
+        if let hubHandler {
+            hubHandler(item.snapshot(changeCount: current))
+        }
     }
 
     private func readCurrent() -> Item? {
+        Self.read(pasteboard)
+    }
+
+    /// Read a pasteboard once and return a typed item. Exposed so modules
+    /// that need a one-shot read (Smart Clipboard's panel refresh) can share
+    /// the exact same parsing logic as the poller instead of duplicating it.
+    public static func read(_ pasteboard: NSPasteboard) -> Item? {
         let types = pasteboard.types ?? []
         let isTransient = types.contains(.init(rawValue: "org.nspasteboard.TransientType"))
         let isConcealed = types.contains(.init(rawValue: "org.nspasteboard.ConcealedType"))

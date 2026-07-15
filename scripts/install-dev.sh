@@ -32,6 +32,8 @@ xcodebuild \
     -scheme DropThings \
     -configuration Release \
     -derivedDataPath "$BUILD_DIR" \
+    -destination 'generic/platform=macOS' \
+    ARCHS=arm64 \
     -quiet \
     build
 
@@ -46,6 +48,17 @@ if [[ ! -d "$APP_PATH" ]]; then
     exit 1
 fi
 
+echo "==> Thinning embedded frameworks to Apple Silicon"
+while IFS= read -r -d '' binary; do
+    ARCHITECTURES="$(lipo -archs "$binary" 2>/dev/null || true)"
+    if [[ "$ARCHITECTURES" == *arm64* && "$ARCHITECTURES" == *x86_64* ]]; then
+        THINNED="${binary}.arm64"
+        lipo "$binary" -thin arm64 -output "$THINNED"
+        chmod "$(stat -f '%Lp' "$binary")" "$THINNED"
+        mv "$THINNED" "$binary"
+    fi
+done < <(find "$APP_PATH" -type f -perm -111 -print0)
+
 if [[ -z "$SIGNING_IDENTITY" ]]; then
     AVAILABLE_IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
     SIGNING_IDENTITY="$(printf '%s\n' "$AVAILABLE_IDENTITIES" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)"
@@ -56,14 +69,20 @@ fi
 
 if [[ -n "$SIGNING_IDENTITY" ]]; then
     echo "==> Re-signing with stable identity: $SIGNING_IDENTITY"
-    FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
-    if [[ -d "$FRAMEWORK" ]]; then
-        codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$FRAMEWORK"
-    fi
-    codesign --force --options runtime \
+    FFMPEG_DIR="$APP_PATH/Contents/XPCServices/MediaConverterEngine.xpc/Contents/SharedSupport/FFmpeg"
+    for executable in "$FFMPEG_DIR/ffmpeg" "$FFMPEG_DIR/ffprobe"; do
+        [[ ! -f "$executable" ]] || codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$executable"
+    done
+    while IFS= read -r bundle; do
+        codesign --force --options runtime --deep --sign "$SIGNING_IDENTITY" "$bundle"
+    done < <(find "$APP_PATH/Contents/XPCServices" -type d -name '*.xpc' -print 2>/dev/null)
+    while IFS= read -r framework; do
+        codesign --force --options runtime --deep --sign "$SIGNING_IDENTITY" "$framework"
+    done < <(find "$APP_PATH/Contents/Frameworks" -type d -name '*.framework' -print 2>/dev/null)
+    codesign --force --options runtime --deep \
         --entitlements "$PROJECT_ROOT/App/DropThings.entitlements" \
         --sign "$SIGNING_IDENTITY" "$APP_PATH"
-    codesign --verify --strict --verbose "$APP_PATH"
+    codesign --verify --deep --strict --verbose "$APP_PATH"
 else
     echo "==> WARNING: no code-signing identity is installed"
     echo "    This build is ad-hoc. macOS ties Accessibility to this exact build,"

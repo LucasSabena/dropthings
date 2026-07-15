@@ -2,7 +2,7 @@
 
 ## Delivery phases
 
-1. Phase 0: spike native capabilities and universal FFmpeg packaging; decide exact configure flags, licenses, signing and source-release process.
+1. Phase 0: spike native capabilities and Apple Silicon FFmpeg packaging; decide exact configure flags, licenses, signing and source-release process.
 2. Phase 1: MediaKit models plus native image-only vertical slice, safe naming, resizing, metadata and re-probe.
 3. Phase 2: Simple/Advanced image UX, queue, cancellation, Finder/Command Palette and file actions.
 4. Phase 3: isolated FFmpeg helper plus audio and transcription-normalization operations.

@@ -10,6 +10,8 @@ when implementation begins.
 | NSPasteboard | `https://developer.apple.com/documentation/appkit/nspasteboard` | Apple SDK terms | Pasteboard backend |
 | Uniform Type Identifiers | `https://developer.apple.com/documentation/uniformtypeidentifiers` | Apple SDK terms | Typed representations |
 | Accessibility | `https://developer.apple.com/documentation/applicationservices/accessibility` | Apple SDK terms | Optional paste automation |
+| `ColorMath` (in-repo) | `Sources/DropThingsModules/ColorPicker/ColorFormats.swift` | GPL-3.0-only (this repo) | RGB↔HSL math reused within the same SwiftPM target |
+| `ClipboardMonitor` (in-repo) | `Sources/DropThingsPlatform/Adapters/ClipboardMonitor.swift` | GPL-3.0-only (this repo) | Single shared pasteboard observer backing `PasteboardHub` |
 
 ## Rules
 

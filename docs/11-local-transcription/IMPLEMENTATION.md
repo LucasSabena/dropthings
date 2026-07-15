@@ -1,5 +1,27 @@
 # Implementation plan
 
+## Current status — 2026-07-14
+
+The Phase 1 vertical slice is implemented, packaged and registered in `AppServices`:
+
+- Foundation-only `DropThingsTranscriptionKit` owns the versioned request,
+  transcript/model schemas, strict WAV inspection and atomic TXT/JSON export.
+- `TranscriptionEngine.xpc` owns the whisper context and inference. The host uses a
+  versioned `Data`-based XPC contract, validates job identity and maps typed failures
+  without exposing whisper.cpp to the app process.
+- `DropThingsWhisperEngine` links the official whisper.cpp v1.9.1
+  XCFramework and uses Metal where available. Core ML is not bundled or required.
+- The module owns a sequential queue, typed settings, a dedicated keyboard-usable
+  window and explicit model download/import/delete actions.
+- Tiny/Base/Small downloads use `.partial` staging, exact byte counts, SHA-256
+  verification, atomic replacement and active-job leases.
+- File transcription requests no microphone or screen permission. Network access
+  occurs only after an explicit model Download action.
+
+The packaged helper and a real Tiny-model fixture have been proven. Broad-media
+normalization, queue persistence, SRT/VTT/Markdown, VAD and review remain explicitly
+in Phases 2–3; the current UI labels its narrower PCM WAV and TXT/JSON scope.
+
 ## Delivery phases
 
 1. Phase 0: pin/build whisper.cpp, measure Tiny/Base/Small Spanish/English, prove helper packaging/cancel/crash and decide Metal/Core ML policy.

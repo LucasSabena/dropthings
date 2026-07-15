@@ -36,4 +36,7 @@ extension ModuleID {
     public static let audioControl = ModuleID("modules.audio-control")
     public static let networkPriority = ModuleID("modules.network-priority")
     public static let keyboardLock = ModuleID("modules.keyboard-lock")
+    public static let localTranscription = ModuleID("modules.local-transcription")
+    public static let smartClipboard = ModuleID("modules.smart-clipboard")
+    public static let mediaConverter = ModuleID("modules.media-converter")
 }

@@ -24,6 +24,9 @@ public final class ClipboardHistoryModule: DropThingsModule {
 
     private let settingsStore: SettingsStore
     private let monitor: ClipboardMonitor
+    private let hub: PasteboardHub?
+    private let origin = PasteboardHub.OriginToken("modules.clipboard-history")
+    private var hubSubscription: PasteboardHub.Subscription?
     private let persistence: any ClipboardHistoryPersisting
     private var hotkey: GlobalHotkey?
     private var hotkeyHealth = HotkeyRegistrationHealth()
@@ -34,13 +37,23 @@ public final class ClipboardHistoryModule: DropThingsModule {
     public convenience init(settings: SettingsStore, permissions: PermissionCenter) {
         self.init(
             settings: settings,
-            persistence: ClipboardHistoryStore.live()
+            persistence: ClipboardHistoryStore.live(),
+            hub: PasteboardHub(backend: ClipboardMonitor())
         )
+    }
+
+    /// Compose with an externally owned hub so Clipboard History and Smart
+    /// Clipboard share a single pasteboard observer. `permissions` is kept in
+    /// the signature to preserve source compatibility with the existing
+    /// convenience initializer.
+    public convenience init(settings: SettingsStore, permissions: PermissionCenter, hub: PasteboardHub) {
+        self.init(settings: settings, persistence: ClipboardHistoryStore.live(), hub: hub)
     }
 
     internal init(
         settings: SettingsStore,
-        persistence: any ClipboardHistoryPersisting
+        persistence: any ClipboardHistoryPersisting,
+        hub: PasteboardHub? = nil
     ) {
         self.settingsStore = settings
         self.persistence = persistence
@@ -49,6 +62,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
         self.items = loadedSettings.pinnedItems
         let monitor = ClipboardMonitor()
         self.monitor = monitor
+        self.hub = hub
         let panel = ClipboardHistoryPanelController(module: self)
         self.panel = panel
         monitor.handler = { [weak self] item in
@@ -61,7 +75,17 @@ public final class ClipboardHistoryModule: DropThingsModule {
     public func start() async throws {
         await restorePersistentHistory()
         registerHotkey()
-        monitor.start(interval: 0.25)
+        if let hub {
+            // Shared observer: subscribe and let the hub own the single poller.
+            hubSubscription?.cancel()
+            hubSubscription = hub.subscribe(origin: origin) { [weak self] snapshot in
+                guard let self else { return }
+                self.handleClipboardSnapshot(snapshot)
+            }
+            hub.start(interval: 0.25)
+        } else {
+            monitor.start(interval: 0.25)
+        }
         if case .degraded = state {} else { state = .running }
         logger.info("Clipboard History started")
     }
@@ -71,6 +95,8 @@ public final class ClipboardHistoryModule: DropThingsModule {
         persistenceTask = nil
         await persist(items)
         unregisterHotkey()
+        hubSubscription?.cancel()
+        hubSubscription = nil
         monitor.stop()
         panel?.hide()
         state = .off
@@ -252,6 +278,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
             // Always also expose the hex string so plain-text paste targets work.
             pb.setString(item.content, forType: .string)
         }
+        hub?.recordWrite(origin: origin)
         logger.notice("Copied history item \(item.id) to pasteboard")
     }
 
@@ -309,6 +336,23 @@ public final class ClipboardHistoryModule: DropThingsModule {
             add(candidate)
         }
         schedulePersistence()
+    }
+
+    /// Hub path: rebuild the monitor item from a Foundation-only snapshot and
+    /// reuse the existing handler so behavior is identical to the legacy
+    /// direct-observer path.
+    private func handleClipboardSnapshot(_ snapshot: PasteboardHub.Snapshot) {
+        let item = ClipboardMonitor.Item(
+            text: snapshot.text,
+            url: snapshot.url,
+            fileURLs: snapshot.fileURLs,
+            imageData: snapshot.imageData,
+            colorHex: snapshot.colorHex,
+            isTransient: snapshot.isTransient,
+            isConcealed: snapshot.isConcealed,
+            sourceBundleID: snapshot.sourceBundleID
+        )
+        handleClipboardItem(item)
     }
 
     private func buildItems(from monitorItem: ClipboardMonitor.Item) -> [ClipboardItem] {

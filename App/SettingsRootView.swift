@@ -6,10 +6,18 @@ import DropThingsDesignSystem
 private let productModuleOrder: [ModuleID] = [
     .fileShelf,
     .clipboardHistory,
+    .smartClipboard,
+    .mediaConverter,
     .colorPicker,
+    .screenshotStudio,
+    .markdownViewer,
     .scrollControl,
     .networkPriority,
-    .keepAwake
+    .localTranscription,
+    .audioControl,
+    .keepAwake,
+    .keyboardLock,
+    .commandPalette
 ]
 
 private func productOrder(_ id: ModuleID) -> Int {
@@ -109,7 +117,9 @@ struct SettingsRootView: View {
 
     private var orderedModules: [any DropThingsModule] {
         services.registry.modules.values.sorted {
-            productOrder($0.id) < productOrder($1.id)
+            let left = productOrder($0.id)
+            let right = productOrder($1.id)
+            return left == right ? $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending : left < right
         }
     }
 
@@ -234,7 +244,11 @@ private struct ControlCenterView: View {
     }
 
     private var orderedModules: [any DropThingsModule] {
-        services.registry.modules.values.sorted { productOrder($0.id) < productOrder($1.id) }
+        services.registry.modules.values.sorted {
+            let left = productOrder($0.id)
+            let right = productOrder($1.id)
+            return left == right ? $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending : left < right
+        }
     }
 
     private var activeCount: Int {
