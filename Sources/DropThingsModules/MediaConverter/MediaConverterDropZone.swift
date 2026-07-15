@@ -15,6 +15,8 @@ struct MediaConverterDropZone: View {
     @State private var selectedPreset: MediaPresetID
     @State private var selectedFormat: MediaFormatID
     @State private var selectedKind: MediaKind
+    @State private var quality = 75.0
+    @State private var imageMaxEdge = 1600
 
     init(module: MediaConverterModule, advanced: Bool) {
         self.module = module
@@ -31,6 +33,11 @@ struct MediaConverterDropZone: View {
                     ForEach(MediaPreset.shipped.filter { module.ffmpegAvailable || $0.applicableKinds == [.image] }) { preset in
                         Text(preset.title).tag(preset.id)
                     }
+                }
+                if let preset = MediaPreset.find(selectedPreset) {
+                    Label(preset.summary, systemImage: preset.iconName)
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
                 }
             } else {
                 Picker("Media type", selection: $selectedKind) {
@@ -49,7 +56,37 @@ struct MediaConverterDropZone: View {
                         Text(label(for: format)).tag(format)
                     }
                 }
+                if selectedKind == .image {
+                    Picker("Maximum size", selection: $imageMaxEdge) {
+                        Text("Original dimensions").tag(0)
+                        Text("1024 px longest edge").tag(1024)
+                        Text("1600 px longest edge").tag(1600)
+                        Text("2048 px longest edge").tag(2048)
+                    }
+                }
+                if isLossy(selectedFormat) {
+                    VStack(alignment: .leading, spacing: DTSpace.xs) {
+                        HStack {
+                            Text("Compression quality")
+                            Spacer()
+                            Text("\(Int(quality))%")
+                                .font(DTTypography.caption.monospacedDigit())
+                        }
+                        Slider(value: $quality, in: 30...95, step: 1)
+                        HStack {
+                            Text("Smaller file")
+                            Spacer()
+                            Text("Higher fidelity")
+                        }
+                        .font(DTTypography.caption)
+                        .foregroundStyle(DTColor.textSecondary)
+                    }
+                }
             }
+
+            Label("Original files are never replaced. Results are verified before they appear as Done.", systemImage: "checkmark.shield")
+                .font(DTTypography.caption)
+                .foregroundStyle(DTColor.textSecondary)
 
             ZStack {
                 RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous)
@@ -105,6 +142,10 @@ struct MediaConverterDropZone: View {
         }
     }
 
+    private func isLossy(_ format: MediaFormatID) -> Bool {
+        [.jpeg, .heic, .webp, .m4aAAC, .opus, .mp4H264, .movH264, .mkvH264].contains(format)
+    }
+
     private func selectFiles() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
@@ -112,11 +153,9 @@ struct MediaConverterDropZone: View {
         panel.canChooseFiles = true
         // Allow images always; audio/video only when the FFmpeg backend is
         // packaged, so the picker never offers conversions that would fail.
-        var types: [UTType] = [.png, .jpeg, .heic, .tiff, .image]
-        if module.ffmpegAvailable {
-            types.append(contentsOf: [.audio, .mp3, .mpeg4Audio, .movie, .video, .quickTimeMovie])
-        }
-        panel.allowedContentTypes = types
+        panel.allowedContentTypes = module.ffmpegAvailable
+            ? [.item]
+            : [.png, .jpeg, .heic, .tiff, .image]
         if panel.runModal() == .OK {
             handle(urls: panel.urls)
         }
@@ -126,22 +165,37 @@ struct MediaConverterDropZone: View {
         guard !urls.isEmpty else { return }
         let outputDir = module.settings.outputDirectory ?? urls.first!.deletingLastPathComponent()
         if advanced {
-            module.enqueueConversion(sources: urls) { source in
+            let valid = urls.filter { MediaKindClassifier.kind(of: $0) == selectedKind }
+            let rejected = urls.filter { !valid.contains($0) }
+            if !rejected.isEmpty {
+                module.reject(
+                    sources: rejected,
+                    reason: "Choose the \(MediaKindClassifier.label(for: MediaKindClassifier.kind(of: rejected[0]))) media type or use Simple mode."
+                )
+            }
+            module.enqueueConversion(sources: valid) { source in
                 MediaConversionRequest(
                     source: source,
                     outputDirectory: outputDir,
                     outputFormat: selectedFormat,
-                    resize: .none,
+                    resize: selectedKind == .image && imageMaxEdge > 0 ? .maxEdge(maxEdge: imageMaxEdge) : .none,
                     noUpscale: module.settings.noUpscaleByDefault,
-                    quality: 82,
+                    quality: Int(quality),
                     metadata: module.settings.metadata,
                     conflict: module.settings.conflict
                 )
             }
         } else {
-            // Simple mode: classify each source by kind and resolve the preset
-            // against that kind so audio/video sources pick the right output.
-            module.enqueueConversion(sources: urls) { source in
+            guard let preset = MediaPreset.find(selectedPreset) else { return }
+            let valid = urls.filter { preset.applicableKinds.contains(MediaKindClassifier.kind(of: $0)) }
+            let rejected = urls.filter { !valid.contains($0) }
+            if !rejected.isEmpty {
+                module.reject(
+                    sources: rejected,
+                    reason: "“\(preset.title)” does not accept \(MediaKindClassifier.label(for: MediaKindClassifier.kind(of: rejected[0]))) files."
+                )
+            }
+            module.enqueueConversion(sources: valid) { source in
                 let kind = MediaKindClassifier.kind(of: source)
                 if let request = try? MediaPlanResolver.resolve(
                     presetID: selectedPreset,
@@ -153,6 +207,8 @@ struct MediaConverterDropZone: View {
                 ) {
                     return request
                 }
+                // A corrupted preset manifest is still handled safely by the
+                // typed pipeline; never silently change a valid selection.
                 let fallback = defaultFormat(for: kind)
                 return MediaConversionRequest(
                     source: source, outputDirectory: outputDir,

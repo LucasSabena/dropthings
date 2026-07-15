@@ -24,7 +24,9 @@ public final class SmartClipboardModule: DropThingsModule {
     @Published public private(set) var settings: SmartClipboardSettings
     @Published public private(set) var lastResult: String?
     @Published public private(set) var lastError: String?
+    @Published public private(set) var lastNotice: String?
     @Published public private(set) var pinnedActionIDs: [String] = []
+    @Published private var liveSnapshot: PasteboardHub.Snapshot?
 
     private let settingsStore: SettingsStore
     private let permissions: PermissionCenter
@@ -99,13 +101,14 @@ public final class SmartClipboardModule: DropThingsModule {
     public func start() async throws {
         registerHotkey()
         hubSubscription?.cancel()
-        hubSubscription = hub.subscribe(origin: origin) { [weak self] _ in
-            // The panel polls the hub on demand; we only refresh the live
-            // snapshot when the panel is open. This keeps a background module
-            // cheap and avoids touching the pasteboard on every change.
-            Task { @MainActor [weak self] in self?.panel?.refreshIfOpen() }
+        hubSubscription = hub.subscribe(origin: origin) { [weak self] snapshot in
+            // Publish the actual clipboard value through the module. The panel
+            // observes the module, not PasteboardHub, so only updating the hub
+            // left an already-open panel permanently stale.
+            self?.liveSnapshot = snapshot
         }
         hub.start(interval: 0.25)
+        refreshSnapshot()
         if case .degraded = state {} else { state = .running }
         logger.info("Smart Clipboard started")
     }
@@ -116,7 +119,10 @@ public final class SmartClipboardModule: DropThingsModule {
         hubSubscription = nil
         cancelUndoExpiry()
         preCopySnapshot = nil
+        liveSnapshot = nil
         lastResult = nil
+        lastError = nil
+        lastNotice = nil
         panel?.hide()
         state = .off
         logger.info("Smart Clipboard stopped")
@@ -218,7 +224,7 @@ public final class SmartClipboardModule: DropThingsModule {
     /// The current pasteboard snapshot, classified. Used by the panel to
     /// render the live preview and the action list.
     public func currentSnapshot() -> SmartClipboardSnapshot? {
-        guard let snapshot = hub.latestSnapshot else { return nil }
+        guard let snapshot = liveSnapshot ?? hub.latestSnapshot else { return nil }
         return makeSnapshot(from: snapshot)
     }
 
@@ -229,7 +235,10 @@ public final class SmartClipboardModule: DropThingsModule {
         // Reading NSPasteboard directly here is intentional: the hub polls at
         // a bounded interval, but the panel's explicit refresh should reflect
         // the very latest state. The next hub poll will catch up.
-        guard let item = SmartClipboardReader.read(pasteboard: pasteboard) else { return }
+        guard let item = SmartClipboardReader.read(pasteboard: pasteboard) else {
+            liveSnapshot = nil
+            return
+        }
         let snapshot = PasteboardHub.Snapshot(
             changeCount: pasteboard.changeCount,
             text: item.text,
@@ -242,6 +251,7 @@ public final class SmartClipboardModule: DropThingsModule {
             sourceBundleID: item.sourceBundleID
         )
         hub.overrideLatest(snapshot)
+        liveSnapshot = snapshot
     }
 
     // MARK: - Action application
@@ -339,6 +349,14 @@ public final class SmartClipboardModule: DropThingsModule {
             return ActionOutcome(preview: "Choose a destination to save.", copyableText: nil, notice: nil)
         case .filesAction(let ref):
             return ActionOutcome(preview: ref.title, copyableText: nil, notice: nil)
+        case .imageInfo:
+            guard let data = snapshot.imageData,
+                  let bitmap = NSBitmapImageRep(data: data) else {
+                return ActionOutcome(preview: "Could not inspect this image", copyableText: nil, notice: nil)
+            }
+            let size = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+            let text = "\(bitmap.pixelsWide) × \(bitmap.pixelsHigh) px · \(size)"
+            return ActionOutcome(preview: text, copyableText: text, notice: nil)
         }
     }
 
@@ -372,6 +390,8 @@ public final class SmartClipboardModule: DropThingsModule {
         pb.setString(text, forType: .string)
         hub.recordWrite(origin: origin)
         lastResult = text
+        lastError = nil
+        lastNotice = "Copied result"
         scheduleUndoExpiry()
         logger.notice("Copied Smart Clipboard result (\(text.count) characters)")
     }
@@ -390,6 +410,8 @@ public final class SmartClipboardModule: DropThingsModule {
         pb.setString(value, forType: .string)
         hub.recordWrite(origin: origin)
         lastResult = value
+        lastError = nil
+        lastNotice = "Copied color"
         scheduleUndoExpiry()
         logger.notice("Copied color \(value)")
     }
@@ -484,14 +506,21 @@ public final class SmartClipboardModule: DropThingsModule {
 
     /// Save the snapshot's image data to a user-chosen file.
     public func saveImageRepresentation(for snapshot: SmartClipboardSnapshot) {
-        guard let data = snapshot.imageData else { return }
+        guard let data = snapshot.imageData,
+              let bitmap = NSBitmapImageRep(data: data),
+              let png = bitmap.representation(using: .png, properties: [:]) else {
+            lastError = "Could not decode the clipboard image."
+            return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "clipboard-image.png"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try data.write(to: url)
+            try png.write(to: url, options: .atomic)
+            lastError = nil
+            lastNotice = "Saved \(url.lastPathComponent)"
             logger.notice("Saved image representation to \(url.lastPathComponent)")
         } catch {
             lastError = "Could not save image: \(error.localizedDescription)"

@@ -33,7 +33,7 @@ struct LocalTranscriptionWorkspaceView: View {
             }
             Spacer()
             Button { module.chooseAudioFiles() } label: {
-                Label("Add WAV Files…", systemImage: "plus")
+                Label("Add Media…", systemImage: "plus")
             }
             Button("Clear Finished") { module.clearFinished() }
                 .disabled(!module.hasFinishedItems)
@@ -45,9 +45,9 @@ struct LocalTranscriptionWorkspaceView: View {
     private var queueContent: some View {
         if module.queue.isEmpty {
             ContentUnavailableView {
-                Label("Drop WAV files here", systemImage: "waveform")
+                Label("Drop audio or video here", systemImage: "waveform")
             } description: {
-                Text("Or choose one or more 16 kHz mono PCM WAV files.")
+                Text("Opus, Ogg, MP3, M4A, WAV, FLAC, MKV, MP4, MOV, WebM and other decodable media.")
             } actions: {
                 Button("Choose Files…") { module.chooseAudioFiles() }
             }
@@ -90,7 +90,7 @@ struct LocalTranscriptionWorkspaceView: View {
                 let url: URL?
                 if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
                 else { url = item as? URL }
-                guard let url, url.pathExtension.lowercased() == "wav" else { return }
+                guard let url else { return }
                 Task { @MainActor in module.addFiles([url]) }
             }
         }
@@ -161,6 +161,7 @@ private extension TranscriptionPhase {
     var displayName: String {
         switch self {
         case .inspect: "Inspecting audio"
+        case .normalize: "Extracting and normalizing audio"
         case .modelLoad: "Loading model"
         case .transcribe: "Transcribing"
         case .finalize: "Finalizing outputs"

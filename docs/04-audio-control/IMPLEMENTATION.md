@@ -1,5 +1,25 @@
 # Implementation plan
 
+## Reliability correction — 2026-07-15
+
+- Device discovery now requires at least one output channel, excludes private
+  DropThings aggregate paths and deduplicates by stable UID. Input-only devices
+  such as the Mac microphone cannot appear or be selected as system output.
+- The system-output adapter repeats the output-channel validation before
+  changing Core Audio's global default.
+- Process discovery keeps only identities that resolve to an owning `.app` or
+  installed application, preventing daemon/helper identifiers from becoming
+  misleading app rows.
+- MediaRemote is resolved with `dlopen`/`dlsym`. This supports macOS versions
+  where the framework executable exists only in the dyld shared cache and its
+  filesystem symlink cannot be loaded through `CFBundle`.
+- The menu-bar surface is now a compact mixer: every real output is a visible
+  row with system selection, mute and independent hardware volume; app rows
+  expose mute, volume, level, route and advanced actions without Settings.
+- Host state is read for every available output, not only the current default.
+  The rendered two-output/one-app state was captured and compared directly
+  against the supplied reference on 2026-07-15.
+
 ## Current implementation status — 2026-07-13
 
 The Phase 1 code slice is implemented and buildable, but the hardware gates are
@@ -13,8 +33,8 @@ The independent module menu-bar vertical slice is implemented end to end:
 - [x] Generic optional module presentation contract.
 - [x] Persisted per-module `Show in menu bar` preference and settings control.
 - [x] App-shell `NSStatusItem`/`NSPopover` ownership with deterministic teardown.
-- [x] Audio popover with output selection, master volume/mute, app mixer,
-  per-app route menu, empty/error/loading states, settings, and quit.
+- [x] Audio popover with direct per-output selection/volume/mute, app mixer,
+  per-app route menu, Now Playing, empty/error/loading states, settings and quit.
 - [x] Core Audio adapter for default output and hardware volume/mute.
 - [x] VoiceOver labels/values, keyboard-operable native controls, template icon,
   semantic colors, shared spacing/type/size tokens, and Reduce Motion handling.

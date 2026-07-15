@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 import DropThingsCore
 import DropThingsDesignSystem
 import DropThingsPlatform
@@ -10,7 +11,7 @@ import DropThingsTranscriptionKit
 public final class LocalTranscriptionModule: DropThingsModule {
     public let id = ModuleID.localTranscription
     public let name = "Local Transcription"
-    public let summary = "Turn local PCM WAV audio into timestamped text offline."
+    public let summary = "Transcribe audio and video locally into timestamped text."
     public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
@@ -19,10 +20,12 @@ public final class LocalTranscriptionModule: DropThingsModule {
     @Published public private(set) var installedModels: Set<TranscriptionModelID> = []
     @Published public private(set) var modelOperation: TranscriptionModelID?
     @Published public private(set) var notice: String?
+    @Published public private(set) var broadMediaAvailable = false
 
     private let settingsStore: SettingsStore
     private let client: any LocalTranscriptionClient
     private let modelManager: TranscriptionModelManager
+    private let mediaNormalizer: TranscriptionMediaNormalizer
     private lazy var windowController = LocalTranscriptionWindowController(module: self)
     private var queueTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
@@ -43,12 +46,14 @@ public final class LocalTranscriptionModule: DropThingsModule {
     public init(
         settings: SettingsStore,
         client: (any LocalTranscriptionClient)? = nil,
-        modelManager: TranscriptionModelManager? = nil
+        modelManager: TranscriptionModelManager? = nil,
+        mediaNormalizer: TranscriptionMediaNormalizer? = nil
     ) {
         settingsStore = settings
         self.settings = settings.loadLocalTranscriptionSettings()
         self.client = client ?? XPCTranscriptionClient()
         self.modelManager = modelManager ?? TranscriptionModelManager()
+        self.mediaNormalizer = mediaNormalizer ?? TranscriptionMediaNormalizer()
     }
 
     public var primaryAction: ModulePrimaryAction? {
@@ -61,7 +66,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
         [CommandDescriptor(
             id: "local-transcription.open",
             title: "Open Local Transcription",
-            subtitle: "Transcribe a PCM WAV file offline",
+            subtitle: "Transcribe audio or video offline",
             iconName: iconName
         ) { [weak self] in
             Task { @MainActor in self?.openWorkspace() }
@@ -71,6 +76,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
     public func start() async throws {
         guard state != .running else { return }
         installedModels = await modelManager.installedModelIDs()
+        broadMediaAvailable = await mediaNormalizer.isAvailable()
         switch await client.availability() {
         case .available:
             state = .running
@@ -82,7 +88,10 @@ public final class LocalTranscriptionModule: DropThingsModule {
     public func stop() async {
         queueTask?.cancel()
         modelTask?.cancel()
-        if let activeJobID { await client.cancel(jobID: activeJobID) }
+        if let activeJobID {
+            await client.cancel(jobID: activeJobID)
+            await mediaNormalizer.cancel(jobID: activeJobID)
+        }
         queueTask = nil
         modelTask = nil
         activeJobID = nil
@@ -99,8 +108,11 @@ public final class LocalTranscriptionModule: DropThingsModule {
 
     public func chooseAudioFiles() {
         let panel = NSOpenPanel()
-        panel.title = "Choose 16 kHz Mono PCM WAV Audio"
-        panel.allowedContentTypes = [.wav]
+        panel.title = "Choose Audio or Video"
+        // Do not gate by extension: FFmpeg supports many containers/codecs
+        // that Launch Services reports as generic data. Intake stays broad and
+        // the isolated decoder returns a precise error for non-media files.
+        panel.allowedContentTypes = [.item]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
@@ -141,7 +153,11 @@ public final class LocalTranscriptionModule: DropThingsModule {
 
     public func cancelActiveJob() {
         guard let activeJobID else { return }
-        Task { await client.cancel(jobID: activeJobID) }
+        queueTask?.cancel()
+        Task {
+            await client.cancel(jobID: activeJobID)
+            await mediaNormalizer.cancel(jobID: activeJobID)
+        }
     }
 
     public func updateSettings(_ mutate: (inout LocalTranscriptionSettings) -> Void) {
@@ -209,9 +225,8 @@ public final class LocalTranscriptionModule: DropThingsModule {
             activeJobID = nil
             queueTask = nil
         }
-        for index in queue.indices where queue[index].status == .waiting {
+        while let item = queue.first(where: { $0.status == .waiting }) {
             if Task.isCancelled { break }
-            let item = queue[index]
             activeJobID = item.id
             do {
                 let snapshot = settings
@@ -235,11 +250,25 @@ public final class LocalTranscriptionModule: DropThingsModule {
         settings snapshot: LocalTranscriptionSettings
     ) async throws -> [URL] {
         let modelID = snapshot.selectedModel
+        let transcriptionInput: URL
+        do {
+            _ = try WAVInspector.inspect(url: item.sourceURL)
+            transcriptionInput = item.sourceURL
+        } catch {
+            guard broadMediaAvailable else {
+                throw TranscriptionClientError.invalidRequest(
+                    "This file needs the bundled media decoder. Rebuild or reinstall DropThings with FFmpeg included."
+                )
+            }
+            setStatus(.active(.init(phase: .normalize)), for: item.id)
+            transcriptionInput = try await mediaNormalizer.normalize(source: item.sourceURL, jobID: item.id)
+        }
+        defer { mediaNormalizer.removeTemporaryFiles(for: item.id) }
         let modelURL = try await modelManager.acquire(modelID)
         do {
             let request = TranscriptionRequest(
                 jobID: item.id,
-                inputURL: item.sourceURL,
+                inputURL: transcriptionInput,
                 modelURL: modelURL,
                 language: snapshot.language,
                 mode: snapshot.mode,
@@ -248,6 +277,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
             let document = try await client.transcribe(request) { [weak self] progress in
                 Task { @MainActor in self?.setStatus(.active(progress), for: item.id) }
             }
+            try Task.checkCancellation()
             await modelManager.release(modelID)
             let outputDirectory = item.sourceURL.deletingLastPathComponent()
             let baseName = item.sourceURL.deletingPathExtension().lastPathComponent + " Transcript"
@@ -267,4 +297,5 @@ public final class LocalTranscriptionModule: DropThingsModule {
         guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
         queue[index].status = status
     }
+
 }

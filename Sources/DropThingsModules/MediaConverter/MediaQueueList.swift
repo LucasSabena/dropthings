@@ -16,7 +16,7 @@ struct MediaQueueList: View {
                     .font(DTTypography.sectionTitle)
                     .foregroundStyle(DTColor.textPrimary)
                 Spacer()
-                Button("Clear") { module.queue.clearCompleted() }
+                Button("Clear Finished") { module.queue.clearCompleted() }
                     .font(DTTypography.caption)
             }
 
@@ -52,9 +52,14 @@ private struct MediaQueueRow: View {
                     .foregroundStyle(DTColor.textSecondary)
 
                 if let progress = item.phase.progress {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                        .tint(DTColor.accent)
+                    if progress > 0 {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                            .tint(DTColor.accent)
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
             }
 
@@ -86,6 +91,13 @@ private struct MediaQueueRow: View {
                     Image(systemName: "doc")
                 }
                 .accessibilityLabel("Open")
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(destination.path, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .accessibilityLabel("Copy output path")
             }
             .buttonStyle(.borderless)
         case .pending, .probing, .validating, .encoding, .reprobing, .finalizing:
@@ -120,11 +132,14 @@ private struct MediaQueueRow: View {
 
     private var phaseText: String {
         switch item.phase {
-        case .completed(_, let sizeDelta):
-            return "Done — \(formatDelta(sizeDelta))"
+        case .pending:
+            return "Ready · \(formattedFileSize(item.source))"
+        case .completed(let destination, let sizeDelta):
+            return completedSummary(destination: destination, delta: sizeDelta)
         case .failed(let reason): return reason
         case .skipped(let reason): return "Skipped: \(reason)"
-        case .encoding(let progress): return "Converting… \(Int(progress * 100))%"
+        case .encoding(let progress):
+            return progress > 0 ? "Converting… \(Int(progress * 100))%" : "Converting…"
         default: return item.phase.shortLabel
         }
     }
@@ -135,5 +150,28 @@ private struct MediaQueueRow: View {
         if delta < 0 { return "\(formatter.string(fromByteCount: abs(delta))) smaller" }
         if delta > 0 { return "\(formatter.string(fromByteCount: delta)) larger" }
         return "same size"
+    }
+
+    private func completedSummary(destination: URL, delta: Int64) -> String {
+        let output = fileSize(destination)
+        let source = max(0, output - delta)
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        let before = formatter.string(fromByteCount: source)
+        let after = formatter.string(fromByteCount: output)
+        guard source > 0 else { return "Done · \(after)" }
+        let percent = Int((Double(abs(delta)) / Double(source) * 100).rounded())
+        if delta < 0 { return "Done · \(before) → \(after) · \(percent)% smaller" }
+        if delta > 0 { return "Done · \(before) → \(after) · \(percent)% larger" }
+        return "Done · \(before) → \(after) · same size"
+    }
+
+    private func fileSize(_ url: URL) -> Int64 {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    private func formattedFileSize(_ url: URL) -> String {
+        ByteCountFormatter.string(fromByteCount: fileSize(url), countStyle: .file)
     }
 }

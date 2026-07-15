@@ -22,6 +22,8 @@ public final class AudioControlModule: DropThingsModule {
     @Published public private(set) var observedState: AudioControlObservedState?
     @Published public private(set) var isRestoringNormalAudio = false
     @Published public private(set) var systemOutputState: SystemAudioOutputState?
+    @Published public private(set) var outputStates: [String: SystemAudioOutputState] = [:]
+    @Published public private(set) var activeOutputUID: String?
     @Published public private(set) var outputControlError: String?
 
     private let settingsStore: SettingsStore
@@ -81,7 +83,8 @@ public final class AudioControlModule: DropThingsModule {
         do {
             observedState = try await engine.snapshot()
             generation = max(generation, observedState?.generation ?? 0)
-            refreshSystemOutputState()
+            activeOutputUID = observedState?.defaultOutputUID
+            refreshOutputStates()
             state = healthState(from: observedState?.engineHealth)
             startRefreshing()
         } catch {
@@ -104,6 +107,8 @@ public final class AudioControlModule: DropThingsModule {
         engine.invalidate()
         observedState = nil
         systemOutputState = nil
+        outputStates = [:]
+        activeOutputUID = nil
         state = .off
     }
 
@@ -132,13 +137,15 @@ public final class AudioControlModule: DropThingsModule {
     }
 
     public var defaultOutput: AudioDeviceIdentity? {
-        guard let uid = observedState?.defaultOutputUID else { return nil }
+        guard let uid = activeOutputUID ?? observedState?.defaultOutputUID else { return nil }
         return observedState?.devices.first { $0.uid == uid }
     }
 
     public var availableOutputs: [AudioDeviceIdentity] {
-        (observedState?.devices ?? [])
-            .filter(\.isAvailable)
+        let available = (observedState?.devices ?? []).filter(\.isAvailable)
+        return Dictionary(grouping: available, by: \AudioDeviceIdentity.uid)
+            .values
+            .compactMap(\.first)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -157,9 +164,11 @@ public final class AudioControlModule: DropThingsModule {
     }
 
     public func setDefaultOutput(deviceUID: String) {
-        guard deviceUID != observedState?.defaultOutputUID else { return }
+        guard deviceUID != activeOutputUID else { return }
         do {
             try systemOutput.setDefaultOutput(deviceUID: deviceUID)
+            activeOutputUID = deviceUID
+            systemOutputState = outputStates[deviceUID]
             outputControlError = nil
             Task { @MainActor [weak self] in await self?.reloadObservedState() }
         } catch {
@@ -168,36 +177,53 @@ public final class AudioControlModule: DropThingsModule {
     }
 
     public func setSystemOutputVolume(_ volume: Double) {
-        guard let uid = observedState?.defaultOutputUID else { return }
-        let previous = systemOutputState
-        systemOutputState = SystemAudioOutputState(
-            deviceUID: uid,
+        guard let uid = activeOutputUID else { return }
+        setOutputVolume(volume, deviceUID: uid)
+    }
+
+    public func outputState(for deviceUID: String) -> SystemAudioOutputState? {
+        outputStates[deviceUID]
+    }
+
+    public func setOutputVolume(_ volume: Double, deviceUID: String) {
+        guard let previous = outputStates[deviceUID] else { return }
+        let updated = SystemAudioOutputState(
+            deviceUID: deviceUID,
             volume: max(0, min(1, volume)),
-            isMuted: previous?.isMuted ?? false,
-            canSetVolume: previous?.canSetVolume ?? false,
-            canSetMute: previous?.canSetMute ?? false
+            isMuted: previous.isMuted,
+            canSetVolume: previous.canSetVolume,
+            canSetMute: previous.canSetMute
         )
+        outputStates[deviceUID] = updated
+        if deviceUID == activeOutputUID { systemOutputState = updated }
         do {
-            try systemOutput.setVolume(volume, forDeviceUID: uid)
+            try systemOutput.setVolume(volume, forDeviceUID: deviceUID)
             outputControlError = nil
         } catch {
-            systemOutputState = previous
+            outputStates[deviceUID] = previous
+            if deviceUID == activeOutputUID { systemOutputState = previous }
             outputControlError = error.localizedDescription
         }
     }
 
     public func toggleSystemOutputMute() {
-        guard let uid = observedState?.defaultOutputUID,
-              let current = systemOutputState else { return }
+        guard let uid = activeOutputUID else { return }
+        toggleOutputMute(deviceUID: uid)
+    }
+
+    public func toggleOutputMute(deviceUID: String) {
+        guard let current = outputStates[deviceUID] else { return }
         do {
-            try systemOutput.setMuted(!current.isMuted, forDeviceUID: uid)
-            systemOutputState = SystemAudioOutputState(
-                deviceUID: uid,
+            try systemOutput.setMuted(!current.isMuted, forDeviceUID: deviceUID)
+            let updated = SystemAudioOutputState(
+                deviceUID: deviceUID,
                 volume: current.volume,
                 isMuted: !current.isMuted,
                 canSetVolume: current.canSetVolume,
                 canSetMute: current.canSetMute
             )
+            outputStates[deviceUID] = updated
+            if deviceUID == activeOutputUID { systemOutputState = updated }
             outputControlError = nil
         } catch {
             outputControlError = error.localizedDescription
@@ -218,7 +244,8 @@ public final class AudioControlModule: DropThingsModule {
             guard let self else { return }
             do {
                 self.observedState = try await self.engine.sendMediaCommand(command)
-                self.refreshSystemOutputState()
+                self.activeOutputUID = self.observedState?.defaultOutputUID
+                self.refreshOutputStates()
                 self.outputControlError = nil
             } catch {
                 self.outputControlError = error.localizedDescription
@@ -271,7 +298,8 @@ public final class AudioControlModule: DropThingsModule {
             do {
                 try await self.engine.restoreNormalAudio()
                 self.observedState = try await self.engine.snapshot()
-                self.refreshSystemOutputState()
+                self.activeOutputUID = self.observedState?.defaultOutputUID
+                self.refreshOutputStates()
                 self.state = .running
             } catch {
                 self.state = .failed(
@@ -292,34 +320,75 @@ public final class AudioControlModule: DropThingsModule {
     }
 
 #if DEBUG
-    /// Stable empty state used only by the app shell's visual-QA launch flag.
+    /// Stable populated state used only by the app shell's visual-QA launch flag.
     /// Release builds never contain synthetic audio observations.
     public func prepareEmptyVisualTestingState() {
         refreshTask?.cancel()
         refreshTask = nil
-        let device = AudioDeviceIdentity(
+        let builtIn = AudioDeviceIdentity(
             uid: "visual-testing-built-in-output",
             name: "MacBook Air Speakers",
             transport: "Built-in",
             sampleRate: 48_000,
             isAvailable: true,
             hasVolumeControl: true,
+            isDefault: false
+        )
+        let headphones = AudioDeviceIdentity(
+            uid: "visual-testing-headphones",
+            name: "EDIFIER ES850NB",
+            transport: "Bluetooth",
+            sampleRate: 48_000,
+            isAvailable: true,
+            hasVolumeControl: true,
             isDefault: true
+        )
+        let whatsapp = AudioAppIdentity(
+            bundleID: "net.whatsapp.WhatsApp",
+            processFallback: nil,
+            displayName: "WhatsApp"
         )
         observedState = AudioControlObservedState(
             generation: generation,
             engineHealth: .bypassed,
-            apps: [],
-            devices: [device],
-            defaultOutputUID: device.uid
+            apps: [
+                AudioAppObservedState(
+                    identity: whatsapp,
+                    isProducingAudio: true,
+                    health: .healthy,
+                    peakLevel: 0.72,
+                    appliedGain: 1,
+                    activeDeviceUID: headphones.uid
+                )
+            ],
+            devices: [builtIn, headphones],
+            defaultOutputUID: headphones.uid,
+            mediaPlayback: MediaPlaybackState(
+                sourceBundleID: whatsapp.bundleID,
+                sourceDisplayName: "WhatsApp",
+                title: "Voice message",
+                artist: "Now playing",
+                isPlaying: true
+            )
         )
         systemOutputState = SystemAudioOutputState(
-            deviceUID: device.uid,
-            volume: 0.37,
+            deviceUID: headphones.uid,
+            volume: 1,
             isMuted: false,
             canSetVolume: true,
             canSetMute: true
         )
+        activeOutputUID = headphones.uid
+        outputStates = [
+            builtIn.uid: SystemAudioOutputState(
+                deviceUID: builtIn.uid,
+                volume: 0.25,
+                isMuted: false,
+                canSetVolume: true,
+                canSetMute: true
+            ),
+            headphones.uid: systemOutputState!
+        ]
         outputControlError = nil
         state = .running
     }
@@ -355,7 +424,8 @@ public final class AudioControlModule: DropThingsModule {
             let observed = try await engine.apply(desired)
             guard observed.generation >= generation else { return }
             observedState = observed
-            refreshSystemOutputState()
+            activeOutputUID = observed.defaultOutputUID
+            refreshOutputStates()
             state = healthState(from: observed.engineHealth)
         } catch {
             state = .failed(
@@ -380,7 +450,8 @@ public final class AudioControlModule: DropThingsModule {
     private func reloadObservedState() async {
         do {
             observedState = try await engine.snapshot()
-            refreshSystemOutputState()
+            activeOutputUID = observedState?.defaultOutputUID
+            refreshOutputStates()
             if let health = observedState?.engineHealth {
                 state = healthState(from: health)
             }
@@ -389,17 +460,24 @@ public final class AudioControlModule: DropThingsModule {
         }
     }
 
-    private func refreshSystemOutputState() {
-        guard let uid = observedState?.defaultOutputUID else {
+    private func refreshOutputStates() {
+        var refreshed: [String: SystemAudioOutputState] = [:]
+        for device in availableOutputs {
+            if let state = try? systemOutput.state(forDeviceUID: device.uid) {
+                refreshed[device.uid] = state
+            }
+        }
+        outputStates = refreshed
+        guard let uid = activeOutputUID ?? observedState?.defaultOutputUID else {
             systemOutputState = nil
             return
         }
-        do {
-            systemOutputState = try systemOutput.state(forDeviceUID: uid)
+        if let state = refreshed[uid] {
+            systemOutputState = state
             outputControlError = nil
-        } catch {
+        } else {
             systemOutputState = nil
-            outputControlError = error.localizedDescription
+            outputControlError = "The active audio output is unavailable."
         }
     }
 

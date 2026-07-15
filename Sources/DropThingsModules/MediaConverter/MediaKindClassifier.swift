@@ -8,6 +8,14 @@ import DropThingsMediaConverterKit
 /// that stays with `MediaCapabilityManifest` — it only decides the broad family.
 enum MediaKindClassifier {
     static func kind(of url: URL) -> MediaKind {
+        switch url.pathExtension.lowercased() {
+        case "mkv", "webm", "avi", "mp4", "mov", "m4v", "mpeg", "mpg", "ts":
+            return .video
+        case "opus", "ogg", "oga", "flac", "mp3", "m4a", "aac", "wav", "aif", "aiff", "wma":
+            return .audio
+        default:
+            break
+        }
         let type: UTType
         if let resolved = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType {
             type = resolved
@@ -23,5 +31,13 @@ enum MediaKindClassifier {
         // attempts a probe; the pipeline will report a clear failure if it
         // cannot read it.
         return .image
+    }
+
+    static func label(for kind: MediaKind) -> String {
+        switch kind {
+        case .image: return "image"
+        case .audio: return "audio"
+        case .video: return "video"
+        }
     }
 }

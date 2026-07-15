@@ -1,4 +1,5 @@
 #import "DTMediaRemoteBridge.h"
+#import <dlfcn.h>
 
 typedef void (^DTMediaRemoteInfoCompletion)(NSDictionary * _Nullable information);
 typedef void (^DTMediaRemotePIDCompletion)(int pid);
@@ -14,6 +15,10 @@ typedef BOOL (*DTMediaRemoteSendCommand)(NSInteger command, id _Nullable userInf
     DTMediaRemoteGetPID _getPID;
     DTMediaRemoteGetPlaying _getPlaying;
     DTMediaRemoteSendCommand _sendCommand;
+    void *_frameworkHandle;
+    NSString *_titleKey;
+    NSString *_artistKey;
+    NSString *_albumKey;
 }
 
 - (instancetype)init {
@@ -21,16 +26,24 @@ typedef BOOL (*DTMediaRemoteSendCommand)(NSInteger command, id _Nullable userInf
     if (!self) { return nil; }
 
     _queue = dispatch_queue_create("app.dropthings.media-remote", DISPATCH_QUEUE_SERIAL);
-    CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:@"/System/Library/PrivateFrameworks/MediaRemote.framework"];
-    CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, url);
-    if (!bundle) { return self; }
-    CFBundleLoadExecutable(bundle);
-    _getInfo = (DTMediaRemoteGetInfo)CFBundleGetFunctionPointerForName(bundle, CFSTR("MRMediaRemoteGetNowPlayingInfo"));
-    _getPID = (DTMediaRemoteGetPID)CFBundleGetFunctionPointerForName(bundle, CFSTR("MRMediaRemoteGetNowPlayingApplicationPID"));
-    _getPlaying = (DTMediaRemoteGetPlaying)CFBundleGetFunctionPointerForName(bundle, CFSTR("MRMediaRemoteGetNowPlayingApplicationIsPlaying"));
-    _sendCommand = (DTMediaRemoteSendCommand)CFBundleGetFunctionPointerForName(bundle, CFSTR("MRMediaRemoteSendCommand"));
-    CFRelease(bundle);
+    // On current macOS releases the framework executable can live only in the
+    // dyld shared cache, leaving its on-disk symlink apparently broken. dlopen
+    // still resolves it; CFBundleLoadExecutable does not.
+    _frameworkHandle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY | RTLD_LOCAL);
+    if (!_frameworkHandle) { return self; }
+    _getInfo = (DTMediaRemoteGetInfo)dlsym(_frameworkHandle, "MRMediaRemoteGetNowPlayingInfo");
+    _getPID = (DTMediaRemoteGetPID)dlsym(_frameworkHandle, "MRMediaRemoteGetNowPlayingApplicationPID");
+    _getPlaying = (DTMediaRemoteGetPlaying)dlsym(_frameworkHandle, "MRMediaRemoteGetNowPlayingApplicationIsPlaying");
+    _sendCommand = (DTMediaRemoteSendCommand)dlsym(_frameworkHandle, "MRMediaRemoteSendCommand");
+    _titleKey = [self stringConstant:"kMRMediaRemoteNowPlayingInfoTitle" fallback:@"kMRMediaRemoteNowPlayingInfoTitle"];
+    _artistKey = [self stringConstant:"kMRMediaRemoteNowPlayingInfoArtist" fallback:@"kMRMediaRemoteNowPlayingInfoArtist"];
+    _albumKey = [self stringConstant:"kMRMediaRemoteNowPlayingInfoAlbum" fallback:@"kMRMediaRemoteNowPlayingInfoAlbum"];
     return self;
+}
+
+- (NSString *)stringConstant:(const char *)name fallback:(NSString *)fallback {
+    NSString *const *pointer = (NSString *const *)dlsym(_frameworkHandle, name);
+    return pointer && *pointer ? *pointer : fallback;
 }
 
 - (BOOL)isAvailable {
@@ -58,9 +71,9 @@ typedef BOOL (*DTMediaRemoteSendCommand)(NSInteger command, id _Nullable userInf
     dispatch_group_enter(group);
     _getInfo(_queue, ^(NSDictionary *information) {
         if (information) {
-            id title = information[@"kMRMediaRemoteNowPlayingInfoTitle"];
-            id artist = information[@"kMRMediaRemoteNowPlayingInfoArtist"];
-            id album = information[@"kMRMediaRemoteNowPlayingInfoAlbum"];
+            id title = information[self->_titleKey];
+            id artist = information[self->_artistKey];
+            id album = information[self->_albumKey];
             if ([title isKindOfClass:NSString.class]) { result[@"title"] = title; }
             if ([artist isKindOfClass:NSString.class]) { result[@"artist"] = artist; }
             if ([album isKindOfClass:NSString.class]) { result[@"album"] = album; }

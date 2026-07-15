@@ -1,5 +1,19 @@
 # Implementation plan
 
+## Current status — 2026-07-15
+
+The module now opens a dedicated conversion window from its primary action.
+Simple presets explain their output, Advanced mode exposes maximum image edge
+and compression quality, and each completed row shows input size, output size,
+percentage smaller/larger, Reveal, Open and Copy Path. Native probe falls back
+to the isolated FFprobe helper, so generic UTTypes such as MKV, WebM, Ogg and
+Opus no longer get misrouted as images. Original files are never replaced.
+Advanced mode now includes an output-folder chooser and rejects media that does
+not match the chosen kind. Simple presets report incompatible inputs instead of
+silently substituting a different conversion. Native image metadata preservation
+and stripping are covered by a real ImageIO regression test. Startup verifies
+FFmpeg through the isolated XPC helper, and module stop cancels active jobs.
+
 ## Delivery phases
 
 1. Phase 0: spike native capabilities and Apple Silicon FFmpeg packaging; decide exact configure flags, licenses, signing and source-release process.

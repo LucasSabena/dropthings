@@ -131,7 +131,7 @@ struct SmartClipboardPanelView: View {
 
     @ViewBuilder
     private func previewBody(for snapshot: SmartClipboardSnapshot) -> some View {
-        let hide = module.smartClipboardSettings.hideSensitivePreview
+        let hide = module.smartClipboardSettings.hideSensitivePreview || snapshot.isConcealed
         switch snapshot.kind {
         case .text, .url, .json:
             TextEditor(text: .constant(hide ? "Preview hidden" : previewText(for: snapshot)))
@@ -164,11 +164,17 @@ struct SmartClipboardPanelView: View {
 
     private var actions: [SmartClipboardAction] {
         guard let snapshot else { return [] }
-        return SmartClipboardActionRegistry.actions(
+        let all = SmartClipboardActionRegistry.actions(
             for: snapshot.kind,
             fileActions: module.availableFileActions(),
             canFetchTitle: true
         )
+        return all.enumerated().sorted { lhs, rhs in
+            let leftPinned = module.pinnedActionIDs.contains(lhs.element.id)
+            let rightPinned = module.pinnedActionIDs.contains(rhs.element.id)
+            if leftPinned != rightPinned { return leftPinned }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
     }
 
     @ViewBuilder
@@ -248,6 +254,17 @@ struct SmartClipboardPanelView: View {
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.success)
             }
+            if let error = module.lastError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.danger)
+                    .lineLimit(1)
+            } else if let notice = module.lastNotice {
+                Text(notice)
+                    .font(DTTypography.caption)
+                    .foregroundStyle(DTColor.textSecondary)
+                    .lineLimit(1)
+            }
             Spacer()
             Button {
                 module.undoCopy()
@@ -290,6 +307,11 @@ struct SmartClipboardPanelView: View {
                 fetchingTitle = true
                 let result = await module.fetchURLTitle(for: snapshot)
                 outcome = result
+                if let text = result.copyableText {
+                    module.copyResult(text)
+                    didCopy = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
+                }
                 fetchingTitle = false
             }
             return
@@ -316,7 +338,11 @@ struct SmartClipboardPanelView: View {
         // Copy-only actions with a copyable text commit immediately so the
         // user can paste without an extra step.
         if let text = result.copyableText {
-            module.copyResult(text)
+            if case .colorFormat(let format) = action.body, let color = snapshot.color {
+                module.copyColor(color, as: format)
+            } else {
+                module.copyResult(text)
+            }
             didCopy = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
         }

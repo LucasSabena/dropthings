@@ -37,6 +37,7 @@ public struct SmartClipboardAction: Identifiable, Hashable, Sendable {
         case filesInfo
         case filesSaveRepresentation
         case filesAction(FileActionRef)
+        case imageInfo
     }
 
     public let body: Body
@@ -200,7 +201,7 @@ public enum SmartClipboardActionRegistry {
 
     public static func imageActions() -> [SmartClipboardAction] {
         [
-            SmartClipboardAction(id: "image.info", title: "Dimensions & size", systemImage: "info.circle", body: .filesInfo),
+            SmartClipboardAction(id: "image.info", title: "Dimensions & size", systemImage: "info.circle", body: .imageInfo),
             SmartClipboardAction(id: "image.save", title: "Save to file", systemImage: "square.and.arrow.down", body: .filesSaveRepresentation)
         ]
     }

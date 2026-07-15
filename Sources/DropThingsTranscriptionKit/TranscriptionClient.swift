@@ -2,6 +2,7 @@ import Foundation
 
 public enum TranscriptionPhase: String, Codable, CaseIterable, Sendable {
     case inspect
+    case normalize
     case modelLoad
     case transcribe
     case finalize

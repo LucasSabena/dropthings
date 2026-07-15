@@ -17,10 +17,10 @@ struct CoreAudioCatalog {
             guard let pid: pid_t = scalar(objectID, selector: kAudioProcessPropertyPID) else { return nil }
             let running = (scalar(objectID, selector: kAudioProcessPropertyIsRunningOutput) as UInt32?) == 1
             let application = NSRunningApplication(processIdentifier: pid)
-            let identity = appIdentity(
+            guard let identity = appIdentity(
                 for: application,
                 reportedBundleID: string(objectID, selector: kAudioProcessPropertyBundleID)
-            )
+            ) else { return nil }
             return RunningAudioProcess(
                 objectIDs: running ? [objectID] : [],
                 identity: identity,
@@ -42,27 +42,27 @@ struct CoreAudioCatalog {
 
     func devices() -> [AudioDeviceIdentity] {
         let defaultID: AudioObjectID = scalar(AudioObjectID(kAudioObjectSystemObject), selector: kAudioHardwarePropertyDefaultOutputDevice) ?? kAudioObjectUnknown
-        return objectIDs(selector: kAudioHardwarePropertyDevices).compactMap { objectID in
+        let devices = objectIDs(selector: kAudioHardwarePropertyDevices).compactMap { objectID -> AudioDeviceIdentity? in
             guard let uid = string(objectID, selector: kAudioDevicePropertyDeviceUID),
-                  let name = string(objectID, selector: kAudioObjectPropertyName) else { return nil }
+                  let name = string(objectID, selector: kAudioObjectPropertyName),
+                  outputChannelCount(objectID) > 0,
+                  !OwnedAudioResource.isOwned(uid: uid) else { return nil }
             let transportCode: UInt32 = scalar(objectID, selector: kAudioDevicePropertyTransportType) ?? 0
             let sampleRate: Float64 = scalar(objectID, selector: kAudioDevicePropertyNominalSampleRate) ?? 0
             let alive: UInt32 = scalar(objectID, selector: kAudioDevicePropertyDeviceIsAlive) ?? 0
-            var volumeAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: kAudioObjectPropertyElementMain
-            )
             return AudioDeviceIdentity(
                 uid: uid,
                 name: name,
                 transport: transportName(transportCode),
                 sampleRate: sampleRate,
                 isAvailable: alive == 1,
-                hasVolumeControl: AudioObjectHasProperty(objectID, &volumeAddress),
+                hasVolumeControl: hasOutputVolumeControl(objectID),
                 isDefault: objectID == defaultID
             )
         }
+        return Dictionary(grouping: devices, by: \AudioDeviceIdentity.uid)
+            .values
+            .compactMap(\.first)
     }
 
     func audioObjectID(forDeviceUID uid: String) -> AudioObjectID? {
@@ -155,14 +155,27 @@ struct CoreAudioCatalog {
     private func appIdentity(
         for application: NSRunningApplication?,
         reportedBundleID: String?
-    ) -> AudioAppIdentity {
+    ) -> AudioAppIdentity? {
         let containerBundle = application.flatMap(containingApplicationBundle)
+        let installedBundle = reportedBundleID?.nonEmpty
+            .flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+            .flatMap(Bundle.init(url:))
+        // Only surface identities that resolve to a real application bundle.
+        // Core Audio also reports helpers, agents and daemons; showing their
+        // executable names makes the mixer noisy and misleading.
+        guard containerBundle != nil || installedBundle != nil else {
+            return nil
+        }
         let bundleID = containerBundle?.bundleIdentifier
             ?? application?.bundleIdentifier
-            ?? reportedBundleID?.nonEmpty
-        let fallback = application?.executableURL?.path ?? "unidentified-audio-process"
+            ?? installedBundle?.bundleIdentifier
+        let fallback = application?.executableURL?.path
+            ?? installedBundle?.bundleURL.path
+            ?? "unidentified-audio-process"
         let displayName = (containerBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (containerBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? (installedBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (installedBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? application?.localizedName
             ?? bundleID
             ?? URL(fileURLWithPath: fallback).lastPathComponent
@@ -175,10 +188,35 @@ struct CoreAudioCatalog {
     private func containingApplicationBundle(_ application: NSRunningApplication) -> Bundle? {
         guard let bundleURL = application.bundleURL else { return nil }
         let components = bundleURL.pathComponents
-        guard let appIndex = components.firstIndex(where: { $0.hasSuffix(".app") }) else {
-            return Bundle(url: bundleURL)
-        }
+        guard let appIndex = components.firstIndex(where: { $0.hasSuffix(".app") }) else { return nil }
         return Bundle(url: URL(fileURLWithPath: "/").appendingPathComponent(components[1...appIndex].joined(separator: "/")))
+    }
+
+    private func outputChannelCount(_ device: AudioObjectID) -> Int {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr,
+              size >= MemoryLayout<AudioBufferList>.size else { return 0 }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, raw) == noErr else { return 0 }
+        let list = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+        return UnsafeMutableAudioBufferListPointer(list).reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    private func hasOutputVolumeControl(_ device: AudioObjectID) -> Bool {
+        (0...8).contains { element in
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: AudioObjectPropertyElement(element)
+            )
+            return AudioObjectHasProperty(device, &address)
+        }
     }
 }
 

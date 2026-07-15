@@ -165,4 +165,42 @@ final class AudioControlModuleTests: XCTestCase {
         XCTAssertEqual(engine.applied.last?.apps.first?.routeDeviceUID, "usb-dac")
         await module.stop()
     }
+
+    func testEveryOutputHasIndependentStateAndCanBecomeSystemDefault() async throws {
+        let speakers = AudioDeviceIdentity(
+            uid: "speakers", name: "Mac Speakers", transport: "Built-in",
+            sampleRate: 48_000, isAvailable: true, hasVolumeControl: true, isDefault: true
+        )
+        let headphones = AudioDeviceIdentity(
+            uid: "headphones", name: "Headphones", transport: "Bluetooth",
+            sampleRate: 48_000, isAvailable: true, hasVolumeControl: true, isDefault: false
+        )
+        let engine = FakeAudioControlEngine(state: AudioControlObservedState(
+            generation: 0, engineHealth: .bypassed, apps: [],
+            devices: [speakers, headphones], defaultOutputUID: speakers.uid
+        ))
+        let output = FakeSystemAudioOutput()
+        output.stateByUID = [
+            speakers.uid: .init(deviceUID: speakers.uid, volume: 0.25, isMuted: false, canSetVolume: true, canSetMute: true),
+            headphones.uid: .init(deviceUID: headphones.uid, volume: 0.8, isMuted: false, canSetVolume: true, canSetMute: true)
+        ]
+        let module = AudioControlModule(
+            settings: SettingsStore(backend: InMemorySettingsBackend()),
+            engine: engine,
+            systemOutput: output
+        )
+
+        try await module.start()
+        XCTAssertEqual(module.outputState(for: speakers.uid)?.volume, 0.25)
+        XCTAssertEqual(module.outputState(for: headphones.uid)?.volume, 0.8)
+
+        module.setOutputVolume(0.6, deviceUID: headphones.uid)
+        module.setDefaultOutput(deviceUID: headphones.uid)
+
+        XCTAssertEqual(output.volumes.last?.0, headphones.uid)
+        XCTAssertEqual(output.volumes.last?.1, 0.6)
+        XCTAssertEqual(output.defaultOutputUID, headphones.uid)
+        XCTAssertEqual(module.activeOutputUID, headphones.uid)
+        await module.stop()
+    }
 }

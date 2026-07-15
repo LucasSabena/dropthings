@@ -56,6 +56,16 @@ final class SmartClipboardModuleTests: XCTestCase {
         XCTAssertEqual(module.state, .off)
     }
 
+    func testRunningModulePublishesExternalClipboardChangesToItsSnapshot() async throws {
+        let module = makeModule()
+        try await module.start()
+
+        hubBackend.emit(snapshot(text: "new clipboard", changeCount: 42))
+
+        XCTAssertEqual(module.currentSnapshot()?.text, "new clipboard")
+        await module.stop()
+    }
+
     func testStartIsIdempotent() async throws {
         let module = makeModule()
         try await module.start()
@@ -129,6 +139,33 @@ final class SmartClipboardModuleTests: XCTestCase {
 
         XCTAssertTrue(outcome.preview.contains("11 characters"))
         XCTAssertTrue(outcome.preview.contains("2 words"))
+    }
+
+    func testImageInfoUsesImagePixelsInsteadOfEmptyFileList() {
+        let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 3,
+            pixelsHigh: 2,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )!
+        let data = bitmap.representation(using: .png, properties: [:])!
+        let module = makeModule()
+        hub.overrideLatest(snapshot(imageData: data))
+        let snap = module.currentSnapshot()!
+
+        let outcome = module.apply(
+            action: SmartClipboardAction(id: "image.info", title: "Info", systemImage: "info.circle", body: .imageInfo),
+            to: snap
+        )
+
+        XCTAssertTrue(outcome.preview.contains("3 × 2 px"))
+        XCTAssertFalse(outcome.preview.isEmpty)
     }
 
     func testCopyResultWritesToPasteboardAndSetsLastResult() {

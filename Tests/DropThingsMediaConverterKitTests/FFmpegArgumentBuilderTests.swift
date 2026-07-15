@@ -78,6 +78,21 @@ final class FFmpegArgumentBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("experimental"))
     }
 
+    func testTranscriptionNormalizationForcesWhisperPCMShape() {
+        let request = MediaConversionRequest(
+            source: URL(fileURLWithPath: "/tmp/source.webm"),
+            outputDirectory: URL(fileURLWithPath: "/tmp"),
+            outputFormat: .wav,
+            audioSampleRate: 16_000,
+            audioChannels: 1,
+            metadata: .stripNonessential
+        )
+        let args = FFmpegArgumentBuilder.audioArguments(for: request)!
+        XCTAssertEqual(args[args.firstIndex(of: "-ar")! + 1], "16000")
+        XCTAssertEqual(args[args.firstIndex(of: "-ac")! + 1], "1")
+        XCTAssertTrue(args.contains("pcm_s16le"))
+    }
+
     func testNonAudioRequestReturnsNilForAudioBuilder() {
         let request = makeRequest(format: .png, source: URL(fileURLWithPath: "/tmp/x.png"))
         XCTAssertNil(FFmpegArgumentBuilder.audioArguments(for: request))

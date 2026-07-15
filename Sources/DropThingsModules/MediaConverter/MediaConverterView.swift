@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import DropThingsCore
@@ -82,7 +83,37 @@ private struct AdvancedControls: View {
                     get: { module.settings.noUpscaleByDefault },
                     set: { module.setNoUpscaleDefault($0) }
                 ))
+
+                HStack {
+                    VStack(alignment: .leading, spacing: DTSpace.xxs) {
+                        Text("Output folder")
+                            .font(DTTypography.body)
+                        Text(module.settings.outputDirectory?.path ?? "Same folder as each source")
+                            .font(DTTypography.caption)
+                            .foregroundStyle(DTColor.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    if module.settings.outputDirectory != nil {
+                        Button("Use Source Folder") { module.setOutputDirectory(nil) }
+                            .controlSize(.small)
+                    }
+                    Button("Choose…") { chooseOutputFolder() }
+                        .controlSize(.small)
+                }
             }
         }
+    }
+
+    private func chooseOutputFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Conversion Output Folder"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK else { return }
+        module.setOutputDirectory(panel.url)
     }
 }

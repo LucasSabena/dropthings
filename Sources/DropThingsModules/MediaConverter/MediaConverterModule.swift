@@ -32,6 +32,7 @@ public final class MediaConverterModule: DropThingsModule {
     private let engineClient: MediaConverterEngineClient?
     private let fileActionRegistry: FileActionRegistry?
     private var pipeline: MediaConverterPipeline?
+    private lazy var windowController = MediaConverterWindowController(module: self)
     private var health = RecoverableFailureHealth()
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "media-converter")
 
@@ -79,6 +80,12 @@ public final class MediaConverterModule: DropThingsModule {
         // truthful about what the user can pick (stop-condition: "do not expose
         // a setting the chosen backend ignores").
         refreshFFmpegAvailability()
+        if ffmpegAvailable, let engineClient {
+            ffmpegAvailable = await engineClient.ffmpegIsAvailable()
+            if !ffmpegAvailable {
+                ffmpegReason = "The isolated media engine could not load its bundled FFmpeg tools."
+            }
+        }
         let config = MediaConverterPipeline.Configuration(
             manifest: manifest,
             ffmpegAvailable: ffmpegAvailable
@@ -98,6 +105,11 @@ public final class MediaConverterModule: DropThingsModule {
 
     public func stop() async {
         fileActionRegistry?.unregisterProducer(id.rawValue)
+        for item in queue.items where !item.phase.isTerminal {
+            pipeline?.cancel(item.id)
+            queue.setPhase(.cancelled, for: item.id)
+        }
+        engineClient?.invalidate()
         pipeline = nil
         state = .off
         logger.info("Media Converter stopped")
@@ -129,13 +141,8 @@ public final class MediaConverterModule: DropThingsModule {
         ]
     }
 
-    // The module's detailed surface is its settings view; "open surface" is a
-    // hook for future dedicated window presentation. For now it surfaces the
-    // settings/detail pane through the standard module detail navigation.
     private func openSurface() {
-        // Surfaced through the normal module detail view; no separate window in
-        // this phase. Future work can present a dedicated queue window here.
-        NotificationCenter.default.post(name: .openMediaConverterSurface, object: nil)
+        windowController.show()
     }
 
     // MARK: - Conversion entry point
@@ -171,6 +178,12 @@ public final class MediaConverterModule: DropThingsModule {
 
     public func cancel(jobID: UUID) {
         pipeline?.cancel(jobID)
+    }
+
+    public func reject(sources: [URL], reason: String) {
+        for id in queue.enqueue(sources) {
+            queue.setPhase(.failed(reason: reason), for: id)
+        }
     }
 
     // MARK: - Cross-module file actions
@@ -277,8 +290,4 @@ public final class MediaConverterModule: DropThingsModule {
     public func makeSettingsView() -> AnyView {
         AnyView(MediaConverterSettingsView(module: self))
     }
-}
-
-extension Notification.Name {
-    static let openMediaConverterSurface = Notification.Name("app.dropthings.media-converter.open-surface")
 }

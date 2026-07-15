@@ -63,8 +63,12 @@ public final class NativeImageEncoder: ImageEncoding {
             return .failure(.unsupportedConversion(reason: "This image format isn't supported here."))
         }
 
-        var properties: [CFString: Any] = [:]
-        properties = applyMetadata(properties: properties, policy: request.metadata, format: request.outputFormat)
+        let sourceProperties = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] ?? [:]
+        var properties = applyMetadata(
+            properties: sourceProperties,
+            policy: request.metadata,
+            format: request.outputFormat
+        )
         if isLossy(request.outputFormat) {
             properties[kCGImageDestinationLossyCompressionQuality] = Double(request.quality) / 100.0
         }
@@ -93,15 +97,14 @@ public final class NativeImageEncoder: ImageEncoding {
         case .preserve:
             break
         case .removeLocationOnly:
-            // ImageIO drops GPS when we set the GPS dictionary to empty.
-            props[kCGImagePropertyGPSDictionary] = [:] as CFDictionary
+            props.removeValue(forKey: kCGImagePropertyGPSDictionary)
         case .stripNonessential:
-            // Keep the color profile (for correctness) but drop EXIF/IPTC/TIFF
-            // metadata by not copying it through. ImageIO only writes what we
-            // pass; we pass none of the source EXIF.
-            props[kCGImagePropertyExifDictionary] = [:] as CFDictionary
-            props[kCGImagePropertyIPTCDictionary] = [:] as CFDictionary
-            props[kCGImagePropertyGPSDictionary] = [:] as CFDictionary
+            // Keep image-description properties needed for correct rendering,
+            // but remove camera, authoring and location dictionaries.
+            props.removeValue(forKey: kCGImagePropertyExifDictionary)
+            props.removeValue(forKey: kCGImagePropertyIPTCDictionary)
+            props.removeValue(forKey: kCGImagePropertyGPSDictionary)
+            props.removeValue(forKey: kCGImagePropertyTIFFDictionary)
         }
         return props
     }

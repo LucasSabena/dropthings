@@ -99,7 +99,7 @@ public final class CoreAudioSystemOutputController: SystemAudioOutputControlling
     }
 
     private func deviceID(forUID uid: String) throws -> AudioDeviceID {
-        for device in try deviceIDs() where readUID(for: device) == uid {
+        for device in try deviceIDs() where readUID(for: device) == uid && outputChannelCount(device) > 0 {
             return device
         }
         throw SystemAudioOutputError.deviceUnavailable
@@ -126,6 +126,22 @@ public final class CoreAudioSystemOutputController: SystemAudioOutputControlling
             AudioObjectGetPropertyData(device, &address, 0, nil, &size, pointer)
         }
         return status == noErr ? value as String : nil
+    }
+
+    private func outputChannelCount(_ device: AudioDeviceID) -> Int {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr,
+              size >= MemoryLayout<AudioBufferList>.size else { return 0 }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, raw) == noErr else { return 0 }
+        return UnsafeMutableAudioBufferListPointer(raw.bindMemory(to: AudioBufferList.self, capacity: 1))
+            .reduce(0) { $0 + Int($1.mNumberChannels) }
     }
 
     private func scalarAddresses(for device: AudioDeviceID) -> [AudioObjectPropertyAddress] {

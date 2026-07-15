@@ -72,7 +72,7 @@ public actor MediaConverterPipeline {
         if isCancelled(jobID) { onPhase(.cancelled); return .failure(.cancelled) }
         onPhase(.probing)
         let probe: MediaProbeResult
-        switch await probeAdapter.probe(url: request.source) {
+        switch await inspectMedia(url: request.source) {
         case .success(let result): probe = result
         case .failure(let error): onPhase(.failed(reason: error.errorDescription ?? "Probe failed")); return .failure(error)
         }
@@ -127,7 +127,7 @@ public actor MediaConverterPipeline {
             // the encoder already finalized, but we independently verify the
             // output is a real, readable file of the right kind.
             onPhase(.reprobing)
-            switch await probeAdapter.probe(url: output) {
+            switch await inspectMedia(url: output) {
             case .success(let reprobe):
                 guard reprobe.kind == request.outputFormat.kind else {
                     try? FileManager.default.removeItem(at: output)
@@ -154,6 +154,22 @@ public actor MediaConverterPipeline {
     }
 
     // MARK: - FFmpeg helper path (audio/video)
+
+    /// Native frameworks are quickest for images and Apple media. FFprobe is
+    /// the authoritative fallback for containers such as Opus/Ogg, MKV and
+    /// WebM that UTType/AVFoundation often classify as generic data.
+    private func inspectMedia(url: URL) async -> Result<MediaProbeResult, MediaConverterError> {
+        let native = await probeAdapter.probe(url: url)
+        if case .success = native { return native }
+        guard configuration.ffmpegAvailable, let engineClient else { return native }
+        do {
+            return .success(try await engineClient.probe(url))
+        } catch let error as MediaConverterError {
+            return .failure(error)
+        } catch {
+            return .failure(.probeFailed(reason: error.localizedDescription))
+        }
+    }
 
     /// Route an audio/video request to the isolated FFmpeg helper. Resolves a
     /// staging output URL inside the destination directory, asks the helper to

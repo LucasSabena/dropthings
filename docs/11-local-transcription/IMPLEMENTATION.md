@@ -1,6 +1,17 @@
 # Implementation plan
 
-## Current status — 2026-07-14
+## Current status — 2026-07-15
+
+Broad-media normalization is now part of the vertical slice. Intake does not
+filter by extension: the pinned FFmpeg 8.1.2 helper extracts the first/primary
+audio stream from audio or video containers and produces a temporary 16 kHz,
+mono, signed-16-bit PCM WAV before Whisper runs. This covers Opus/Ogg, MP3,
+M4A/AAC, WAV, FLAC, MKV, MP4, MOV, WebM and the other demuxers/decoders present
+in the shipped manifest. Temporary normalized audio is deleted after success,
+failure or cancellation. A file with no decodable audio stream fails explicitly.
+Cancellation now maps to Cancelled rather than a helper failure and terminates
+both XPC operations. Queue traversal uses stable item identities, so adding or
+removing other waiting files during a transcription cannot invalidate indices.
 
 The Phase 1 vertical slice is implemented, packaged and registered in `AppServices`:
 
@@ -18,9 +29,8 @@ The Phase 1 vertical slice is implemented, packaged and registered in `AppServic
 - File transcription requests no microphone or screen permission. Network access
   occurs only after an explicit model Download action.
 
-The packaged helper and a real Tiny-model fixture have been proven. Broad-media
-normalization, queue persistence, SRT/VTT/Markdown, VAD and review remain explicitly
-in Phases 2–3; the current UI labels its narrower PCM WAV and TXT/JSON scope.
+The packaged helper and a real Tiny-model fixture have been proven. Queue
+persistence, SRT/VTT/Markdown, VAD and review remain explicitly in Phases 2–3.
 
 ## Delivery phases
 

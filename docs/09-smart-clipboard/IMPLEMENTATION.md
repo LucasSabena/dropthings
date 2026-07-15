@@ -1,5 +1,17 @@
 # Implementation plan
 
+## Current status — 2026-07-15
+
+The module publishes the initial and subsequent pasteboard snapshots through
+its own observable state. The panel therefore renders clipboard content on its
+first open and updates while visible; it no longer depends on an unrelated
+module property changing to force a SwiftUI refresh. The shared single-observer
+and origin-token echo suppression remain intact.
+Image information now reads bitmap pixels, Save always emits a valid PNG, URL
+title results copy immediately, native color representations are preserved,
+pinned actions sort first and concealed clipboard previews hide automatically.
+Copy/save errors and success notices are visible in the panel.
+
 ## Delivery phases
 
 1. Phase 0: characterize every current Clipboard History/Color Picker pasteboard path and add regression tests.
