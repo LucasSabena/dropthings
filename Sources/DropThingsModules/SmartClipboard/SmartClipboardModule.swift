@@ -34,6 +34,7 @@ public final class SmartClipboardModule: DropThingsModule {
     private let pasteboard: NSPasteboard
     private let fileActionRegistry: FileActionRegistry?
     private let urlTitleFetcher: SmartClipboardURLTitleFetching
+    private let transientSurfaces: TransientSurfaceCoordinator?
     let origin = PasteboardHub.OriginToken("modules.smart-clipboard")
     private var hubSubscription: PasteboardHub.Subscription?
     private var hotkey: GlobalHotkey?
@@ -47,14 +48,19 @@ public final class SmartClipboardModule: DropThingsModule {
     /// stale snapshot never lingers beyond the configured period.
     private var undoExpiryTimer: Timer?
 
-    public convenience init(settings: SettingsStore, permissions: PermissionCenter) {
+    public convenience init(
+        settings: SettingsStore,
+        permissions: PermissionCenter,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
+    ) {
         self.init(
             settings: settings,
             permissions: permissions,
             hub: PasteboardHub(backend: ClipboardMonitor()),
             pasteboard: .general,
             fileActionRegistry: nil,
-            urlTitleFetcher: SystemURLTitleFetcher()
+            urlTitleFetcher: SystemURLTitleFetcher(),
+            transientSurfaces: transientSurfaces
         )
     }
 
@@ -65,7 +71,8 @@ public final class SmartClipboardModule: DropThingsModule {
         settings: SettingsStore,
         permissions: PermissionCenter,
         hub: PasteboardHub,
-        fileActionRegistry: FileActionRegistry?
+        fileActionRegistry: FileActionRegistry?,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
     ) {
         self.init(
             settings: settings,
@@ -73,7 +80,8 @@ public final class SmartClipboardModule: DropThingsModule {
             hub: hub,
             pasteboard: .general,
             fileActionRegistry: fileActionRegistry,
-            urlTitleFetcher: SystemURLTitleFetcher()
+            urlTitleFetcher: SystemURLTitleFetcher(),
+            transientSurfaces: transientSurfaces
         )
     }
 
@@ -83,7 +91,8 @@ public final class SmartClipboardModule: DropThingsModule {
         hub: PasteboardHub,
         pasteboard: NSPasteboard = .general,
         fileActionRegistry: FileActionRegistry?,
-        urlTitleFetcher: SmartClipboardURLTitleFetching
+        urlTitleFetcher: SmartClipboardURLTitleFetching,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
     ) {
         self.settingsStore = settings
         self.permissions = permissions
@@ -91,6 +100,7 @@ public final class SmartClipboardModule: DropThingsModule {
         self.pasteboard = pasteboard
         self.fileActionRegistry = fileActionRegistry
         self.urlTitleFetcher = urlTitleFetcher
+        self.transientSurfaces = transientSurfaces
         self.settings = settings.loadSmartClipboardSettings()
         self.panel = SmartClipboardPanelController(module: self)
         loadPinned()
@@ -99,13 +109,14 @@ public final class SmartClipboardModule: DropThingsModule {
     // MARK: - Lifecycle
 
     public func start() async throws {
+        transientSurfaces?.register(id) { [weak self] in self?.hidePanel() }
         registerHotkey()
         hubSubscription?.cancel()
         hubSubscription = hub.subscribe(origin: origin) { [weak self] snapshot in
             // Publish the actual clipboard value through the module. The panel
             // observes the module, not PasteboardHub, so only updating the hub
             // left an already-open panel permanently stale.
-            self?.liveSnapshot = snapshot
+            self?.accept(snapshot)
         }
         hub.start(interval: 0.25)
         refreshSnapshot()
@@ -114,6 +125,7 @@ public final class SmartClipboardModule: DropThingsModule {
     }
 
     public func stop() async {
+        transientSurfaces?.unregister(id)
         unregisterHotkey()
         hubSubscription?.cancel()
         hubSubscription = nil
@@ -161,6 +173,7 @@ public final class SmartClipboardModule: DropThingsModule {
     // MARK: - Public actions
 
     public func showPanel() {
+        transientSurfaces?.prepareToPresent(id)
         panel?.show()
     }
 
@@ -251,7 +264,7 @@ public final class SmartClipboardModule: DropThingsModule {
             sourceBundleID: item.sourceBundleID
         )
         hub.overrideLatest(snapshot)
-        liveSnapshot = snapshot
+        accept(snapshot)
     }
 
     // MARK: - Action application
@@ -369,7 +382,7 @@ public final class SmartClipboardModule: DropThingsModule {
             let md = SmartClipboardURLEngine.markdownLink(url: url, label: title)
             return ActionOutcome(preview: md, copyableText: md, notice: title == nil ? "No <title> found." : nil)
         } catch {
-            logger.warning("URL title fetch failed for \(url.absoluteString): \(error)")
+            logger.warning("URL title fetch failed: \(String(describing: type(of: error)))")
             return ActionOutcome(
                 preview: "Could not fetch title",
                 copyableText: nil,
@@ -386,9 +399,9 @@ public final class SmartClipboardModule: DropThingsModule {
     public func copyResult(_ text: String) {
         let pb = pasteboard
         preCopySnapshot = NSPasteboardSnapshot.capture(from: pb)
+        hub.recordWrite(origin: origin)
         pb.clearContents()
         pb.setString(text, forType: .string)
-        hub.recordWrite(origin: origin)
         lastResult = text
         lastError = nil
         lastNotice = "Copied result"
@@ -402,13 +415,13 @@ public final class SmartClipboardModule: DropThingsModule {
     public func copyColor(_ color: SmartClipboardColor, as format: SmartClipboardColorFormat) {
         let pb = pasteboard
         preCopySnapshot = NSPasteboardSnapshot.capture(from: pb)
+        hub.recordWrite(origin: origin)
         pb.clearContents()
         let value = format.string(from: color)
         if let nsColor = color.nsColor {
             pb.writeObjects([nsColor])
         }
         pb.setString(value, forType: .string)
-        hub.recordWrite(origin: origin)
         lastResult = value
         lastError = nil
         lastNotice = "Copied color"
@@ -444,8 +457,8 @@ public final class SmartClipboardModule: DropThingsModule {
     @discardableResult
     public func undoCopy() -> UndoResult {
         guard let snapshot = preCopySnapshot else { return .nothingToUndo }
-        snapshot.restore(into: pasteboard)
         hub.recordWrite(origin: origin)
+        snapshot.restore(into: pasteboard)
         preCopySnapshot = nil
         lastResult = nil
         cancelUndoExpiry()
@@ -568,7 +581,7 @@ public final class SmartClipboardModule: DropThingsModule {
 
     private func makeSnapshot(from snapshot: PasteboardHub.Snapshot) -> SmartClipboardSnapshot {
         let kind: SmartClipboardKind
-        if let override = panel?.forcedKind {
+        if let override = panel?.forcedKind(for: snapshot.changeCount) {
             kind = override
         } else {
             kind = SmartClipboardClassifier.classify(
@@ -597,6 +610,13 @@ public final class SmartClipboardModule: DropThingsModule {
 
     private func unavailable(_ snapshot: SmartClipboardSnapshot) -> ActionOutcome {
         ActionOutcome(preview: "Not available for this content", copyableText: nil, notice: nil)
+    }
+
+    private func accept(_ snapshot: PasteboardHub.Snapshot) {
+        panel?.resetForcedKind(ifSnapshotChangedTo: snapshot.changeCount)
+        liveSnapshot = snapshot
+        lastError = nil
+        lastNotice = nil
     }
 
     // MARK: - Hotkey

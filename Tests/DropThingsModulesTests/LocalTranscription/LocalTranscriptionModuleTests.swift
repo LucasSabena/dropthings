@@ -46,6 +46,7 @@ final class LocalTranscriptionModuleTests: XCTestCase {
         let module = makeModule(client: FakeLocalTranscriptionClient(.available(version: "test")))
         XCTAssertEqual(module.id, .localTranscription)
         XCTAssertEqual(module.iconName, "waveform.and.mic")
+        XCTAssertEqual(module.releaseStage, .beta)
     }
 
     private func makeModule(client: any LocalTranscriptionClient) -> LocalTranscriptionModule {

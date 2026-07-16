@@ -14,6 +14,19 @@ silently substituting a different conversion. Native image metadata preservation
 and stripping are covered by a real ImageIO regression test. Startup verifies
 FFmpeg through the isolated XPC helper, and module stop cancels active jobs.
 
+## Beta hardening — 2026-07-16
+
+The module is visibly labeled Beta in the control center, sidebar, detail view
+and dedicated window. The shipped capability manifest no longer advertises
+WebP output because macOS ImageIO can decode it but does not expose a matching
+destination encoder. Image conversion now applies EXIF orientation to pixels
+and resets the output orientation, video probing uses real tracks and applies
+the preferred transform, and audio-only assets are no longer misclassified as
+video. Conflict `Skip` produces a Skipped row without invoking an encoder;
+late pipeline updates cannot overwrite Cancelled or other terminal states.
+Disabling the module hides its window and the drop zone cannot enqueue work
+while the module is off.
+
 ## Delivery phases
 
 1. Phase 0: spike native capabilities and Apple Silicon FFmpeg packaging; decide exact configure flags, licenses, signing and source-release process.

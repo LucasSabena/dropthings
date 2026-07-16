@@ -97,6 +97,29 @@ public actor MediaConverterPipeline {
             onPhase(.failed(reason: error.errorDescription ?? "Unsupported")); return .failure(error)
         }
 
+        // Resolve non-overwriting conflict policies before spending time and
+        // memory on an encode. Suffix mode is resolved by the selected backend.
+        let proposedOutput = OutputNaming.proposedURL(
+            for: request.source,
+            format: request.outputFormat,
+            in: request.outputDirectory
+        )
+        if FileManager.default.fileExists(atPath: proposedOutput.path) {
+            switch request.conflict {
+            case .skip:
+                onPhase(.skipped(reason: "An output with this name already exists."))
+                return .failure(.skippedExistingOutput)
+            case .fail:
+                let error = MediaConverterError.finalizationFailed(
+                    reason: "An output with this name already exists."
+                )
+                onPhase(.failed(reason: error.errorDescription ?? "Output exists"))
+                return .failure(error)
+            case .suffix:
+                break
+            }
+        }
+
         // 4. Disk preflight (rough estimate: require at least the source size).
         if isCancelled(jobID) { onPhase(.cancelled); return .failure(.cancelled) }
         let available = diskSpace.availableBytes(on: request.outputDirectory)

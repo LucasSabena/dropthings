@@ -38,7 +38,7 @@ unrelated features available. Returning from System Settings rechecks automatica
 ## Required user-visible capabilities
 
 - Probe container, codec, dimensions, duration, frame rate, channels, sample rate, alpha, orientation, metadata and color profile.
-- Image outputs: PNG, JPEG, TIFF, HEIC and WebP where the shipped capability manifest confirms support.
+- Image outputs: PNG, JPEG, TIFF and HEIC. WebP remains hidden until a shipped encoder is verified.
 - Audio outputs: M4A/AAC, WAV, FLAC, Opus and MP3 only when the approved backend includes the encoder.
 - Video outputs: MP4/MOV/MKV/WebM with explicit codec compatibility; H.264/AAC MP4 is the default compatibility preset.
 - Resize by exact dimensions, fit, fill, percentage or maximum edge; no-upscale toggle.

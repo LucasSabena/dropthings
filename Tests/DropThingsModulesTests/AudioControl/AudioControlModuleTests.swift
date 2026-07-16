@@ -132,11 +132,11 @@ final class AudioControlModuleTests: XCTestCase {
         )
 
         try await module.start()
-        XCTAssertEqual(module.menuBarIconName, "speaker.wave.2.fill")
+        XCTAssertEqual(module.menuBarIconName, "hifispeaker.fill")
         module.setSystemOutputVolume(0.65)
-        XCTAssertEqual(module.menuBarIconName, "speaker.wave.2.fill")
+        XCTAssertEqual(module.menuBarIconName, "hifispeaker.fill")
         module.toggleSystemOutputMute()
-        XCTAssertEqual(module.menuBarIconName, "speaker.slash.fill")
+        XCTAssertEqual(module.menuBarIconName, "hifispeaker.fill")
 
         XCTAssertEqual(module.systemOutputState?.volume, 0.65)
         XCTAssertEqual(output.volumes.first?.0, device.uid)
@@ -201,6 +201,7 @@ final class AudioControlModuleTests: XCTestCase {
         XCTAssertEqual(output.volumes.last?.1, 0.6)
         XCTAssertEqual(output.defaultOutputUID, headphones.uid)
         XCTAssertEqual(module.activeOutputUID, headphones.uid)
+        XCTAssertEqual(module.menuBarIconName, "headphones")
         await module.stop()
     }
 }

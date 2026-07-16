@@ -20,11 +20,20 @@ struct MediaConverterSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DTSpace.lg) {
+            HStack(spacing: DTSpace.sm) {
+                Text("Media Converter")
+                    .font(DTTypography.pageTitle)
+                ModuleReleaseBadge(stage: module.releaseStage)
+            }
+
             SettingsSection(
-                title: "Media Converter",
+                title: "Convert media",
                 caption: "Convert, resize and compress images, audio and video locally. Your files never leave this Mac."
             ) {
                 VStack(alignment: .leading, spacing: DTSpace.md) {
+                    if !module.canConvert {
+                        InlineAlert(style: .warning, message: "Enable Media Converter in the control center before adding files.")
+                    }
                     Picker("Mode", selection: $advanced) {
                         Text("Simple").tag(false)
                         Text("Advanced").tag(true)
@@ -40,6 +49,7 @@ struct MediaConverterSettingsView: View {
                     }
 
                     MediaConverterDropZone(module: module, advanced: advanced)
+                        .disabled(!module.canConvert)
 
                     if !module.queue.items.isEmpty {
                         MediaQueueList(module: module)
@@ -67,7 +77,7 @@ private struct AdvancedControls: View {
                 )) {
                     Text("Add a suffix").tag(ConflictPolicy.suffix)
                     Text("Skip").tag(ConflictPolicy.skip)
-                    Text("Ask").tag(ConflictPolicy.fail)
+                    Text("Stop with error").tag(ConflictPolicy.fail)
                 }
 
                 Picker("Metadata", selection: Binding(

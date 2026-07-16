@@ -40,7 +40,10 @@ public struct MediaCapabilityManifest: Hashable, Sendable {
     /// for schema stability but the manifest hides them, so the UI never offers
     /// a conversion the backend cannot perform.
     public static let shipped = MediaCapabilityManifest(
-        nativeImageOutputs: [.png, .jpeg, .heic, .webp, .tiff],
+        // ImageIO can decode WebP on current macOS releases but does not expose
+        // a WebP destination encoder. Keep the stable format ID, but never
+        // advertise an output the native backend cannot actually write.
+        nativeImageOutputs: [.png, .jpeg, .heic, .tiff],
         ffmpegAudioOutputs: [.m4aAAC, .wav, .flac, .opus],
         ffmpegVideoOutputs: [.mp4H264, .movH264, .mkvH264]
     )

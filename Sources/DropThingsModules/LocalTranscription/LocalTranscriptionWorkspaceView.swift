@@ -15,6 +15,11 @@ struct LocalTranscriptionWorkspaceView: View {
                 InlineAlert(style: .info, message: notice)
                     .padding(DTSpace.md)
             }
+            if !module.canProcess {
+                InlineAlert(style: .warning, message: "Enable Local Transcription in the control center to process this queue.")
+                    .padding(.horizontal, DTSpace.md)
+                    .padding(.bottom, DTSpace.md)
+            }
             queueContent
             Divider()
             footer
@@ -26,7 +31,10 @@ struct LocalTranscriptionWorkspaceView: View {
     private var header: some View {
         HStack(spacing: DTSpace.md) {
             VStack(alignment: .leading, spacing: DTSpace.xxs) {
-                Text("Local Transcription").font(DTTypography.pageTitle)
+                HStack(spacing: DTSpace.sm) {
+                    Text("Local Transcription").font(DTTypography.pageTitle)
+                    ModuleReleaseBadge(stage: module.releaseStage)
+                }
                 Text("Audio and transcript content stay on this Mac.")
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
@@ -72,7 +80,7 @@ struct LocalTranscriptionWorkspaceView: View {
             } else {
                 Button("Start Queue") { module.startQueue() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!module.hasWaitingItems)
+                    .disabled(!module.hasWaitingItems || !module.canProcess)
             }
         }
         .padding(DTSpace.lg)
@@ -117,6 +125,12 @@ private struct QueueItemRow: View {
             Spacer()
             if case .completed(let urls) = item.status, let first = urls.first {
                 Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([first]) }
+            }
+            if case .failed = item.status {
+                Button("Retry") { module.retryQueueItem(id: item.id) }
+            }
+            if case .cancelled = item.status {
+                Button("Retry") { module.retryQueueItem(id: item.id) }
             }
             if case .waiting = item.status {
                 Button { module.removeQueueItem(id: item.id) } label: { Image(systemName: "xmark") }

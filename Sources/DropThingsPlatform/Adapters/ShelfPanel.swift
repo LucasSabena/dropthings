@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 /// here; the SwiftUI list and the module business logic stay out of this file
 /// so this remains a thin Platform adapter per `AGENTS.md`.
 public final class ShelfPanel: NSPanel {
+    public var onClose: (() -> Void)?
+
     public init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 440),
@@ -20,6 +22,11 @@ public final class ShelfPanel: NSPanel {
         animationBehavior = .utilityWindow
         isReleasedWhenClosed = false
         minSize = NSSize(width: 520, height: 320)
+    }
+
+    public override func close() {
+        super.close()
+        onClose?()
     }
 }
 

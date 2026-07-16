@@ -13,8 +13,12 @@ final class LocalTranscriptionWindowController: NSObject, NSWindowDelegate {
     func show() {
         if window == nil { makeWindow() }
         window?.center()
-        window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    func hide() {
+        window?.orderOut(nil)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

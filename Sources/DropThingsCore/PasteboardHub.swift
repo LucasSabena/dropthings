@@ -160,6 +160,12 @@ public final class PasteboardHub: ObservableObject {
     fileprivate func removeSubscriber(id: UUID) {
         subscribers.removeValue(forKey: id)
         subscriberOrigins.removeValue(forKey: id)
+        // The hub is shared, but it should not become a permanent background
+        // poller after every clipboard consumer has been disabled.
+        if subscribers.isEmpty {
+            backend.stop()
+            latestOrigin = nil
+        }
     }
 
     private func dispatch(_ snapshot: Snapshot) {

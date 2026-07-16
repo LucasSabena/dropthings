@@ -92,6 +92,7 @@ public final class FileShelfModule: DropThingsModule {
     private let reader = PasteboardItemReader()
     private let persistence: ShelfPersistence
     private let captureArchive: CaptureArchive
+    private let transientSurfaces: TransientSurfaceCoordinator?
     private let clipboardMonitor = ClipboardMonitor()
     private var screenshotFolderMonitor: DirectoryMonitor?
     private var knownScreenshotURLs = Set<URL>()
@@ -114,19 +115,35 @@ public final class FileShelfModule: DropThingsModule {
     /// is never silent. Cleared on the next successful ingest.
     @Published public private(set) var ingestError: String?
 
-    public convenience init(settings: SettingsStore, captureArchive: CaptureArchive = CaptureArchive()) {
-        self.init(settings: settings, persistence: .shared, captureArchive: captureArchive)
+    public convenience init(
+        settings: SettingsStore,
+        captureArchive: CaptureArchive = CaptureArchive(),
+        transientSurfaces: TransientSurfaceCoordinator? = nil
+    ) {
+        self.init(
+            settings: settings,
+            persistence: .shared,
+            captureArchive: captureArchive,
+            transientSurfaces: transientSurfaces
+        )
     }
 
-    internal init(settings: SettingsStore, persistence: ShelfPersistence, captureArchive: CaptureArchive = CaptureArchive()) {
+    internal init(
+        settings: SettingsStore,
+        persistence: ShelfPersistence,
+        captureArchive: CaptureArchive = CaptureArchive(),
+        transientSurfaces: TransientSurfaceCoordinator? = nil
+    ) {
         self.settingsStore = settings
         self.persistence = persistence
         self.captureArchive = captureArchive
+        self.transientSurfaces = transientSurfaces
         self.settings = settings.loadFileShelfSettings()
         clipboardMonitor.handler = { [weak self] item in self?.archiveClipboardImage(item) }
     }
 
     public func start() async throws {
+        transientSurfaces?.register(id) { [weak self] in self?.hidePanel() }
         loadPinnedFromDisk()
         ensureDefaultCollection()
         ensureCaptureCollection()
@@ -144,6 +161,7 @@ public final class FileShelfModule: DropThingsModule {
     }
 
     public func stop() async {
+        transientSurfaces?.unregister(id)
         unregisterHotkey()
         stopCaptureArchive()
         stopGestureDetection()
@@ -483,6 +501,7 @@ public final class FileShelfModule: DropThingsModule {
     // MARK: - Panel
 
     public func showPanel(near location: CGPoint? = nil) {
+        transientSurfaces?.prepareToPresent(id)
         if panel == nil {
             createPanel()
         }
@@ -499,6 +518,7 @@ public final class FileShelfModule: DropThingsModule {
     /// the payoff for the flick gesture: throw the mouse to the top, the
     /// shelf appears where the eye already is.
     public func showPanelFromNotch(on screen: NSScreen) {
+        transientSurfaces?.prepareToPresent(id)
         if panel == nil {
             createPanel()
         }
@@ -1007,6 +1027,9 @@ public final class FileShelfModule: DropThingsModule {
 
     private func createPanel() {
         let panel = ShelfPanel()
+        panel.onClose = { [weak self] in
+            self?.isPanelVisible = false
+        }
         let view = ShelfView(module: self)
         let content = ShelfContentView(rootView: AnyView(view))
         content.onDrop = { [weak self] pasteboard in
@@ -1020,6 +1043,7 @@ public final class FileShelfModule: DropThingsModule {
     private func closePanel() {
         contentView?.onDrop = nil
         contentView = nil
+        panel?.onClose = nil
         panel?.contentView = nil
         panel?.orderOut(nil as Any?)
         panel = nil

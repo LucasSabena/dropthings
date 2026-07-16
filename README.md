@@ -25,8 +25,8 @@ are enabled or when you click **Check for Updates**.
 | **Markdown Viewer** | Native tabbed GitHub-flavored Markdown viewer with Finder integration and live reload. | Automation only for the optional Finder selection shortcut |
 | **Audio Control** | Independent menu-bar mixer with system output, master volume, per-app volume, mute, solo, and routing. | System Audio Recording when an app control is first changed |
 | **Network Priority** | One-click Ethernet-first/Wi-Fi-first service order with a live menu-bar icon. | Administrator authentication when macOS requires it |
-| **Local Transcription** | Offline queue for verified Tiny/Base/Small models and 16 kHz mono PCM WAV export to TXT/JSON. Inference runs in an isolated bundled helper. | — |
-| **Media Converter** | Local batch conversion, resizing, compression and optimization. Native image conversion (PNG/JPEG/HEIC/WebP/TIFF); audio (AAC/FLAC/Opus/WAV) and video (H.264) via a bundled, reproducibly built FFmpeg helper. | — |
+| **Local Transcription · Beta** | Offline queue for verified Tiny/Base/Small models and common audio/video input, exported to TXT/JSON. Inference runs in an isolated bundled helper. | — |
+| **Media Converter · Beta** | Local batch conversion, resizing, compression and optimization. Native image conversion (PNG/JPEG/HEIC/TIFF); audio (AAC/FLAC/Opus/WAV) and video (H.264) via a bundled, reproducibly built FFmpeg helper. | — |
 
 ### Complete module inventory
 

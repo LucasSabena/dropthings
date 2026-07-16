@@ -16,6 +16,12 @@
 - Large image, promised/stale file, malformed RTF, hotkey conflict, target app quit and focus restore failure.
 - 1,000 synthetic changes remain bounded and typical text panel opens perceptually immediately.
 
+## Hardening evidence — 2026-07-16
+
+- Tests cover live snapshot publication, self-echo suppression and last-subscriber shutdown.
+- Treat-As overrides are verified to expire when `changeCount` changes.
+- A disabled/expired undo window is verified to return `nothingToUndo` rather than a false success.
+
 ## Manual matrix
 
 - Permission deny, grant and revoke paths relevant to the product.

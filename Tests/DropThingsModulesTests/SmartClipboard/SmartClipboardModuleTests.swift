@@ -50,10 +50,8 @@ final class SmartClipboardModuleTests: XCTestCase {
         XCTAssertEqual(module.state, .running)
         XCTAssertTrue(hubBackend.isRunning)
         await module.stop()
-        // The module stops itself but leaves the shared hub running so other
-        // subscribers (Clipboard History) keep observing. The app shell owns
-        // the hub lifetime, not any single module.
         XCTAssertEqual(module.state, .off)
+        XCTAssertFalse(hubBackend.isRunning)
     }
 
     func testRunningModulePublishesExternalClipboardChangesToItsSnapshot() async throws {
@@ -202,6 +200,28 @@ final class SmartClipboardModuleTests: XCTestCase {
     func testUndoWithoutCopyReturnsNothingToUndo() {
         let module = makeModule()
         XCTAssertEqual(module.undoCopy(), .nothingToUndo)
+    }
+
+    func testDisabledUndoWindowDoesNotClaimAClipboardRestore() {
+        let module = makeModule()
+        module.setUndoCopyWindow(seconds: 0)
+        pasteboard.clearContents()
+        pasteboard.setString("original", forType: .string)
+
+        module.copyResult("changed")
+
+        XCTAssertEqual(module.undoCopy(), .nothingToUndo)
+        XCTAssertEqual(pasteboard.string(forType: .string), "changed")
+    }
+
+    func testTreatAsOverrideExpiresWhenClipboardChanges() {
+        let module = makeModule()
+        let controller = SmartClipboardPanelController(module: module)
+        controller.forceKind(.json, for: 10)
+
+        XCTAssertEqual(controller.forcedKind(for: 10), .json)
+        controller.resetForcedKind(ifSnapshotChangedTo: 11)
+        XCTAssertNil(controller.forcedKind(for: 11))
     }
 
     func testPasteBackDisabledByDefault() {

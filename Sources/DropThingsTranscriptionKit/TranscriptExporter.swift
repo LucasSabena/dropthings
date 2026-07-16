@@ -56,7 +56,11 @@ public enum TranscriptExporter {
         var written: [URL] = []
         do {
             for (format, destination) in zip(formats.sorted(by: { $0.rawValue < $1.rawValue }), destinations) {
-                try data(for: document, format: format).write(to: destination, options: [.atomic, .withoutOverwriting])
+                // Foundation traps (rather than throwing) when `.atomic` and
+                // `.withoutOverwriting` are combined. Reserve the destination
+                // with the supported no-overwrite write and roll back the set
+                // below if a later format fails.
+                try data(for: document, format: format).write(to: destination, options: .withoutOverwriting)
                 written.append(destination)
             }
             return written
@@ -64,6 +68,38 @@ public enum TranscriptExporter {
             written.forEach { try? fileManager.removeItem(at: $0) }
             throw error
         }
+    }
+
+    /// Writes without overwriting an earlier transcript. Repeated runs use a
+    /// deterministic numeric suffix instead of failing the completed inference.
+    public static func writeUnique(
+        _ document: TranscriptDocument,
+        formats: Set<TranscriptOutputFormat>,
+        directory: URL,
+        baseName: String,
+        fileManager: FileManager = .default
+    ) throws -> [URL] {
+        for attempt in 1...1_000 {
+            let candidate = attempt == 1 ? baseName : "\(baseName) \(attempt)"
+            do {
+                return try write(
+                    document,
+                    formats: formats,
+                    directory: directory,
+                    baseName: candidate,
+                    fileManager: fileManager
+                )
+            } catch TranscriptExportError.outputExists {
+                continue
+            }
+        }
+        return try write(
+            document,
+            formats: formats,
+            directory: directory,
+            baseName: "\(baseName) \(UUID().uuidString.prefix(8))",
+            fileManager: fileManager
+        )
     }
 
     static func sanitizedBaseName(_ input: String) -> String {

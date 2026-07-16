@@ -101,3 +101,17 @@ browser scripting, history access, cookies, or Automation permission is used.
 - Calculator parse failures are normal “not a calculation” outcomes.
 - An unavailable Spotlight index does not prevent app/command/calculator search.
 - Failed result actions keep the palette open and display an inline error.
+
+## Keyboard ownership and transient panels — 2026-07-16
+
+- Local keyboard monitors must match the owning panel's window number as well
+  as key-window status. `orderOut` does not dismantle an `NSHostingView`, so an
+  unscoped monitor can otherwise keep consuming `C`, arrows, Return, or Escape
+  after its panel is hidden.
+- `TransientSurfaceCoordinator` in Core coordinates the Command Palette, File
+  Shelf, Clipboard History, and Smart Clipboard without module-to-module
+  imports. Presenting one dismisses the other registered surfaces.
+- The app shell dismisses all registered transient surfaces when DropThings
+  resigns active. This uses `orderOut` rather than `hidesOnDeactivate`, because
+  AppKit automatically restores a merely deactivated panel when the app becomes
+  active again.

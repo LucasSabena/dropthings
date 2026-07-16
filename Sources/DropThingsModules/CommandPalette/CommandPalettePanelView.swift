@@ -6,6 +6,7 @@ import DropThingsPlatform
 struct CommandPalettePanelView: View {
     @ObservedObject var coordinator: PaletteQueryCoordinator
     @ObservedObject var presentation: CommandPalettePresentationState
+    let keyWindowNumber: Int
     let onClose: () -> Void
 
     @State private var selection: String?
@@ -210,7 +211,10 @@ struct CommandPalettePanelView: View {
     private func installEventMonitor() {
         guard eventMonitor == nil else { return }
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.window?.isKeyWindow == true else { return event }
+            guard PanelKeyboardEventScope.accepts(
+                event,
+                expectedWindowNumber: keyWindowNumber
+            ) else { return event }
             let handled = handleKey(event)
             return handled ? nil : event
         }

@@ -120,6 +120,48 @@ final class MediaConverterPipelineTests: XCTestCase {
         } else { XCTFail("expected failure") }
     }
 
+    func testSkipConflictDoesNotInvokeEncoderAndReportsSkipped() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let source = root.appendingPathComponent("photo.png")
+        let outputDirectory = root.appendingPathComponent("output")
+        let existing = outputDirectory.appendingPathComponent("photo.jpg")
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        try Data("existing".utf8).write(to: existing)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let request = MediaConversionRequest(
+            source: source,
+            outputDirectory: outputDirectory,
+            outputFormat: .jpeg,
+            conflict: .skip
+        )
+        let probe = FakeProbe()
+        probe.result = .success(MediaProbeResult(
+            url: source,
+            kind: .image,
+            formatHint: .png,
+            fileSize: 1_000,
+            dimensions: MediaDimensions(width: 10, height: 10)
+        ))
+        let encoder = FakeImageEncoder()
+        let pipeline = MediaConverterPipeline(
+            configuration: .init(ffmpegAvailable: false),
+            probeAdapter: probe,
+            imageEncoder: encoder,
+            securityScope: NullSecurityScope(),
+            diskSpace: FixedDiskSpace(bytes: 1_000_000)
+        )
+        var skipped = false
+
+        let result = await pipeline.run(request, jobID: UUID()) { phase in
+            if case .skipped = phase { skipped = true }
+        }
+
+        XCTAssertEqual(result, .failure(.skippedExistingOutput))
+        XCTAssertTrue(skipped)
+        XCTAssertFalse(encoder.invoked)
+        XCTAssertEqual(try Data(contentsOf: existing), Data("existing".utf8))
+    }
+
     // MARK: - Cancellation
 
     func testCancellationBeforeProbeFailsCancelled() async {

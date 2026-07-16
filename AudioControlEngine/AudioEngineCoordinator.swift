@@ -18,6 +18,11 @@ actor AudioEngineCoordinator {
     private var pipelines: [String: ProcessAudioPipeline] = [:]
     private var desiredByID: [String: AudioAppDesiredState] = [:]
     private var recentlyActiveApps: [String: RecentlyActiveApp] = [:]
+    /// Starting an aggregate device is the operation that makes macOS show the
+    /// System Audio Recording prompt. Do not retry a failed start from the
+    /// periodic reconciliation loop: a denied prompt would otherwise return
+    /// while the user is merely moving a slider.
+    private var blockedPipelineStarts: [String: String] = [:]
 
     init() {
         catalog.cleanupOwnedAggregateDevices()
@@ -33,6 +38,7 @@ actor AudioEngineCoordinator {
             restoreNormalAudio()
             generation = 0
             activeSessionID = desired.sessionID
+            blockedPipelineStarts = [:]
         }
         guard desired.generation >= generation else { throw AudioControlProtocolError.staleGeneration }
         generation = desired.generation
@@ -48,6 +54,12 @@ actor AudioEngineCoordinator {
             let soloMuted = anySolo && !app.isSoloed
             let needsProcessing = !app.isIgnored && (app.requiresProcessing || soloMuted)
             guard needsProcessing else {
+                pipelines.removeValue(forKey: id)?.stop()
+                blockedPipelineStarts.removeValue(forKey: id)
+                continue
+            }
+            if let failure = blockedPipelineStarts[id] {
+                failures[id] = failure
                 pipelines.removeValue(forKey: id)?.stop()
                 continue
             }
@@ -72,17 +84,20 @@ actor AudioEngineCoordinator {
                         deviceUID: deviceUID,
                         sessionID: desired.sessionID,
                         initialGain: effectiveGain
-                    )
-                } catch {
-                    failures[id] = "Processing failed and was bypassed: \(error.localizedDescription)"
-                }
+                )
+            } catch {
+                let failure = "Audio controls could not start and were bypassed: \(error.localizedDescription). Restart the engine to try again."
+                blockedPipelineStarts[id] = failure
+                failures[id] = failure
             }
+        }
         }
 
         let desiredIDs = Set(desired.apps.map { $0.identity.stableID })
         for id in pipelines.keys where !desiredIDs.contains(id) {
             pipelines.removeValue(forKey: id)?.stop()
         }
+        blockedPipelineStarts = blockedPipelineStarts.filter { desiredIDs.contains($0.key) }
         return snapshot(failures: failures)
     }
 

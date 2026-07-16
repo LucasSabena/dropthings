@@ -32,7 +32,7 @@ when implementation begins.
 The module is fully implemented across all phases (0–4) and registered in
 `AppServices`. FFmpeg is reproducibly built and bundled.
 
-- **Native image conversion** (PNG/JPEG/HEIC/WebP/TIFF) ships through ImageIO/CoreGraphics adapters in `Sources/DropThingsPlatform/Media/`. No third-party dependency; covered by Apple SDK terms.
+- **Native image conversion** (PNG/JPEG/HEIC/TIFF) ships through ImageIO/CoreGraphics adapters in `Sources/DropThingsPlatform/Media/`. The current macOS ImageIO destination list does not provide a WebP encoder, so WebP is not exposed. No third-party dependency; covered by Apple SDK terms.
 - **`DropThingsMediaConverterKit`** (Foundation-only) holds the typed models, preset resolver, resize math, the typed FFmpeg argument builder (argument arrays, never shell strings), and the XPC wire protocol.
 - **`MediaConverterEngine`** XPC helper (mirrors `AudioControlEngine`) runs FFmpeg in an isolated process so a codec crash can never terminate DropThings. Embedded at `Contents/XPCServices/MediaConverterEngine.xpc`.
 - **Audio/video conversion** runs through the helper: `MediaConverterPipeline` routes audio/video requests to the helper via `XPCMediaConverterEngineClient`; the helper builds typed argv arrays with `FFmpegArgumentBuilder` and runs the bundled binary with `Process` (never a shell).
@@ -90,7 +90,7 @@ so the UI never offers a conversion the backend cannot perform:
 
 | Family | Encoders available | Not available (needs external lib) |
 |---|---|---|
-| Image | PNG, JPEG, HEIC, WebP, TIFF (native ImageIO) | — |
+| Image | PNG, JPEG, HEIC, TIFF (native ImageIO) | WebP (no verified encoder in the shipped backend) |
 | Audio | AAC (native), FLAC, Opus (native), PCM/WAV | MP3 (needs `libmp3lame`) |
 | Video | H.264 via `h264_videotoolbox` | HEVC is not exposed in 0.7.0; VP8/VP9/WebM needs `libvpx`; software H.264 needs GPL `libx264` |
 

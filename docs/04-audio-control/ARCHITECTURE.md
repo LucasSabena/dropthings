@@ -137,3 +137,7 @@ teardown as normal bypass: IOProc, aggregate, then tap.
 - Sleep begins controlled quiesce; wake rediscovers devices/processes and
   reconciles from desired state.
 - Permission loss or protocol mismatch triggers safe bypass/cleanup.
+- A failed process-tap/aggregate start is quarantined for that app for the
+  current engine session. Periodic reconciliation must never retry it, because
+  macOS can show the System Audio Recording permission prompt when an aggregate
+  starts. Restarting the engine is the explicit retry action.

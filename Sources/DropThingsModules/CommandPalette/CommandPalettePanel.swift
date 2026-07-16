@@ -91,6 +91,7 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: CommandPalettePanelView(
             coordinator: coordinator,
             presentation: presentation,
+            keyWindowNumber: panel.windowNumber,
             onClose: { [weak self] in self?.hide() }
         ))
         hostingView.wantsLayer = true

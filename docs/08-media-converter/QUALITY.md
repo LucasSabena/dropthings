@@ -16,6 +16,13 @@
 - Manual matrix: alpha/animated/profiled images; MP3/M4A/WAV/FLAC/Opus; MP4/MOV/MKV/WebM; corrupt and multitrack media.
 - 1,000 start/cancel cycles leave no helper/child process; 24-hour mixed queue leaves no growing temporary storage.
 
+## Beta hardening evidence — 2026-07-16
+
+- Regression coverage verifies EXIF-rotated image dimensions and normalized output pixels.
+- Portrait-video transform math is covered independently of AVFoundation fixtures.
+- Conflict Skip is verified not to call the encoder or modify the existing file.
+- Capability tests verify WebP is absent from native outputs until an encoder is shipped.
+
 ## Manual matrix
 
 - Permission deny, grant and revoke paths relevant to the product.

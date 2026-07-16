@@ -13,7 +13,7 @@ public protocol ImageEncoding: AnyObject, Sendable {
 }
 
 /// Native image encoder using ImageIO + CoreGraphics. Handles PNG/JPEG/HEIC/
-/// WebP/TIFF, resize, and metadata policy. This is the backend that works
+/// TIFF, resize, and metadata policy. This is the backend that works
 /// today without FFmpeg.
 public final class NativeImageEncoder: ImageEncoding {
     public init() {}
@@ -31,7 +31,7 @@ public final class NativeImageEncoder: ImageEncoding {
 
         // Load the source CGImage.
         guard let src = CGImageSourceCreateWithURL(source.url as CFURL, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
+              let cgImage = orientedImage(from: src, maximumPixelSize: sourceDims.longestEdge) else {
             return .failure(.probeFailed(reason: "Could not read the source image."))
         }
 
@@ -69,6 +69,9 @@ public final class NativeImageEncoder: ImageEncoding {
             policy: request.metadata,
             format: request.outputFormat
         )
+        // Pixel data has already been transformed to display orientation.
+        // Persisting the source orientation would rotate it a second time.
+        properties[kCGImagePropertyOrientation] = 1
         if isLossy(request.outputFormat) {
             properties[kCGImageDestinationLossyCompressionQuality] = Double(request.quality) / 100.0
         }
@@ -124,5 +127,15 @@ public final class NativeImageEncoder: ImageEncoding {
         ctx.interpolationQuality = .high
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: dims.width, height: dims.height))
         return ctx.makeImage()
+    }
+
+    private func orientedImage(from source: CGImageSource, maximumPixelSize: Int) -> CGImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, maximumPixelSize),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }

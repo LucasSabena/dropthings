@@ -55,6 +55,27 @@ final class TranscriptExporterTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Audio Transcript.json").path))
     }
 
+    func testUniqueWriteSuffixesRepeatedTranscriptWithoutOverwriting() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let existing = directory.appendingPathComponent("Audio Transcript.txt")
+        try Data("keep".utf8).write(to: existing)
+
+        let outputs = try TranscriptExporter.writeUnique(
+            fixture(),
+            formats: [.text, .json],
+            directory: directory,
+            baseName: "Audio Transcript"
+        )
+
+        XCTAssertEqual(Set(outputs.map(\.lastPathComponent)), [
+            "Audio Transcript 2.txt",
+            "Audio Transcript 2.json"
+        ])
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep")
+    }
+
     private func fixture() throws -> TranscriptDocument {
         try TranscriptDocument(
             jobID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,

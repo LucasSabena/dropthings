@@ -176,6 +176,7 @@ private struct SidebarModuleRow: View {
         Label {
             HStack(spacing: DTSpace.xs) {
                 Text(module.name)
+                ModuleReleaseBadge(stage: module.releaseStage)
                 Spacer(minLength: 0)
                 Circle()
                     .fill(statusColor)
@@ -372,8 +373,11 @@ private struct UtilityRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
 
             VStack(alignment: .leading, spacing: DTSpace.xxs) {
-                Text(module.name)
-                    .font(DTTypography.body.weight(.semibold))
+                HStack(spacing: DTSpace.xs) {
+                    Text(module.name)
+                        .font(DTTypography.body.weight(.semibold))
+                    ModuleReleaseBadge(stage: module.releaseStage)
+                }
                 Text(module.summary)
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)
@@ -544,8 +548,11 @@ private struct ModuleDetailView: View {
                 .background(DTColor.surfaceRaised)
                 .clipShape(RoundedRectangle(cornerRadius: DTRadius.lg, style: .continuous))
             VStack(alignment: .leading, spacing: DTSpace.xxs) {
-                Text(module.name)
-                    .font(DTTypography.pageTitle)
+                HStack(spacing: DTSpace.sm) {
+                    Text(module.name)
+                        .font(DTTypography.pageTitle)
+                    ModuleReleaseBadge(stage: module.releaseStage)
+                }
                 Text(module.summary)
                     .font(DTTypography.body)
                     .foregroundStyle(DTColor.textSecondary)

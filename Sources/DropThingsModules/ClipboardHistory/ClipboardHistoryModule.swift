@@ -28,17 +28,23 @@ public final class ClipboardHistoryModule: DropThingsModule {
     private let origin = PasteboardHub.OriginToken("modules.clipboard-history")
     private var hubSubscription: PasteboardHub.Subscription?
     private let persistence: any ClipboardHistoryPersisting
+    private let transientSurfaces: TransientSurfaceCoordinator?
     private var hotkey: GlobalHotkey?
     private var hotkeyHealth = HotkeyRegistrationHealth()
     private var panel: ClipboardHistoryPanelController?
     private var persistenceTask: Task<Void, Never>?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "clipboard-history")
 
-    public convenience init(settings: SettingsStore, permissions: PermissionCenter) {
+    public convenience init(
+        settings: SettingsStore,
+        permissions: PermissionCenter,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
+    ) {
         self.init(
             settings: settings,
             persistence: ClipboardHistoryStore.live(),
-            hub: PasteboardHub(backend: ClipboardMonitor())
+            hub: PasteboardHub(backend: ClipboardMonitor()),
+            transientSurfaces: transientSurfaces
         )
     }
 
@@ -46,17 +52,29 @@ public final class ClipboardHistoryModule: DropThingsModule {
     /// Clipboard share a single pasteboard observer. `permissions` is kept in
     /// the signature to preserve source compatibility with the existing
     /// convenience initializer.
-    public convenience init(settings: SettingsStore, permissions: PermissionCenter, hub: PasteboardHub) {
-        self.init(settings: settings, persistence: ClipboardHistoryStore.live(), hub: hub)
+    public convenience init(
+        settings: SettingsStore,
+        permissions: PermissionCenter,
+        hub: PasteboardHub,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
+    ) {
+        self.init(
+            settings: settings,
+            persistence: ClipboardHistoryStore.live(),
+            hub: hub,
+            transientSurfaces: transientSurfaces
+        )
     }
 
     internal init(
         settings: SettingsStore,
         persistence: any ClipboardHistoryPersisting,
-        hub: PasteboardHub? = nil
+        hub: PasteboardHub? = nil,
+        transientSurfaces: TransientSurfaceCoordinator? = nil
     ) {
         self.settingsStore = settings
         self.persistence = persistence
+        self.transientSurfaces = transientSurfaces
         let loadedSettings = settings.loadClipboardHistorySettings()
         self.settings = loadedSettings
         self.items = loadedSettings.pinnedItems
@@ -73,6 +91,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
     }
 
     public func start() async throws {
+        transientSurfaces?.register(id) { [weak self] in self?.hideHistoryPanel() }
         await restorePersistentHistory()
         registerHotkey()
         if let hub {
@@ -91,6 +110,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
     }
 
     public func stop() async {
+        transientSurfaces?.unregister(id)
         persistenceTask?.cancel()
         persistenceTask = nil
         await persist(items)
@@ -142,6 +162,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
     // MARK: - Public actions
 
     public func showHistoryPanel() {
+        transientSurfaces?.prepareToPresent(id)
         panel?.show()
     }
 
@@ -251,6 +272,7 @@ public final class ClipboardHistoryModule: DropThingsModule {
 
     public func copyToPasteboard(_ item: ClipboardItem) {
         let pb = NSPasteboard.general
+        hub?.recordWrite(origin: origin)
         pb.clearContents()
         switch item.type {
         case .plainText:
@@ -278,7 +300,6 @@ public final class ClipboardHistoryModule: DropThingsModule {
             // Always also expose the hex string so plain-text paste targets work.
             pb.setString(item.content, forType: .string)
         }
-        hub?.recordWrite(origin: origin)
         logger.notice("Copied history item \(item.id) to pasteboard")
     }
 

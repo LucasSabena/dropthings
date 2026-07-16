@@ -24,7 +24,7 @@ final class MediaConverterWindowController: NSObject, NSWindowDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Media Converter"
+            window.title = "Media Converter — Beta"
             window.minSize = NSSize(width: 620, height: 520)
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: content)
@@ -34,5 +34,9 @@ final class MediaConverterWindowController: NSObject, NSWindowDelegate {
         window?.center()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func hide() {
+        window?.orderOut(nil)
     }
 }

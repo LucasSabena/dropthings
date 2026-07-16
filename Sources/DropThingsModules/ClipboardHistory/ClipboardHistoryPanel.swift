@@ -62,7 +62,11 @@ final class ClipboardHistoryPanelController {
     private func refreshContent() {
         guard let module, let panel else { return }
         let root = AnyView(
-            ClipboardHistoryPanelView(module: module, onClose: { [weak self] in self?.hide() })
+            ClipboardHistoryPanelView(
+                module: module,
+                keyWindowNumber: panel.windowNumber,
+                onClose: { [weak self] in self?.hide() }
+            )
                 .frame(minWidth: 720, minHeight: 460)
         )
         (panel.contentView as? NSHostingView<AnyView>)?.rootView = root

@@ -18,6 +18,7 @@ public final class CommandPaletteModule: DropThingsModule {
     public let coordinator: PaletteQueryCoordinator
 
     private let settingsStore: SettingsStore
+    private let transientSurfaces: TransientSurfaceCoordinator?
     private let applicationCatalog: any ApplicationCataloging
     private let hotkeyFactory: @MainActor (GlobalHotkey.Definition, @escaping @MainActor () -> Void) -> any CommandPaletteHotkeyRegistration
     private var hotkey: (any CommandPaletteHotkeyRegistration)?
@@ -32,9 +33,11 @@ public final class CommandPaletteModule: DropThingsModule {
     public init(
         settings: SettingsStore,
         permissions: PermissionCenter,
-        commandSource: @escaping @MainActor () -> [CommandDescriptor]
+        commandSource: @escaping @MainActor () -> [CommandDescriptor],
+        transientSurfaces: TransientSurfaceCoordinator? = nil
     ) {
         self.settingsStore = settings
+        self.transientSurfaces = transientSurfaces
         let loaded = settings.loadCommandPaletteSettings()
         self.settings = loaded
         let catalog = ApplicationCatalog()
@@ -59,11 +62,13 @@ public final class CommandPaletteModule: DropThingsModule {
         applicationCatalog: any ApplicationCataloging,
         spotlight: any SpotlightFileSearching,
         workspace: PaletteWorkspace,
+        transientSurfaces: TransientSurfaceCoordinator? = nil,
         hotkeyFactory: @escaping @MainActor (GlobalHotkey.Definition, @escaping @MainActor () -> Void) -> any CommandPaletteHotkeyRegistration = { GlobalHotkey(definition: $0, onFire: $1) }
     ) {
         let loaded = settings.loadCommandPaletteSettings()
         let history = PaletteHistoryStore(settings: settings)
         self.settingsStore = settings
+        self.transientSurfaces = transientSurfaces
         self.settings = loaded
         self.applicationCatalog = applicationCatalog
         self.hotkeyFactory = hotkeyFactory
@@ -80,6 +85,7 @@ public final class CommandPaletteModule: DropThingsModule {
     }
 
     public func start() async throws {
+        transientSurfaces?.register(id) { [weak self] in self?.hide() }
         coordinator.start()
         startApplicationMonitors()
         registerHotkey()
@@ -88,6 +94,7 @@ public final class CommandPaletteModule: DropThingsModule {
     }
 
     public func stop() async {
+        transientSurfaces?.unregister(id)
         unregisterHotkey()
         stopApplicationMonitors()
         coordinator.stop()
@@ -105,6 +112,7 @@ public final class CommandPaletteModule: DropThingsModule {
     }
 
     public func show() {
+        transientSurfaces?.prepareToPresent(id)
         coordinator.prepareForPresentation()
         panel.show()
     }

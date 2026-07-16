@@ -28,6 +28,7 @@ public struct MediaOrientation: Hashable, Sendable, Codable {
     public init(rawValue: Int) { self.rawValue = rawValue }
     public static let up = MediaOrientation(rawValue: 1)
     public var isUp: Bool { rawValue == 1 }
+    public var swapsAxes: Bool { [5, 6, 7, 8].contains(rawValue) }
 }
 
 /// Result of probing a source file. All fields optional except `kind`, `format`,

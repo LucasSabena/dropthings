@@ -41,6 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillResignActive(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            AppServices.shared.transientSurfaces.dismissAll()
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Force UserDefaults to flush before the runloop tears down. Without
         // this, a setting changed a few seconds before quit can be lost if the

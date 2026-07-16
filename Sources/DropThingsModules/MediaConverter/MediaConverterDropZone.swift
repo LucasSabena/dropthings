@@ -21,7 +21,13 @@ struct MediaConverterDropZone: View {
     init(module: MediaConverterModule, advanced: Bool) {
         self.module = module
         self.advanced = advanced
-        _selectedPreset = State(initialValue: module.settings.defaultPreset)
+        let available = MediaPreset.shipped.filter {
+            module.ffmpegAvailable || $0.applicableKinds == [.image]
+        }
+        let preferred = available.contains(where: { $0.id == module.settings.defaultPreset })
+            ? module.settings.defaultPreset
+            : (available.first?.id ?? .webImage)
+        _selectedPreset = State(initialValue: preferred)
         _selectedFormat = State(initialValue: .jpeg)
         _selectedKind = State(initialValue: .image)
     }
@@ -30,7 +36,7 @@ struct MediaConverterDropZone: View {
         VStack(alignment: .leading, spacing: DTSpace.md) {
             if !advanced {
                 Picker("Preset", selection: $selectedPreset) {
-                    ForEach(MediaPreset.shipped.filter { module.ffmpegAvailable || $0.applicableKinds == [.image] }) { preset in
+                    ForEach(availablePresets) { preset in
                         Text(preset.title).tag(preset.id)
                     }
                 }
@@ -114,6 +120,10 @@ struct MediaConverterDropZone: View {
             .frame(minHeight: 140)
             .onDrop(of: [.fileURL], delegate: self)
         }
+    }
+
+    private var availablePresets: [MediaPreset] {
+        MediaPreset.shipped.filter { module.ffmpegAvailable || $0.applicableKinds == [.image] }
     }
 
     private func label(for format: MediaFormatID) -> String {

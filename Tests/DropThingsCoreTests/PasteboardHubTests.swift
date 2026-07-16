@@ -48,6 +48,21 @@ final class PasteboardHubTests: XCTestCase {
         backend.emit(makeSnapshot())
 
         XCTAssertEqual(count, 1)
+        XCTAssertFalse(backend.isRunning)
+    }
+
+    func testObserverKeepsRunningUntilLastSubscriberCancels() {
+        let backend = FakePasteboardBackend()
+        let hub = PasteboardHub(backend: backend)
+        let first = hub.subscribe(origin: .init("first")) { _ in }
+        let second = hub.subscribe(origin: .init("second")) { _ in }
+        hub.start()
+
+        first.cancel()
+        XCTAssertTrue(backend.isRunning)
+
+        second.cancel()
+        XCTAssertFalse(backend.isRunning)
     }
 
     func testOriginSuppressionDropsEchoForAuthoringSubscriber() {

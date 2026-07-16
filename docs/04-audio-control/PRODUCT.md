@@ -47,8 +47,9 @@
 - Disabled, unavailable OS, needs System Audio Recording permission, starting,
   running, degraded per app/device, and failed engine with restart/bypass action.
 - Add `NSAudioCaptureUsageDescription` before invoking taps.
-- Prompt only when the user enables the module or explicitly starts the first
-  controlled app; denial leaves normal audio untouched.
+- Prompt only when the user enables an app control for the first time; denial
+  leaves normal audio untouched. A failed/denied request is not retried from
+  background reconciliation; restarting the engine is the explicit retry.
 
 ## Settings
 

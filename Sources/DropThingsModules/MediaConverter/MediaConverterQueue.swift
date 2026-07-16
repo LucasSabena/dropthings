@@ -89,6 +89,11 @@ public final class MediaConverterQueue: ObservableObject {
         items[index].phase = phase
     }
 
+    public func acceptPipelinePhase(_ phase: MediaItemPhase, for id: UUID) {
+        guard let item = items.first(where: { $0.id == id }), !item.phase.isTerminal else { return }
+        setPhase(phase, for: id)
+    }
+
     /// Report fractional progress. Throttled: only flushes to the published
     /// property at most every `throttleInterval` seconds, so a long encode does
     /// not starve the main actor.

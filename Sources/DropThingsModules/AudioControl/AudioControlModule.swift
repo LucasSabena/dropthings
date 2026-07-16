@@ -64,13 +64,8 @@ public final class AudioControlModule: DropThingsModule {
     }
 
     public var menuBarIconName: String {
-        guard let output = systemOutputState else { return "speaker.wave.2" }
-        if output.isMuted || (output.volume ?? 0) <= 0.001 { return "speaker.slash.fill" }
-        switch output.volume ?? 0 {
-        case ..<0.34: return "speaker.wave.1.fill"
-        case ..<0.67: return "speaker.wave.2.fill"
-        default: return "speaker.wave.3.fill"
-        }
+        guard let output = defaultOutput else { return "speaker.wave.2.fill" }
+        return outputIconName(for: output)
     }
 
     public func start() async throws {
@@ -153,6 +148,22 @@ public final class AudioControlModule: DropThingsModule {
         settings.appsByStableID.values
             .filter(\.isIgnored)
             .sorted { $0.identity.displayName.localizedCaseInsensitiveCompare($1.identity.displayName) == .orderedAscending }
+    }
+
+    private func outputIconName(for device: AudioDeviceIdentity) -> String {
+        let name = device.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        if ["headphone", "airpod", "earbud", "earphone", "auricular"].contains(where: name.contains) {
+            return "headphones"
+        }
+        if ["speaker", "parlante", "homepod", "sonos"].contains(where: name.contains) {
+            return "hifispeaker.fill"
+        }
+        switch device.transport {
+        case "Built-in": return "hifispeaker.fill"
+        case "Display": return "display"
+        case "AirPlay": return "airplayaudio"
+        default: return "hifispeaker.fill"
+        }
     }
 
     public func setVolume(_ volume: Double, for identity: AudioAppIdentity) {

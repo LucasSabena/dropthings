@@ -21,6 +21,12 @@ measurements, cancellation/crash fault injection, long-media soak and accessibil
 screenshots remain release evidence to collect before claiming the full product
 definition of done.
 
+## Beta hardening evidence — 2026-07-16
+
+- Export tests cover repeated TXT+JSON output sets without overwrite or process traps.
+- Module tests verify the Beta release stage and availability lifecycle.
+- Queue progress is identity-gated so late callbacks cannot replace Completed, Failed or Cancelled.
+
 ## Safety invariants
 
 - Select multiple common audio/video files, choose model/language/outputs and run a visible cancellable local queue.

@@ -8,7 +8,7 @@ final class MediaCapabilityManifestTests: XCTestCase {
         XCTAssertTrue(m.canEncode(.png, ffmpegAvailable: false))
         XCTAssertTrue(m.canEncode(.jpeg, ffmpegAvailable: false))
         XCTAssertTrue(m.canEncode(.heic, ffmpegAvailable: false))
-        XCTAssertTrue(m.canEncode(.webp, ffmpegAvailable: false))
+        XCTAssertFalse(m.canEncode(.webp, ffmpegAvailable: false))
     }
 
     func testAudioFormatsRequireFFmpeg() {

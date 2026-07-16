@@ -12,6 +12,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
     public let id = ModuleID.localTranscription
     public let name = "Local Transcription"
     public let summary = "Transcribe audio and video locally into timestamped text."
+    public let releaseStage: ModuleReleaseStage = .beta
     public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
@@ -29,10 +30,12 @@ public final class LocalTranscriptionModule: DropThingsModule {
     private lazy var windowController = LocalTranscriptionWindowController(module: self)
     private var queueTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
+    private var modelOperationToken: UUID?
     private var activeJobID: UUID?
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "local-transcription")
 
     var isProcessing: Bool { activeJobID != nil }
+    var canProcess: Bool { state.isActive }
     var hasWaitingItems: Bool { queue.contains { $0.status == .waiting } }
     var hasFinishedItems: Bool {
         queue.contains {
@@ -87,6 +90,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
 
     public func stop() async {
         queueTask?.cancel()
+        modelOperationToken = nil
         modelTask?.cancel()
         if let activeJobID {
             await client.cancel(jobID: activeJobID)
@@ -94,7 +98,9 @@ public final class LocalTranscriptionModule: DropThingsModule {
         }
         queueTask = nil
         modelTask = nil
+        modelOperation = nil
         activeJobID = nil
+        windowController.hide()
         state = .off
     }
 
@@ -140,8 +146,23 @@ public final class LocalTranscriptionModule: DropThingsModule {
         }
     }
 
+    public func retryQueueItem(id: UUID) {
+        guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
+        switch queue[index].status {
+        case .failed, .cancelled:
+            queue[index].status = .waiting
+            notice = nil
+        case .waiting, .active, .completed:
+            break
+        }
+    }
+
     public func startQueue() {
         guard queueTask == nil else { return }
+        guard canProcess else {
+            notice = "Enable Local Transcription before starting the queue."
+            return
+        }
         guard installedModels.contains(settings.selectedModel) else {
             notice = "Install the selected model before starting the queue."
             return
@@ -168,16 +189,23 @@ public final class LocalTranscriptionModule: DropThingsModule {
 
     public func downloadModel(_ id: TranscriptionModelID) {
         guard modelOperation == nil else { return }
+        let operationToken = UUID()
+        modelOperationToken = operationToken
         modelOperation = id
         notice = "Downloading \(CuratedTranscriptionModels.descriptor(for: id).displayName)… Audio is not uploaded."
         modelTask = Task {
             do {
                 try await modelManager.download(id)
+                guard modelOperationToken == operationToken else { return }
                 installedModels = await modelManager.installedModelIDs()
+                guard modelOperationToken == operationToken else { return }
                 notice = "The model was downloaded and verified."
             } catch {
+                guard modelOperationToken == operationToken else { return }
                 notice = error.localizedDescription
             }
+            guard modelOperationToken == operationToken else { return }
+            modelOperationToken = nil
             modelOperation = nil
             modelTask = nil
         }
@@ -190,15 +218,22 @@ public final class LocalTranscriptionModule: DropThingsModule {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let source = panel.url else { return }
+        let operationToken = UUID()
+        modelOperationToken = operationToken
         modelOperation = id
         modelTask = Task {
             do {
                 try await modelManager.importModel(from: source, as: id)
+                guard modelOperationToken == operationToken else { return }
                 installedModels = await modelManager.installedModelIDs()
+                guard modelOperationToken == operationToken else { return }
                 notice = "The imported model was verified."
             } catch {
+                guard modelOperationToken == operationToken else { return }
                 notice = error.localizedDescription
             }
+            guard modelOperationToken == operationToken else { return }
+            modelOperationToken = nil
             modelOperation = nil
             modelTask = nil
         }
@@ -206,15 +241,22 @@ public final class LocalTranscriptionModule: DropThingsModule {
 
     public func deleteModel(_ id: TranscriptionModelID) {
         guard modelOperation == nil else { return }
+        let operationToken = UUID()
+        modelOperationToken = operationToken
         modelOperation = id
         modelTask = Task {
             do {
                 try await modelManager.delete(id)
+                guard modelOperationToken == operationToken else { return }
                 installedModels = await modelManager.installedModelIDs()
+                guard modelOperationToken == operationToken else { return }
                 notice = "The model was removed."
             } catch {
+                guard modelOperationToken == operationToken else { return }
                 notice = error.localizedDescription
             }
+            guard modelOperationToken == operationToken else { return }
+            modelOperationToken = nil
             modelOperation = nil
             modelTask = nil
         }
@@ -228,6 +270,7 @@ public final class LocalTranscriptionModule: DropThingsModule {
         while let item = queue.first(where: { $0.status == .waiting }) {
             if Task.isCancelled { break }
             activeJobID = item.id
+            setStatus(.active(.init(phase: .inspect)), for: item.id)
             do {
                 let snapshot = settings
                 let outputs = try await process(item, settings: snapshot)
@@ -275,13 +318,13 @@ public final class LocalTranscriptionModule: DropThingsModule {
                 initialPrompt: snapshot.initialPrompt
             )
             let document = try await client.transcribe(request) { [weak self] progress in
-                Task { @MainActor in self?.setStatus(.active(progress), for: item.id) }
+                Task { @MainActor in self?.setProgress(progress, for: item.id) }
             }
             try Task.checkCancellation()
             await modelManager.release(modelID)
             let outputDirectory = item.sourceURL.deletingLastPathComponent()
             let baseName = item.sourceURL.deletingPathExtension().lastPathComponent + " Transcript"
-            return try TranscriptExporter.write(
+            return try TranscriptExporter.writeUnique(
                 document,
                 formats: snapshot.outputFormats,
                 directory: outputDirectory,
@@ -296,6 +339,17 @@ public final class LocalTranscriptionModule: DropThingsModule {
     private func setStatus(_ status: TranscriptionQueueItem.Status, for id: UUID) {
         guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
         queue[index].status = status
+    }
+
+    private func setProgress(_ progress: TranscriptionProgress, for id: UUID) {
+        guard activeJobID == id,
+              let index = queue.firstIndex(where: { $0.id == id }) else { return }
+        switch queue[index].status {
+        case .waiting, .active:
+            queue[index].status = .active(progress)
+        case .completed, .failed, .cancelled:
+            break
+        }
     }
 
 }

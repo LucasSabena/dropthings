@@ -255,14 +255,6 @@ private struct ModuleMenuBarPopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(",")
-                Button {
-                    NSApp.terminate(nil)
-                } label: {
-                    Text("Quit")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .keyboardShortcut("q")
             }
             .padding(.horizontal, DTSpace.md)
             .frame(height: DTSize.moduleMenuBarFooterHeight)

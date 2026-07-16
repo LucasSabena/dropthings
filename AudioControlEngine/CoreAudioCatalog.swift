@@ -159,23 +159,37 @@ struct CoreAudioCatalog {
         let containerBundle = application.flatMap(containingApplicationBundle)
         let installedBundle = reportedBundleID?.nonEmpty
             .flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
-            .flatMap(Bundle.init(url:))
+            .flatMap(containingApplicationBundle)
+
+        // A Core Audio process commonly belongs to an Electron/Chromium helper.
+        // Resolve that helper to the outer app, then prefer the running app that
+        // owns the bundle. This keeps Canva and Edge as a single, recognizable
+        // mixer entry rather than exposing their internal process names.
+        let owningBundle = containerBundle ?? installedBundle
+        let ownerApplication = owningBundle.flatMap(runningUserFacingApplication)
+
         // Only surface identities that resolve to a real application bundle.
         // Core Audio also reports helpers, agents and daemons; showing their
         // executable names makes the mixer noisy and misleading.
-        guard containerBundle != nil || installedBundle != nil else {
+        guard let owningBundle else {
             return nil
         }
-        let bundleID = containerBundle?.bundleIdentifier
+
+        // A prohibited process without a regular/accessory app owner is a
+        // background helper (for example PowerChime), not a mixer app.
+        guard ownerApplication != nil || application?.activationPolicy != .prohibited else {
+            return nil
+        }
+
+        let bundleID = owningBundle.bundleIdentifier
+            ?? ownerApplication?.bundleIdentifier
             ?? application?.bundleIdentifier
-            ?? installedBundle?.bundleIdentifier
         let fallback = application?.executableURL?.path
-            ?? installedBundle?.bundleURL.path
+            ?? owningBundle.bundleURL.path
             ?? "unidentified-audio-process"
-        let displayName = (containerBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (containerBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? (installedBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (installedBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+        let displayName = (owningBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (owningBundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? ownerApplication?.localizedName
             ?? application?.localizedName
             ?? bundleID
             ?? URL(fileURLWithPath: fallback).lastPathComponent
@@ -186,10 +200,24 @@ struct CoreAudioCatalog {
     /// uses only public bundle paths and keeps Electron helpers such as Discord
     /// Renderer from appearing as unrelated applications.
     private func containingApplicationBundle(_ application: NSRunningApplication) -> Bundle? {
-        guard let bundleURL = application.bundleURL else { return nil }
-        let components = bundleURL.pathComponents
+        guard let url = application.bundleURL ?? application.executableURL else { return nil }
+        return containingApplicationBundle(at: url)
+    }
+
+    private func containingApplicationBundle(at url: URL) -> Bundle? {
+        let components = url.standardizedFileURL.pathComponents
         guard let appIndex = components.firstIndex(where: { $0.hasSuffix(".app") }) else { return nil }
-        return Bundle(url: URL(fileURLWithPath: "/").appendingPathComponent(components[1...appIndex].joined(separator: "/")))
+        let relativePath = components.dropFirst().prefix(appIndex).joined(separator: "/")
+        return Bundle(url: URL(fileURLWithPath: "/").appendingPathComponent(relativePath))
+    }
+
+    private func runningUserFacingApplication(owning bundle: Bundle) -> NSRunningApplication? {
+        let bundleURL = bundle.bundleURL.standardizedFileURL
+        return NSWorkspace.shared.runningApplications.first { candidate in
+            guard candidate.activationPolicy != .prohibited,
+                  let candidateBundle = containingApplicationBundle(candidate) else { return false }
+            return candidateBundle.bundleURL.standardizedFileURL == bundleURL
+        }
     }
 
     private func outputChannelCount(_ device: AudioObjectID) -> Int {

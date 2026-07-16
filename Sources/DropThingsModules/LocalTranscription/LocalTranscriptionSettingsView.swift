@@ -16,7 +16,7 @@ struct LocalTranscriptionSettingsView: View {
                         VStack(alignment: .leading, spacing: DTSpace.xxs) {
                             Text("Transcription queue")
                                 .font(DTTypography.body)
-                            Text("Phase 1 accepts 16 kHz mono 16-bit PCM WAV files.")
+                            Text("Accepts common audio and video formats and normalizes them locally before transcription.")
                                 .font(DTTypography.caption)
                                 .foregroundStyle(DTColor.textSecondary)
                         }

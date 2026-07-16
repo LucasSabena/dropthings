@@ -32,6 +32,17 @@ The Phase 1 vertical slice is implemented, packaged and registered in `AppServic
 The packaged helper and a real Tiny-model fixture have been proven. Queue
 persistence, SRT/VTT/Markdown, VAD and review remain explicitly in Phases 2–3.
 
+## Beta hardening — 2026-07-16
+
+The module is visibly labeled Beta in its shared app surfaces and workspace.
+Repeated transcription of the same source now creates a numeric-suffixed output
+set instead of throwing after inference, while preserving all existing files.
+Failed and cancelled queue items can be retried. Delayed progress callbacks can
+update only the currently active, nonterminal item. Model operations carry an
+identity token so a cancelled download/import/delete cannot later clear a newer
+operation's state. Disabling the module hides the workspace, and queue execution
+is blocked while the module is not operational.
+
 ## Delivery phases
 
 1. Phase 0: pin/build whisper.cpp, measure Tiny/Base/Small Spanish/English, prove helper packaging/cancel/crash and decide Metal/Core ML policy.

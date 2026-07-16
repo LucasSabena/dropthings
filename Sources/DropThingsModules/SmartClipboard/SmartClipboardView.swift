@@ -13,6 +13,7 @@ struct SmartClipboardPanelView: View {
     @State private var didCopy = false
     @State private var pasteBackResult: SmartClipboardModule.PasteBackResult?
     @State private var undoResult: SmartClipboardModule.UndoResult?
+    @State private var titleFetchTask: Task<Void, Never>?
 
     private var snapshot: SmartClipboardSnapshot? { module.currentSnapshot() }
 
@@ -29,6 +30,13 @@ struct SmartClipboardPanelView: View {
         .background(DTColor.background)
         .onAppear {
             module.refreshSnapshot()
+        }
+        .onChange(of: snapshot?.changeCount) { _, _ in
+            resetActionState()
+        }
+        .onDisappear {
+            titleFetchTask?.cancel()
+            titleFetchTask = nil
         }
     }
 
@@ -78,13 +86,15 @@ struct SmartClipboardPanelView: View {
     private var treatAsMenu: some View {
         Menu {
             Button("Auto-detect") {
-                controller.forcedKind = nil
+                controller.forceKind(nil, for: snapshot?.changeCount)
+                resetActionState()
                 module.refreshSnapshot()
             }
             Divider()
             ForEach(allTreatAsKinds, id: \.self) { kind in
                 Button(kind.label) {
-                    controller.forcedKind = kind
+                    controller.forceKind(kind, for: snapshot?.changeCount)
+                    resetActionState()
                     module.refreshSnapshot()
                 }
             }
@@ -267,8 +277,7 @@ struct SmartClipboardPanelView: View {
             }
             Spacer()
             Button {
-                module.undoCopy()
-                undoResult = .restored
+                undoResult = module.undoCopy()
             } label: {
                 Label("Undo copy", systemImage: "arrow.uturn.backward")
             }
@@ -303,9 +312,16 @@ struct SmartClipboardPanelView: View {
     private func runAction(_ action: SmartClipboardAction) {
         guard let snapshot else { return }
         if case .urlTitleFetch = action.body {
-            Task { @MainActor in
+            titleFetchTask?.cancel()
+            let changeCount = snapshot.changeCount
+            titleFetchTask = Task { @MainActor in
                 fetchingTitle = true
                 let result = await module.fetchURLTitle(for: snapshot)
+                guard !Task.isCancelled,
+                      module.currentSnapshot()?.changeCount == changeCount else {
+                    fetchingTitle = false
+                    return
+                }
                 outcome = result
                 if let text = result.copyableText {
                     module.copyResult(text)
@@ -313,6 +329,7 @@ struct SmartClipboardPanelView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
                 }
                 fetchingTitle = false
+                titleFetchTask = nil
             }
             return
         }
@@ -346,6 +363,16 @@ struct SmartClipboardPanelView: View {
             didCopy = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
         }
+    }
+
+    private func resetActionState() {
+        titleFetchTask?.cancel()
+        titleFetchTask = nil
+        outcome = nil
+        fetchingTitle = false
+        didCopy = false
+        pasteBackResult = nil
+        undoResult = nil
     }
 }
 

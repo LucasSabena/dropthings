@@ -42,7 +42,7 @@ public final class NativeMediaProbe: MediaProbing {
                 return .success(try probeImage(url: url, fileSize: fileSize, type: resolved))
             }
             if resolved.conforms(to: .audio) || resolved.conforms(to: .movie) || resolved.conforms(to: .audiovisualContent) {
-                return .success(try await probeAV(url: url, fileSize: fileSize, type: resolved, isVideo: resolved.conforms(to: .movie) || resolved.conforms(to: .audiovisualContent)))
+                return .success(try await probeAV(url: url, fileSize: fileSize, type: resolved))
             }
         } catch let error as MediaConverterError {
             return .failure(error)
@@ -65,23 +65,27 @@ public final class NativeMediaProbe: MediaProbing {
         let height = (props[kCGImagePropertyPixelHeight] as? Int) ?? 0
         let hasAlpha = (props[kCGImagePropertyHasAlpha] as? Bool) ?? false
         let orientationRaw = props[kCGImagePropertyOrientation] as? Int
+        let orientation = orientationRaw.map { MediaOrientation(rawValue: $0) }
         let colorProfile = props[kCGImagePropertyColorModel] as? String
+        let dimensions = orientation?.swapsAxes == true
+            ? MediaDimensions(width: height, height: width)
+            : MediaDimensions(width: width, height: height)
 
         return MediaProbeResult(
             url: url,
             kind: .image,
             formatHint: formatID(for: type),
             fileSize: fileSize,
-            dimensions: MediaDimensions(width: width, height: height),
+            dimensions: dimensions,
             hasAlpha: hasAlpha,
-            orientation: orientationRaw.map { MediaOrientation(rawValue: $0) },
+            orientation: orientation,
             colorProfileName: colorProfile
         )
     }
 
     // MARK: - Audio / Video (AVFoundation)
 
-    private func probeAV(url: URL, fileSize: Int64, type: UTType, isVideo: Bool) async throws -> MediaProbeResult {
+    private func probeAV(url: URL, fileSize: Int64, type: UTType) async throws -> MediaProbeResult {
         let asset = AVURLAsset(url: url)
         let loadedDuration = try? await asset.load(.duration)
         let durationSeconds: Double? = loadedDuration.flatMap {
@@ -89,33 +93,41 @@ public final class NativeMediaProbe: MediaProbing {
             return seconds.isFinite && seconds > 0 ? seconds : nil
         }
 
-        let tracks = (try? await asset.loadTracks(withMediaType: isVideo ? .video : .audio)) ?? []
+        // Inspect actual tracks instead of deriving the kind from UTType.
+        // `UTType.audiovisualContent` is a parent of both audio and video, so
+        // using that conformance classified ordinary audio files as video.
+        let videoTracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+        let audioTracks = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
+        guard !videoTracks.isEmpty || !audioTracks.isEmpty else {
+            throw MediaConverterError.probeFailed(reason: "The file contains no readable audio or video tracks.")
+        }
         var dimensions: MediaDimensions?
         var frameRate: Double?
         var sampleRate: Double?
         var channelCount: Int?
 
-        for track in tracks {
-            if track.mediaType == .video {
-                let natural = try? await track.load(.naturalSize)
-                let rate = try? await track.load(.nominalFrameRate)
-                if let natural {
-                    dimensions = MediaDimensions(width: Int(natural.width), height: Int(natural.height))
-                }
-                if let rate, rate > 0, frameRate == nil { frameRate = Double(rate) }
-            } else if track.mediaType == .audio {
-                // Read the stream basic description from the first audio format
-                // description. This is the macOS-14-safe async path.
-                let descriptions = (try? await track.load(.formatDescriptions)) ?? []
-                for desc in descriptions {
-                    if let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
-                        let asbd = asbdPtr.pointee
-                        if sampleRate == nil, asbd.mSampleRate > 0 {
-                            sampleRate = Double(asbd.mSampleRate)
-                        }
-                        if channelCount == nil, asbd.mChannelsPerFrame > 0 {
-                            channelCount = Int(asbd.mChannelsPerFrame)
-                        }
+        for track in videoTracks {
+            let natural = try? await track.load(.naturalSize)
+            let transform = (try? await track.load(.preferredTransform)) ?? .identity
+            let rate = try? await track.load(.nominalFrameRate)
+            if let natural {
+                dimensions = Self.displayDimensions(naturalSize: natural, transform: transform)
+            }
+            if let rate, rate > 0, frameRate == nil { frameRate = Double(rate) }
+        }
+
+        for track in audioTracks {
+            // Read the stream basic description from the first audio format
+            // description. This is the macOS-14-safe async path.
+            let descriptions = (try? await track.load(.formatDescriptions)) ?? []
+            for desc in descriptions {
+                if let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
+                    let asbd = asbdPtr.pointee
+                    if sampleRate == nil, asbd.mSampleRate > 0 {
+                        sampleRate = Double(asbd.mSampleRate)
+                    }
+                    if channelCount == nil, asbd.mChannelsPerFrame > 0 {
+                        channelCount = Int(asbd.mChannelsPerFrame)
                     }
                 }
             }
@@ -123,7 +135,7 @@ public final class NativeMediaProbe: MediaProbing {
 
         return MediaProbeResult(
             url: url,
-            kind: isVideo ? .video : .audio,
+            kind: videoTracks.isEmpty ? .audio : .video,
             formatHint: formatID(for: type),
             fileSize: fileSize,
             dimensions: dimensions,
@@ -131,6 +143,17 @@ public final class NativeMediaProbe: MediaProbing {
             frameRate: frameRate,
             sampleRate: sampleRate,
             channelCount: channelCount
+        )
+    }
+
+    static func displayDimensions(
+        naturalSize: CGSize,
+        transform: CGAffineTransform
+    ) -> MediaDimensions {
+        let transformed = CGRect(origin: .zero, size: naturalSize).applying(transform)
+        return MediaDimensions(
+            width: max(0, Int(abs(transformed.width).rounded())),
+            height: max(0, Int(abs(transformed.height).rounded()))
         )
     }
 

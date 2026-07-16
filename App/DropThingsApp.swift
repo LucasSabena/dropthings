@@ -22,6 +22,7 @@ final class AppServices: ObservableObject {
     let registry: ModuleRegistry
     let moduleMenuBarPreferences: ModuleMenuBarPreferences
     let captureArchive: CaptureArchive
+    let transientSurfaces: TransientSurfaceCoordinator
     let settingsWindow: SettingsWindowController
     let launchAtLogin = LaunchAtLoginController()
     let updates: SparkleUpdaterController
@@ -51,6 +52,7 @@ final class AppServices: ObservableObject {
         self.registry = ModuleRegistry(settings: settings, permissions: permissions)
         self.moduleMenuBarPreferences = ModuleMenuBarPreferences(settings: settings)
         self.captureArchive = CaptureArchive()
+        self.transientSurfaces = TransientSurfaceCoordinator()
         self.updates = SparkleUpdaterController()
         self.settingsWindow = SettingsWindowController(
             initialSize: NSSize(width: DTSize.settingsMinWidth, height: DTSize.settingsMinHeight)
@@ -61,16 +63,26 @@ final class AppServices: ObservableObject {
         // The product intentionally ships only the modules that have a
         // reliable end-to-end interaction. Keeping this composition explicit
         // prevents half-finished modules from leaking back into the UI.
-        registry.register(FileShelfModule(settings: settings, captureArchive: captureArchive))
+        registry.register(FileShelfModule(
+            settings: settings,
+            captureArchive: captureArchive,
+            transientSurfaces: transientSurfaces
+        ))
         registry.register(ScrollControlModule(settings: settings, permissions: permissions))
         registry.register(KeepAwakeModule(settings: settings))
         registry.register(ColorPickerModule(settings: settings, permissions: permissions))
-        registry.register(ClipboardHistoryModule(settings: settings, permissions: permissions, hub: pasteboardHub))
+        registry.register(ClipboardHistoryModule(
+            settings: settings,
+            permissions: permissions,
+            hub: pasteboardHub,
+            transientSurfaces: transientSurfaces
+        ))
         registry.register(SmartClipboardModule(
             settings: settings,
             permissions: permissions,
             hub: pasteboardHub,
-            fileActionRegistry: fileActionRegistry
+            fileActionRegistry: fileActionRegistry,
+            transientSurfaces: transientSurfaces
         ))
         registry.register(MarkdownViewerModule(settings: settings, permissions: permissions))
         registry.register(ScreenshotStudioModule(settings: settings, permissions: permissions, captureArchive: captureArchive))
@@ -87,7 +99,8 @@ final class AppServices: ObservableObject {
                 return registry.modules.values
                     .filter { $0.id != .commandPalette && registry.isEnabled($0.id) }
                     .flatMap(\.commands)
-            }
+            },
+            transientSurfaces: transientSurfaces
         )
         registry.register(commandPalette)
         enableCommandPaletteByDefaultIfNeeded()

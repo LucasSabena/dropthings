@@ -13,6 +13,7 @@ public final class MediaConverterModule: DropThingsModule {
     public let id = ModuleID.mediaConverter
     public let name = "Media Converter"
     public let summary = "Convert, resize and compress images, audio and video locally."
+    public let releaseStage: ModuleReleaseStage = .beta
     public let requiredPermissions: [SystemPermission] = []
 
     @Published public private(set) var state: ModuleState = .off
@@ -35,6 +36,8 @@ public final class MediaConverterModule: DropThingsModule {
     private lazy var windowController = MediaConverterWindowController(module: self)
     private var health = RecoverableFailureHealth()
     private let logger = ModuleLogger(subsystem: "app.dropthings", category: "media-converter")
+
+    var canConvert: Bool { state.isActive && pipeline != nil }
 
     /// Production initializer. Uses the native backend adapters and the XPC
     /// helper client for audio/video.
@@ -111,6 +114,7 @@ public final class MediaConverterModule: DropThingsModule {
         }
         engineClient?.invalidate()
         pipeline = nil
+        windowController.hide()
         state = .off
         logger.info("Media Converter stopped")
     }
@@ -165,10 +169,10 @@ public final class MediaConverterModule: DropThingsModule {
                 guard let pipeline else { return }
                 let result = await pipeline.run(request, jobID: id) { [weak self] phase in
                     Task { @MainActor [weak self] in
-                        self?.queue.setPhase(phase, for: id)
+                        self?.queue.acceptPipelinePhase(phase, for: id)
                     }
                 }
-                if case .failure(let error) = result {
+                if case .failure(let error) = result, error != .skippedExistingOutput {
                     self?.logger.warning("Conversion failed: \(error.diagnosticCategory)")
                 }
             }
@@ -177,6 +181,7 @@ public final class MediaConverterModule: DropThingsModule {
     }
 
     public func cancel(jobID: UUID) {
+        queue.setPhase(.cancelled, for: jobID)
         pipeline?.cancel(jobID)
     }
 

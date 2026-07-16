@@ -35,9 +35,12 @@ public struct ModuleRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: DTRadius.md, style: .continuous))
 
             VStack(alignment: .leading, spacing: DTSpace.xxs) {
-                Text(module.name)
-                    .font(DTTypography.body.weight(.semibold))
-                    .foregroundStyle(DTColor.textPrimary)
+                HStack(spacing: DTSpace.xs) {
+                    Text(module.name)
+                        .font(DTTypography.body.weight(.semibold))
+                        .foregroundStyle(DTColor.textPrimary)
+                    ModuleReleaseBadge(stage: module.releaseStage)
+                }
                 Text(module.summary)
                     .font(DTTypography.caption)
                     .foregroundStyle(DTColor.textSecondary)

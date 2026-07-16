@@ -67,3 +67,16 @@
 - Available hardware exposed one built-in Retina display (2880×1864). The
   multi-display, Stage Manager, full-screen, and 14-day replacement gates remain
   operational acceptance work and are not claimed complete.
+
+## Regression evidence — 2026-07-16
+
+- `swift test`: 544 tests passed, 1 explicitly skipped real-model fixture, 0
+  failures. New coverage verifies panel keyboard-event ownership and transient
+  surface exclusion/dismissal.
+- `xcodebuild -quiet -project App.xcodeproj -scheme DropThings -configuration
+  Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build`: succeeded.
+- Native Accessibility inspection of an isolated debug build confirmed that the
+  search field retained `canva`, produced Canva as the selected first result,
+  and exposed the complete result list. Automated physical key injection
+  deactivates this accessory app, so arrow-key behavior remains covered by the
+  event-scope and selection unit tests rather than claimed as manual evidence.

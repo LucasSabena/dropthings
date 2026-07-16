@@ -12,6 +12,18 @@ title results copy immediately, native color representations are preserved,
 pinned actions sort first and concealed clipboard previews hide automatically.
 Copy/save errors and success notices are visible in the panel.
 
+## Hardening — 2026-07-16
+
+Clipboard changes now clear the previous action result and any temporary
+“Treat As” override, so the panel cannot show or transform stale content.
+Overlapping URL-title requests are cancelled and their result is accepted only
+for the clipboard generation that started the request. Undo reports its real
+result after the bounded undo window expires. URL diagnostics no longer include
+the URL. The shared PasteboardHub stops its backend automatically when the last
+clipboard module unsubscribes, while remaining active if another consumer is
+still enabled. Self-authored write origins are recorded before the pasteboard
+mutation so the next observer event is attributed correctly.
+
 ## Delivery phases
 
 1. Phase 0: characterize every current Clipboard History/Color Picker pasteboard path and add regression tests.

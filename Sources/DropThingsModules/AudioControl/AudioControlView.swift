@@ -111,7 +111,7 @@ struct AudioControlSettingsView: View {
                 get: { module.settings.showSystemProcesses },
                 set: { module.setShowSystemProcesses($0) }
             ))
-            Text("Meters are visual diagnostics only and never drive gain. System Audio Recording is requested by macOS only when you first change an app control.")
+            Text("Meters are visual diagnostics only and never drive gain. macOS requests System Audio Recording only when you first enable an app control. If it is denied or unavailable, Audio Control waits for you to restart the engine instead of repeatedly asking.")
                 .font(DTTypography.caption)
                 .foregroundStyle(DTColor.textSecondary)
             if !module.ignoredApps.isEmpty {

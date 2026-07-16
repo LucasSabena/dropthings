@@ -74,6 +74,7 @@ enum ClipboardContentFilter: String, Hashable, CaseIterable {
 /// while the search field has focus (mirrors the CommandPalette monitor pattern).
 struct ClipboardHistoryPanelView: View {
     @ObservedObject var module: ClipboardHistoryModule
+    let keyWindowNumber: Int
     let onClose: () -> Void
 
     @State private var selectedTab: ClipboardTab = .history
@@ -353,7 +354,10 @@ struct ClipboardHistoryPanelView: View {
     private func installMonitor() {
         selectedID = filteredItems.first?.id
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.window?.isKeyWindow == true else { return event }
+            guard PanelKeyboardEventScope.accepts(
+                event,
+                expectedWindowNumber: keyWindowNumber
+            ) else { return event }
             if handleKeyEvent(event) { return nil }
             return event
         }

@@ -16,6 +16,8 @@ public enum MediaConverterError: LocalizedError, Equatable, Sendable {
     case outputReprobeFailed(reason: String)
     /// The job was cancelled before producing a usable output.
     case cancelled
+    /// Conflict policy was `skip` and a valid destination already existed.
+    case skippedExistingOutput
     /// The temporary output could not be moved to its final destination.
     case finalizationFailed(reason: String)
     /// The FFmpeg helper is present but no reproducibly built FFmpeg binary is
@@ -38,6 +40,8 @@ public enum MediaConverterError: LocalizedError, Equatable, Sendable {
             return "The converted file didn't verify and was discarded: \(reason)"
         case .cancelled:
             return "Cancelled. No output was kept."
+        case .skippedExistingOutput:
+            return "Skipped because an output with this name already exists."
         case .finalizationFailed(let reason):
             return "Couldn't save the converted file: \(reason)"
         case .ffmpegBackendUnavailable:
@@ -57,6 +61,7 @@ public enum MediaConverterError: LocalizedError, Equatable, Sendable {
         case .insufficientDiskSpace: return "insufficient-disk-space"
         case .outputReprobeFailed: return "output-reprobe-failed"
         case .cancelled: return "cancelled"
+        case .skippedExistingOutput: return "skipped-existing-output"
         case .finalizationFailed: return "finalization-failed"
         case .ffmpegBackendUnavailable: return "ffmpeg-backend-unavailable"
         case .incompatibleProtocolVersion: return "incompatible-protocol-version"

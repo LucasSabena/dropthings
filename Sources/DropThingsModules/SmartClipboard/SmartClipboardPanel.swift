@@ -24,7 +24,24 @@ final class SmartClipboardPanelController {
     /// The kind the user has forced via "Treat As", or `nil` to use the
     /// classifier's automatic choice. Held here so the panel controller is the
     /// single source of truth the module reads back via `forcedKind`.
-    var forcedKind: SmartClipboardKind?
+    private var forcedKind: SmartClipboardKind?
+    private var forcedChangeCount: Int?
+
+    func forceKind(_ kind: SmartClipboardKind?, for changeCount: Int?) {
+        forcedKind = kind
+        forcedChangeCount = kind == nil ? nil : changeCount
+    }
+
+    func forcedKind(for changeCount: Int) -> SmartClipboardKind? {
+        guard forcedChangeCount == changeCount else { return nil }
+        return forcedKind
+    }
+
+    func resetForcedKind(ifSnapshotChangedTo changeCount: Int) {
+        guard forcedChangeCount != changeCount else { return }
+        forcedKind = nil
+        forcedChangeCount = nil
+    }
 
     func show() {
         if panel == nil {

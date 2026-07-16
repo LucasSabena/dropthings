@@ -3,6 +3,18 @@ import SwiftUI
 
 import Combine
 
+public enum ModuleReleaseStage: String, Sendable {
+    case stable
+    case beta
+
+    public var label: String {
+        switch self {
+        case .stable: return "Stable"
+        case .beta: return "Beta"
+        }
+    }
+}
+
 /// A single runnable action surfaced by a module for the menu bar and similar
 /// one-tap entry points. Keep it stateless from the caller's point of view —
 /// the module decides whether the action is available and what it does.
@@ -66,6 +78,7 @@ where ObjectWillChangePublisher == ObservableObjectPublisher {
     var id: ModuleID { get }
     var name: String { get }
     var summary: String { get }
+    var releaseStage: ModuleReleaseStage { get }
     var iconName: String { get }
     var requiredPermissions: [SystemPermission] { get }
 
@@ -104,6 +117,8 @@ where ObjectWillChangePublisher == ObservableObjectPublisher {
 }
 
 extension DropThingsModule {
+    public var releaseStage: ModuleReleaseStage { .stable }
+
     public var iconName: String {
         switch id {
         case .scrollControl: return "scroll"
